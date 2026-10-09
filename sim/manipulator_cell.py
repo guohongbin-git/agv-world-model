@@ -725,7 +725,7 @@ class ManipulatorCell:
 {fi}        pos="{fng_cx} 0 0" mass="0.02" contype="0" conaffinity="0"/>
 {fi}  <geom name="{a}_pad_{side}" type="box"
 {fi}        size="{pad_h/2} {pad_thick/2} {pad_w/2}"
-{fi}        pos="0 {-sign * pad_thick/2} 0" mass="0.005"
+{fi}        pos="0 {-sign * (fng_half[1] + pad_thick/2)} 0" mass="0.005"
 {fi}        friction="{gr['pad_friction_initial']} 0.01 0.0002"
 {fi}        contype="4" conaffinity="2"/>
 {fi}</body>"""
