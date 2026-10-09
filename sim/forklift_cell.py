@@ -90,11 +90,11 @@ class ForkliftCell:
     <geom name="support_l" type="box" pos="0 -0.027 0.3975" size="0.20 0.003 0.0025" rgba="0.5 0.6 0.7 1"/>
     <geom name="support_c" type="box" pos="0 0 0.3975" size="0.20 0.006 0.0025" rgba="0.5 0.6 0.7 1"/>
     <geom name="support_r" type="box" pos="0 0.027 0.3975" size="0.20 0.003 0.0025" rgba="0.5 0.6 0.7 1"/>
-    <!-- 暂存站 (T03 第二货位): 台面顶 z=45mm; 台下净空 z=0..44mm 供底盘通过,
-         叉(±15mm)从台下中心穿过; 立柱在台面四角 y=±48mm, 高于底盘宽度的叉通道两侧 -->
+    <!-- 暂存站 (T03 第二货位): 台面顶 z=45mm; 台下净空 z=0..44mm 供底盘(宽±75mm)通过,
+         立柱 y=±85mm 在底盘宽度之外; 叉(±20mm)从台下中心贯通 -->
     <geom name="stage_top" type="box" pos="-0.340 0 0.0445" size="0.060 0.050 0.0005" rgba="0.4 0.5 0.4 1"/>
-    <geom name="stage_leg_l" type="box" pos="-0.395 -0.048 0.022" size="0.003 0.003 0.022" rgba="0.3 0.4 0.3 1"/>
-    <geom name="stage_leg_r" type="box" pos="-0.395 0.048 0.022" size="0.003 0.003 0.022" rgba="0.3 0.4 0.3 1"/>
+    <geom name="stage_leg_l" type="box" pos="-0.395 -0.085 0.022" size="0.003 0.003 0.022" rgba="0.3 0.4 0.3 1"/>
+    <geom name="stage_leg_r" type="box" pos="-0.395 0.085 0.022" size="0.003 0.003 0.022" rgba="0.3 0.4 0.3 1"/>
     <!-- 托盘 自由体, 原点=底面(底条局部z 0..4) -->
     <body name="pallet" pos="0 0 0.401">
       <freejoint name="pal"/>
@@ -122,7 +122,7 @@ class ForkliftCell:
       <geom name="counterweight" type="box" pos="-0.20 0 0.0175"
             size="0.010 0.060 0.0175" mass="0.0"/>
       <body name="carriage" pos="0 0 0">
-        <joint name="lift" type="slide" axis="0 0 1" range="0 {k['lift_travel']}" damping="60"/>
+        <joint name="lift" type="slide" axis="0 0 1" range="-0.050 {k['lift_travel']}" damping="60"/>
         <geom name="carriage_plate" type="box" pos="0.020 0 0.030"
               size="0.010 0.060 0.008" mass="0.25"/>
         <geom name="fork_l" type="box" pos="{k['fork_root_x'] + k['fork_len']/2} -0.015 {k['transport_z'] - 0.00125}"

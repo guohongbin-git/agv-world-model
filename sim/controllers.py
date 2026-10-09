@@ -41,6 +41,7 @@ class Ramp:
             self.t1 = self.t3 = v_peak / accel_mps2
             self.t2 = 0.0
             self.d1 = self.d3 = 0.5 * v_peak * (v_peak / accel_mps2)
+            self.d2 = 0.0
             self.speed = v_peak          # 中段速度须同步降为峰值
         self.done_at = self.t1 + self.t2 + self.t3
 
