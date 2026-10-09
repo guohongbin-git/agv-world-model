@@ -246,15 +246,14 @@ class ManipulatorCell:
     def set_joint_targets(self, q_target: np.ndarray, fingers: float | None = None) -> None:
         """位置伺服 (设计 25.4: 限转矩驱动 + 关节反馈)。
 
-        MuJoCo 的 <position kp> 伺服本身即含速度阻尼 (kp·(ctrl−q) 经
-        biasprm 反馈), 额外叠加 kd 会重复计入阻尼并引起振荡 ——
-        实测 kp=1000 纯位置伺服的单关节阶跃误差 4 mrad, 加 kd 后劣化到
-        500+ mrad。故不做额外速度项。
+        `<position kp=K>` 执行器输出的力矩是 K·(ctrl − q), 所以 **ctrl
+        就是关节目标位置**, 不能先乘一次 K —— 此前 ctrl = K·err 使实际增益
+        变成 K² = 1e6, 一个 1.5 rad 的指令瞬间产生 1500 N·m (限矩 6-10),
+        手臂直接冲到限位并卡死 (实测 |q−q*| = 2.92 rad, TCP 偏差 320mm)。
+        MuJoCo 的伺服已含速度阻尼项, 不再额外叠加 kd。
         """
-        kp = 1000.0
         for i, a in enumerate(self.act_j):
-            err = q_target[i] - self.data.qpos[self.qadr[i]]
-            self.data.ctrl[a] = kp * err
+            self.data.ctrl[a] = float(q_target[i])
         if fingers is not None:
             self._command_gap(fingers)
 
@@ -622,26 +621,35 @@ class ManipulatorCell:
 
     # ------------------------------------------------------------ 观测
     def finger_contacts(self) -> tuple[bool, bool, float, float]:
-        """两指是否分别接触箱件 + 各自法向力 (N)。"""
-        forces = []
-        contact = []
-        f = np.zeros(6)
+        """左右指是否分别接触箱件 + 各自法向力 (N)。
+
+        按**几何**归属 (pad_l / pad_r 的 geom id), 不能按接触列表顺序推断
+        —— 顺序由 MuJoCo 内部 broadphase 决定, 与左右无关。实测两指各
+        4 个接触点真实同时接触, 但旧实现把"列表里有没有第二个接触"当成
+        右指, 报出 (False, True) 的假单指结论。
+        """
+        gl, gr = self.pad_gids
+        force_l = force_r = 0.0
         for i in range(self.data.ncon):
             c = self.data.contact[i]
-            if self.box_bid not in (c.geom1 // 1000, c.geom2 // 1000):
-                pass
             g1_body = self.model.geom_bodyid[c.geom1]
             g2_body = self.model.geom_bodyid[c.geom2]
-            if self.box_bid in (g1_body, g2_body) and (c.geom1 in self.pad_gids or c.geom2 in self.pad_gids):
-                mujoco.mj_contactForce(self.model, self.data, i, f)
-                forces.append(float(np.linalg.norm(f[:3])))
-                contact.append(c.geom1 in self.pad_gids)
-        left = any(fl and not fr for fl, fr in zip(contact, contact)) or \
-            (len(forces) >= 1 and contact and contact[0])
-        right = len(forces) >= 2
-        return (bool(left), bool(right),
-                float(forces[0]) if forces else 0.0,
-                float(forces[1]) if len(forces) > 1 else 0.0)
+            if self.box_bid not in (g1_body, g2_body):
+                continue
+            if c.geom1 in self.pad_gids:
+                pad = c.geom1
+            elif c.geom2 in self.pad_gids:
+                pad = c.geom2
+            else:
+                continue
+            f = np.zeros(6)
+            mujoco.mj_contactForce(self.model, self.data, i, f)
+            mag = float(np.linalg.norm(f[:3]))
+            if pad == gl:
+                force_l += mag
+            elif pad == gr:
+                force_r += mag
+        return (force_l > 1e-6, force_r > 1e-6, force_l, force_r)
 
     def box_supported_ratio(self) -> float:
         """箱件底面承托的竖向力 / 箱重 (落托判据 ≥0.90)。"""
