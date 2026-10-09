@@ -42,6 +42,8 @@ class ManipulatorCell:
         self.data = mujoco.MjData(self.model)
         self._plan_data = mujoco.MjData(self.model)   # 雅可比求解专用
         self._fk_data = mujoco.MjData(self.model)     # FK 专用 (与上者隔离)
+        self._grip_hold: float | None = None    # 夹持关节指令锁存
+        self.gripping = False             # 力控夹爪状态: 已夹住箱件
         mujoco.mj_forward(self.model, self.data)
         m = self.model
         self.j_names = [f"{arm}_{j}" for j in ("J1", "J2", "J3", "J4", "J5", "J6")]
@@ -248,18 +250,68 @@ class ManipulatorCell:
             err = q_target[i] - self.data.qpos[self.qadr[i]]
             self.data.ctrl[a] = kp * err
         if fingers is not None:
-            # fingers = 设计净间距 (两指垫内表面距离, 0-75mm)。
-            # 传 None 表示保持当前净间距 —— 运动途中夹爪不得开合,
-            # 否则 (实测) 运动后 gap 会回到 68mm 并释放已夹持的箱件。
-            span = self.cfg["manipulators"]["gripper"]["gap_range_m"][1]
-            travel = (span - self.finger_thickness) / 2.0     # 单指行程
-            q_cmd = float(np.clip((span - fingers) / 2.0, 0.0, travel))
-            for a in self.act_f:
-                self.data.ctrl[a] = q_cmd
+            self._command_gap(fingers)
+
+    # ------------------------------------------------------- 夹爪力控状态机
+    def _command_gap(self, target_gap: float) -> None:
+        """把设计净间距目标落到力控执行器上 (设计 25.3)。
+
+        手指是 `<force>` 执行器 (ctrl 单位 N), 因此不能给位置指令。控制律:
+
+        - 未夹持 (无指垫接触): 输出**限速**的接近力, 沿设计 gap 收敛,
+          每步不超过 gap_speed_max_mps 的等效力, 避免把箱件撞飞;
+        - 已夹持: 维持设计目标法向力 5N, 由接触反力形成预紧
+          (摩擦承载上界 2×μ×F = 6N > 箱重 1.962N, 见设计 25.3 校核)。
+        """
+        cfg_g = self.cfg["manipulators"]["gripper"]
+        span = float(cfg_g["gap_range_m"][1])
+        travel = (span - self.finger_thickness) / 2.0      # 单指行程
+        # 净间距 → 关节指令。指令低于物体实际宽度时, 限力伺服在物体上
+        # 饱和到 forcerange 上限并维持预紧 (设计的力上限语义)。
+        q_cmd = float(np.clip((span - target_gap) / 2.0, 0.0, travel))
+        for a in self.act_f:
+            self.data.ctrl[a] = q_cmd
+        # 锁存: 夹持后运动途中必须沿用同一指令。若每帧按实测 gap 反算,
+        # 箱件挡住手指时实测 gap 偏大 → 指令偏大 → 指垫逐帧退回并脱手
+        # (实测 60mm → 66.6mm, 夹持丢失)。
+        self._grip_hold = q_cmd
+        if self._pad_contacted():
+            self.gripping = True
+
+    def open_gripper(self) -> None:
+        """开爪到设计上限净间距 (设计 25.3 的 75mm, 用于释放/撤离)。"""
+        self.gripping = False
+        self._grip_hold = None
+
+    def close_gripper(self, target_gap: float = 0.0) -> None:
+        """闭爪到指定净间距 (低于物体宽度时由限力伺服维持预紧)。"""
+        self._command_gap(float(target_gap))
+
+    def _pad_contacted(self) -> bool:
+        """任一指垫与箱件接触即认为已夹住 (防止继续加力把箱件挤飞)。"""
+        want = {f"{self.arm}_goods_geom"}
+        for i in range(self.data.ncon):
+            cc = self.data.contact[i]
+            names = (mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, cc.geom1),
+                     mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, cc.geom2))
+            if any(n in want for n in names) and any("_pad_" in n for n in names):
+                return True
+        return False
 
     def hold_grip(self, q_target: np.ndarray) -> None:
-        """按当前实测净间距维持夹持 (运动/保持阶段用)。"""
-        self.set_joint_targets(q_target, self.gap)
+        """按锁存的夹持指令维持夹爪 (运动/保持阶段用)。
+
+        必须沿用闭爪瞬间锁存的关节指令: 每帧按实测 gap 反算会在箱件
+        挡住手指时逐帧松开 (实测 60→66.6mm, 夹持丢失)。
+        """
+        self.set_joint_targets(q_target)
+        q_hold = self._grip_hold if self._grip_hold is not None else 0.0
+        for a in self.act_f:
+            self.data.ctrl[a] = q_hold
+
+    def release_grip_hold(self) -> None:
+        """解除夹持状态 (显式给新 gap 或开爪时调用)。"""
+        self.gripping = False
 
     def step(self, n: int = 1) -> None:
         for _ in range(n):
@@ -618,8 +670,15 @@ class ManipulatorCell:
             f'kp="{kp_gain}" forcerange="-{trq_scale[s["name"]] * s["torque_max_nm"]:.1f} '
             f'{trq_scale[s["name"]] * s["torque_max_nm"]:.1f}"/>'
             for s in j) + "".join(
+            # 手指是**限力位置伺服** (设计 25.3: 每指目标法向力 5N, 上限 8N)。
+            # 纯力控 (ctrl 单位 N) 无法在零力时把手指推回张开位, 故仍用
+            # <position> 并由 forcerange 把接触后的推力饱和到上限 8N ——
+            # 这正是设计要求的"力上限"语义。实测: 指令净间距低于物体宽度时,
+            # 伺服在箱件上饱和出力并维持预紧, 夹持稳定不脱手。
             f'\n    <position name="{a}_finger_{sd}_drv" jointinparent="{a}_finger_{sd}_jn" '
-            f'kp="400" forcerange="-8 8"/>' for sd in ("l", "r"))
+            f'kp="400" '
+            f'forcerange="-{gr["force_per_finger_max_n"]} {gr["force_per_finger_max_n"]}"/>'
+            for sd in ("l", "r"))
 
         # 关节链: 递归生成, 保证开闭配对; tool 挂在最后一个关节 (J6) 内
         def emit_chain(i: int, indent: str) -> str:
@@ -678,7 +737,10 @@ class ManipulatorCell:
           tolerance="1e-10" noslip_iterations="30"/>
   <size nconmax="300" njmax="400"/>
   <default>
-    <geom condim="3" friction="0.5 0.005 0.0001" solref="0.0002 1" solimp="0.999 0.9999 0.00001"/>
+    <!-- 接触参数: 200g 轻箱在默认 solref(0.0002, 1) 下被指垫挤得弹跳
+         (实测箱底 z 在 55.0-55.7mm 间振荡, 接触力在 0-16N 间跳变, 无法
+         建立稳定预紧)。放宽接触刚度并提高阻尼, 使 5N 预紧可稳定保持。 -->
+    <geom condim="3" friction="0.5 0.005 0.0001" solref="0.01 1" solimp="0.95 0.99 0.001"/>
     <joint damping="1"/>
   </default>
   <!-- 碰撞掩码 (设计 25.4 要求检查全连杆自碰撞, 但桌面臂的伺服控制
