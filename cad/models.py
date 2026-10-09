@@ -494,13 +494,19 @@ def build_manipulator(p: SimpleNamespace, d: Derived) -> BodyNode:
 # 9. table — 桌面
 # --------------------------------------------------------------------------- #
 def build_table(p: SimpleNamespace, d: Derived) -> BodyNode:
-    """原点=桌面几何中心, 顶面 z=0（世界坐标即桌面上表面）。"""
+    """桌面: 设计 3 节"桌面左下角为世界坐标原点", 边界 X 0→1800 / Y 0→1200 mm。
+
+    因此桌面几何中心在 (length/2, width/2), 顶面 z=0 即桌面上表面。
+    (此前把桌面建在原点, 与设计 §3 的边界定义及所有 region 坐标矛盾 ——
+    实测 F01 停在 (1550,900)mm 落到桌面外, 车轮悬空自由落体。)
+    """
     t = d.values["table"]["thickness_m"]
+    center = (p.table.length_m / 2, p.table.width_m / 2)
     prim = _box_prim("table_top", (p.table.length_m, p.table.width_m, t),
-                     (0.0, 0.0, -t / 2))
+                     (center[0], center[1], -t / 2))
     return BodyNode(
         name="table", prims=[prim], shape=_shape_from_prims([prim], "table"),
-        note="静体; 世界 z=0 = 桌面上表面。",
+        note="静体; 原点在桌面左下角, 世界 z=0 = 桌面上表面。",
     )
 
 

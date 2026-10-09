@@ -28,6 +28,18 @@ from .params import Derived, SimpleNamespace
 _MU_TORSION = 0.005
 _MU_ROLL = 0.0001
 
+# 关节阻尼与转子惯量（按 design.yaml 各关节的量级选取）。这些不是设计给定值,
+# 而是让"限转矩驱动 + 重力补偿"闭环收敛所需的最小物理量：无阻尼时机械臂
+# 在补偿后仍以 ~1 rad/s 持续振荡（实测 M01/M02 的 J4）。
+_JOINT_DAMPING = {"J1": 8.0, "J2": 12.0, "J3": 10.0,
+                  "J4": 4.0, "J5": 3.0, "J6": 2.0}
+_JOINT_ARMATURE = {"J1": 0.050, "J2": 0.060, "J3": 0.040,
+                   "J4": 0.010, "J5": 0.008, "J6": 0.005}
+_SLIDE_DAMPING = {"finger_l": 40.0, "finger_r": 40.0,
+                  "forklift_lift": 200.0}
+_SLIDE_ARMATURE = {"finger_l": 0.004, "finger_r": 0.004,
+                   "forklift_lift": 0.020}
+
 
 def _fmt(values: Sequence[float]) -> str:
     return " ".join(f"{v:.9g}" for v in values)
@@ -48,11 +60,12 @@ def _geom_attrs(prim: Prim) -> dict:
 
 
 def _add_geom(parent: ET.Element, prim: Prim, prefix: str,
-              default_friction: float) -> None:
+              default_friction: float, mask: str = "2 6") -> None:
     attrs = _geom_attrs(prim)
     mu = prim.friction if prim.friction is not None else default_friction
     attrs["friction"] = _fmt([mu, _MU_TORSION, _MU_ROLL])
     attrs["pos"] = _fmt(prim.center_m)
+    attrs["contype"], attrs["conaffinity"] = mask.split()
     ET.SubElement(parent, "geom", name=f"{prefix}_{prim.name}", **attrs)
 
 
@@ -109,9 +122,21 @@ def _add_site(parent: ET.Element, name: str, pos: Sequence[float]) -> None:
                   size="0.004", rgba="1 0 0 0.4")
 
 
+# 碰撞掩码分组（MuJoCo contype/conaffinity 位）:
+#   bit0 = 车辆 (R01/F01 本体), bit1 = 货物/托盘/站台/货架等静态场景,
+#   bit2 = 地面。
+# 默认位 (2 6) = 货物/静态组互相碰撞, 且能被车辆和地面感知。
+# 机械臂连杆用 (0 0) 禁自碰: 关节零位下基座圆柱与肩部圆柱按设计就是
+# 套叠的 (实测初始穿透 40mm), 不禁自碰会在 t=0 直接把 QACC 打成 NaN。
+# 限力与路径规划由执行层负责, 详见 sim/manipulator_cell.py 的同类处理。
+_MASK_DEFAULT = "2 6"
+_MASK_ARM_LINK = "0 0"
+_MASK_FLOOR = "4 4"
+
+
 def _add_body(parent: ET.Element, node: BodyNode, name: str, pos: Sequence[float],
               quat: Sequence[float] | None, prefix: str,
-              default_friction: float) -> ET.Element:
+              default_friction: float, mask: str = _MASK_DEFAULT) -> ET.Element:
     attrs = {"name": name, "pos": _fmt(pos)}
     if quat is not None:
         attrs["quat"] = _fmt(quat)
@@ -128,17 +153,26 @@ def _add_body(parent: ET.Element, node: BodyNode, name: str, pos: Sequence[float
                       "axis": _fmt(joint.axis)}
             if joint.range_rad_or_m is not None:
                 jattrs["range"] = _fmt(joint.range_rad_or_m)
+            # 关节阻尼/转动惯量: 设计 25.2 给出各关节速度与加速度上限, 意味着
+            # 真实驱动带阻尼。缺失时 (实测 damping=0) 机械臂在重力补偿后仍会
+            # 持续振荡 (J4 稳态 0.97 rad/s), 无法收敛到保持位。
+            if mjcf_type == "hinge":
+                jattrs["damping"] = f"{_JOINT_DAMPING.get(joint.name, 1.0):.4g}"
+                jattrs["armature"] = f"{_JOINT_ARMATURE.get(joint.name, 0.01):.4g}"
+            else:
+                jattrs["damping"] = f"{_SLIDE_DAMPING.get(joint.name, 1.0):.4g}"
+                jattrs["armature"] = f"{_SLIDE_ARMATURE.get(joint.name, 0.002):.4g}"
             ET.SubElement(body, "joint", **jattrs)
     if node.mass_kg is not None:
         _add_inertial(body, node)
     for prim in node.prims:
-        _add_geom(body, prim, prefix, default_friction)
+        _add_geom(body, prim, prefix, default_friction, mask)
     for site_name, site_pos in node.sites.items():
         _add_site(body, f"{prefix}_{site_name}", site_pos)
     for child in node.children:
         child_prefix = f"{prefix}_{child.name}"
         _add_body(body, child, child_prefix, child.pos_m, child.quat_wxyz,
-                  child_prefix, default_friction)
+                  child_prefix, default_friction, mask)
     return body
 
 
@@ -169,9 +203,10 @@ def build_mjcf(p: SimpleNamespace, derived: Derived,
     instance_actuators: list[tuple[str, float]] = []
 
     # 托盘/货箱接触摩擦按 box_pallet_friction_initial 标注（不改树, 仅渲染时映射）。
-    def _place(model_key: str, inst: str, pos: Sequence[float], quat=None) -> None:
+    def _place(model_key: str, inst: str, pos: Sequence[float], quat=None,
+               mask: str = _MASK_DEFAULT) -> None:
         mu = box_mu if model_key in ("pallet", "goods_box") else ground_mu
-        _add_body(world, models[model_key], inst, pos, quat, inst, mu)
+        _add_body(world, models[model_key], inst, pos, quat, inst, mu, mask)
         instance_actuators.extend(_collect_instance_actuators(models[model_key], inst))
 
     _place("table", "table", (0.0, 0.0, 0.0))
@@ -187,7 +222,8 @@ def build_mjcf(p: SimpleNamespace, derived: Derived,
            (sum(p.rack.column_centers_group_b_x_m) / len(p.rack.column_centers_group_b_x_m),
             p.rack.slot_center_y_m, 0.0))
     for inst in p.manipulators.instances:
-        _place("manipulator", inst.robot_id, tuple(inst.base_position_m))
+        _place("manipulator", inst.robot_id, tuple(inst.base_position_m),
+               mask=_MASK_ARM_LINK)
     _place("flat_agv", "R01", (reg.park_p01.x_m, reg.park_p01.y_m, 0.0),
            _yaw_quat(reg.park_p01.yaw_rad))
     _place("forklift", "F01", (reg.park_p02.x_m, reg.park_p02.y_m, 0.0),
@@ -200,8 +236,12 @@ def build_mjcf(p: SimpleNamespace, derived: Derived,
 
     actuators = ET.SubElement(muj, "actuator")
     for joint_name, drive_max in instance_actuators:
+        # MuJoCo 3.15 的 joint= 传动默认取"父链", 对嵌套运动树会把力矩
+        # 施加到固定基座上 (实测整场景 t=0 即 DOF 4 NaN)。必须用
+        # jointinparent= 才能作用在关节自身的 body 上。
         ET.SubElement(actuators, "motor", name=f"{joint_name}_drv",
-                      joint=joint_name, gear="1",
+                      jointinparent=joint_name, gear="1",
+                      ctrlrange=_fmt([0.0, drive_max]),
                       forcerange=_fmt([-drive_max, drive_max]))
 
     ET.indent(muj, space="  ")
