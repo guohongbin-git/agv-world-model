@@ -1,0 +1,242 @@
+# 单一工程参数源 — 桌面AGV与机器人仓储Demo
+# design_version 2.0.0 · 所有数值单位后缀强制 · 修改须同步 design_version
+design_version: "2.0.0"
+schema_version: "2.0"
+units: {length: m, mass: kg, angle: rad, time: s}
+
+table:
+  length_m: 1.8
+  width_m: 1.2
+  edge_clearance_m: 0.080          # 桌边静态退让
+
+regions:                            # 世界坐标 mm→m, 左下角原点, X右 Y上
+  rack_a: {x_min_m: 0.350, x_max_m: 0.740, y_min_m: 0.940, y_max_m: 1.100}
+  rack_b: {x_min_m: 0.960, x_max_m: 1.350, y_min_m: 0.940, y_max_m: 1.100}
+  work_band: {x_min_m: 0.250, x_max_m: 1.450, y_min_m: 0.450, y_max_m: 0.920}
+  handoff_h01: {x_m: 0.850, y_m: 0.350}
+  inbound_i01: {x_m: 0.250, y_m: 0.250}
+  outbound_o01: {x_m: 1.400, y_m: 0.250}
+  park_p01: {x_m: 0.650, y_m: 0.200, yaw_rad: 1.5707963267948966}
+  park_p02: {x_m: 1.550, y_m: 0.900, yaw_rad: -1.5707963267948966}
+  m01_base_m: [0.150, 0.470, 0.000]
+  m02_base_m: [1.650, 0.470, 0.000]
+  feed_i_tray: {x_m: 0.150, y_m: 0.150, top_z_m: 0.055}
+  feed_o_tray: {x_m: 1.650, y_m: 0.150, top_z_m: 0.055}
+  arm_in_zone: {x_min_m: 0.080, x_max_m: 0.520, y_min_m: 0.080, y_max_m: 0.700, z_max_m: 0.650}
+  arm_out_zone: {x_min_m: 1.200, x_max_m: 1.720, y_min_m: 0.080, y_max_m: 0.700, z_max_m: 0.650}
+
+pallet:
+  body_size_m: [0.080, 0.060, 0.018]
+  total_size_m: [0.080, 0.060, 0.021]      # 含3mm定位凸边
+  cargo_support_local_z_m: 0.018
+  locator_inner_size_m: [0.070, 0.050]
+  locator_height_m: 0.003
+  tare_mass_max_kg: 0.050
+  cargo_mass_max_kg: 0.200
+  channel_centers_y_m: [-0.015, 0.015]
+  channel_width_m: 0.018
+  channel_height_m: 0.008
+  channel_z_m: [0.004, 0.012]              # 开孔 z 4→12mm, X向贯通
+  tare_mass_kg: 0.045                       # 设计初值(含凸边, ≤0.050)
+
+fork:
+  mounting_root_x_m: 0.040
+  size_m: [0.080, 0.010, 0.0025]
+  centers_y_m: [-0.015, 0.015]
+  insertion_depth_m: 0.065
+  top_z_range_m: [0.020, 0.450]
+  insert_tip_clearance_z_m: 0.010          # 插叉时叉顶面=支撑面+10mm
+  engage_lift_z_m: 0.017                    # 接触叉孔顶+抬离5mm
+
+forklift:
+  body_bounds_x_m: [-0.195, 0.025]         # 前轮轴为原点
+  body_width_m: 0.150
+  mast_height_m: 0.540
+  drive_contact_xy_m: [[0.000, -0.060], [0.000, 0.060]]
+  rear_contact_xy_m: [[-0.160, -0.055], [-0.160, 0.055]]
+  fixed_mass_kg: 1.500
+  fixed_com_x_m: -0.050
+  carriage_mass_kg: 0.250
+  carriage_com_x_m: 0.045
+  pallet_loaded_com_x_m: 0.095
+  transport_fork_top_z_m: 0.065
+  high_motion_threshold_m: 0.100
+  turn_envelope_diameter_m: 0.430
+  lift_speed_max_mps: 0.010
+  lift_travel_m: 0.430
+  lift_force_max_n: 14.7
+  wheel_radius_m: 0.025
+  wheel_base_y_m: 0.120
+
+flat_agv:
+  size_xy_m: [0.160, 0.110]
+  fixed_body_height_max_m: 0.035
+  platform_z_m: [0.045, 0.065]
+  platform_size_m: [0.070, 0.040]
+  platform_travel_m: 0.020
+  platform_force_max_n: 15.0
+  wheel_radius_m: 0.015
+
+rack:
+  groups: 2
+  columns: 3
+  levels: 3
+  support_z_m: [0.100, 0.250, 0.400]
+  level_pitch_m: 0.150
+  slot_clearance_m: [0.110, 0.120, 0.120]  # 宽/深/净高
+  column_centers_group_a_x_m: [0.415, 0.545, 0.675]
+  column_centers_group_b_x_m: [1.025, 1.155, 1.285]
+  front_y_m: 0.940
+  slot_center_y_m: 1.000
+  overall_size_m: [0.390, 0.160, 0.540]
+
+station:
+  support_z_m: 0.055
+  rail_base_z_m: 0.045
+  entry_clear_width_min_m: 0.140
+  rail_support_y_m: [-0.027, 0.027]
+  rail_support_width_m: 0.006
+  count: 3                                  # I01/H01/O01
+
+goods:
+  size_m: [0.060, 0.040, 0.050]
+  mass_kg: 0.200
+  label_side_m: 0.025
+  initial_binding: null
+  physics_mode: free_body_contact
+
+manipulators:
+  instances:
+    - {robot_id: M01, base_position_m: [0.150, 0.470, 0.000], station_id: I01}
+    - {robot_id: M02, base_position_m: [1.650, 0.470, 0.000], station_id: O01}
+  reach_geometric_upper_m: 0.480
+  payload_mass_max_kg: 0.200
+  stow_xy_radius_initial_m: 0.070
+  base_radius_m: 0.040
+  joints:
+    - {name: J1, kind: revolute, axis: [0,0,1], offset_m: [0,0,0.070], lower_rad: -3.141592653589793, upper_rad: 3.141592653589793, vel_max_radps: 0.5, acc_max_radps2: 1.0, torque_max_nm: 3.0}
+    - {name: J2, kind: revolute, axis: [0,1,0], offset_m: [0,0,0], lower_rad: -2.4, upper_rad: 2.4, vel_max_radps: 0.5, acc_max_radps2: 1.0, torque_max_nm: 5.0}
+    - {name: J3, kind: revolute, axis: [0,1,0], offset_m: [0.200,0,0], lower_rad: -2.6, upper_rad: 2.6, vel_max_radps: 0.5, acc_max_radps2: 1.0, torque_max_nm: 2.0}
+    - {name: J4, kind: revolute, axis: [1,0,0], offset_m: [0.180,0,0], lower_rad: -3.141592653589793, upper_rad: 3.141592653589793, vel_max_radps: 0.8, acc_max_radps2: 1.6, torque_max_nm: 0.8}
+    - {name: J5, kind: revolute, axis: [0,1,0], offset_m: [0.035,0,0], lower_rad: -2.4, upper_rad: 2.4, vel_max_radps: 0.8, acc_max_radps2: 1.6, torque_max_nm: 0.8}
+    - {name: J6, kind: revolute, axis: [1,0,0], offset_m: [0.025,0,0], lower_rad: -3.141592653589793, upper_rad: 3.141592653589793, vel_max_radps: 0.8, acc_max_radps2: 1.6, torque_max_nm: 0.5}
+  tcp_offset_m: [0.040, 0, 0]
+  link_mass_kg: {upper_arm: 0.30, forearm: 0.25, wrist_gripper: 0.20}
+  gripper:
+    gap_range_m: [0.000, 0.075]
+    gap_speed_max_mps: 0.020
+    force_per_finger_target_n: 5.000
+    force_per_finger_max_n: 8.000
+    pad_friction_initial: 0.600
+    pad_size_m: [0.010, 0.015]
+    pad_center_above_box_base_m: 0.025
+    palm_size_m: [0.070, 0.020, 0.015]
+    palm_center_above_tcp_z_m: 0.045
+    finger_size_m: [0.006, 0.010, 0.045]
+  grasp_lift_m: 0.050
+  tcp_speed_max_mps: 0.050
+  contact_approach_speed_max_mps: 0.005
+  stow_evidence_max_age_s: 0.100
+  ik:
+    max_iterations: 200
+    seeds: 8
+    pos_tol_m: 0.001
+    rot_tol_rad: 0.03490658503988659        # 2°
+    joint_limit_margin_rad: 0.05
+    pos_scale_m: 0.050
+    rot_scale_rad: 1.0
+
+robots:
+  R01: {robot_class: flat_agv, capabilities: [move_to, align, platform_lift, stop], speed_max_mps: 0.10}
+  F01: {robot_class: forklift, capabilities: [move_to, align, dock_linear, insert_forks, lift_to, lower_until_supported, withdraw_forks, retreat_loaded, stop], speed_max_mps: 0.10}
+  M01: {robot_class: manipulator, capabilities: [arm_move_joints, arm_move_tcp, gripper_close, gripper_open, arm_stow, stop]}
+  M02: {robot_class: manipulator, capabilities: [arm_move_joints, arm_move_tcp, gripper_close, gripper_open, arm_stow, stop]}
+
+speed_limits:
+  normal_max_mps: 0.10
+  loaded_turn_max_mps: 0.05
+  insert_max_mps: 0.01
+  high_approach_max_mps: 0.005
+  loaded_turn_max_radps: 0.30
+  empty_turn_max_radps: 0.50
+  accel_max_mps2: 0.30
+
+precision:
+  lateral_err_max_m: 0.0015
+  heading_err_max_rad: 0.008726646259971648   # 0.5°
+  lift_err_max_m: 0.001
+  place_pos_err_max_m: 0.002
+  place_yaw_err_max_rad: 0.008726646259971648
+  place_height_err_max_m: 0.0005
+  place_hold_s: 0.500
+  support_force_min_ratio: 0.90
+  fork_residual_force_max_ratio: 0.10
+
+docking:
+  rack_loaded_axis_y_m: 0.905
+  rack_loaded_safe_axis_y_m: 0.785
+  rack_empty_safe_axis_y_m: 0.800
+  rack_loaded_retreat_m: 0.120
+  rack_empty_withdraw_m: 0.105
+  handoff_loaded_axis_y_m: 0.445
+  handoff_loaded_safe_axis_y_m: 0.545
+  handoff_empty_safe_axis_y_m: 0.530
+  handoff_loaded_retreat_m: 0.100
+  handoff_empty_withdraw_m: 0.085
+  lift_insert_clearance_z_m: 0.002
+  handoff_fork_top_insert_z_m: 0.065
+  handoff_fork_top_lift_z_m: 0.072
+  rack_fork_top_insert_z_by_level_m: [0.110, 0.260, 0.410]
+  rack_fork_top_lift_z_by_level_m: [0.117, 0.267, 0.417]
+
+simulation:
+  clock_domain: simulation
+  timestep_s: 0.001
+  comparison_timestep_s: 0.0005
+  contact_penetration_max_m: 0.0005
+  placement_hold_s: 0.500
+  control_hz: 100
+  observation_hz: 20
+  heartbeat_hz: 10
+  heartbeat_timeout_s: 0.300
+  obs_stale_insert_s: 0.200
+  obs_stale_drive_s: 0.500
+  friction_scan: [0.3, 0.5, 0.8]
+  load_scan_kg: [0.0, 0.125, 0.250]
+  lateral_bias_scan_m: [-0.003, 0.003]
+  heading_bias_scan_rad: [-0.017453292519943295, 0.017453292519943295]
+  load_ecc_scan_m: [-0.010, 0.010]
+  box_pallet_friction_initial: 0.4
+  ground_friction_initial: 0.5
+
+planner:
+  active_primary_tasks_max: 1
+  global_grid_m: 0.025
+  headings: 8
+  collision_inflation_m: 0.010
+  scheduling_tick_s: 0.100
+  reservation_renew_s: 0.100
+  reservation_lease_s: 1.000
+  cpsat_wall_budget_s: 1.0
+
+labels:
+  qr_version: 1
+  error_correction: M
+  quiet_zone_modules: 4
+  token_bytes: 8
+  crc8_poly: 0x07
+  pallet_label_side_m: 0.015
+  product_slot_label_side_m: 0.025
+  pallet_label_center_m: [0.000, 0.030, 0.009]
+  marker_side_m: 0.040
+  local_frame_width_px: 1280
+  local_fov_width_at_label_distance_max_m: 0.100
+  max_view_angle_rad: 0.7853981633974483
+  min_projected_px_per_module: 4.000
+
+control:
+  loop_hz: 100
+  telemetry_hz: 20
+  stop_decel_mps2: 0.30
+
+qr: {version: 1, ecc: M}
