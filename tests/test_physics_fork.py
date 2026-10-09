@@ -12,7 +12,7 @@ import pytest
 from sim.controllers import CellController, Ramp
 from sim.forklift_cell import ForkliftCell
 
-X_START = -0.340     # 叉尖 -0.22, 完全在支撑板(-0.20)之外, 抬升无干涉
+X_START = -0.450     # 叉尖 -0.33, 完全在支撑板(-0.20)与暂存台(-0.40)之外; 底盘不碰暂存台
 X_TIP_AT_EDGE = -0.160
 X_INSERTED = -0.095  # 轴心在托盘中心后 95mm
 
@@ -29,22 +29,23 @@ def result() -> dict:
         mujoco_step(cell)
     A_X, A_L = cell.a_x, cell.a_lift
     k = cell.k
+    X_SAFE = X_INSERTED - k["retreat_loaded"]        # 带载退出后的安全轴 (托盘中心 -0.215)
+    X_STAGE = -0.340 - k["axle_behind_center"]        # 托盘中心对准暂存台 (-0.340)
     ramps = [
-        (A_L, Ramp(0.0, k["insert_z"] - k["transport_z"], 0.010)),            # 远端升到 410
-        (A_X, Ramp(X_START, X_TIP_AT_EDGE, 0.005)),                            # 靠近 55mm
-        (A_X, Ramp(X_TIP_AT_EDGE, X_INSERTED, 0.005)),                         # 插叉 65mm
+        # --- 从第三层取出 ---
+        (A_L, Ramp(0.0, k["insert_z"] - k["transport_z"], 0.010)),            # 1 远端升到 410
+        (A_X, Ramp(X_START, X_TIP_AT_EDGE, 0.005)),                            # 2 接近前沿
+        (A_X, Ramp(X_TIP_AT_EDGE, X_INSERTED, 0.005)),                         # 3 插叉 65mm
         (A_L, Ramp(k["insert_z"] - k["transport_z"],
-                   k["lift_z"] - k["transport_z"], 0.002)),                    # 啮合抬离→417
-        (A_X, Ramp(X_INSERTED, X_START, 0.005)),                               # 带载退出
-        (A_L, Ramp(k["lift_z"] - k["transport_z"], 0.0, 0.010)),               # 降至运输高度
-        (A_L, Ramp(0.0, k["insert_z"] - k["transport_z"], 0.010)),             # 举升到插叉位(叉尖在托盘前沿外)
-        (A_X, Ramp(X_START, X_TIP_AT_EDGE, 0.005)),                            # 对位前沿
-        (A_L, Ramp(k["insert_z"] - k["transport_z"], 0.0, 0.010)),             # 叉降至410, 托盘落到支撑梁
-        (A_X, Ramp(X_TIP_AT_EDGE, X_INSERTED, 0.005)),                         # 满插 65mm
-        (A_L, Ramp(k["insert_z"] - k["transport_z"],
-                   k["lift_z"] - k["transport_z"], 0.002)),                    # 放托 417→410: 先抬托盘, 叉再退到410
-        (A_X, Ramp(X_INSERTED, X_INSERTED - k["withdraw_empty"], 0.005)),      # 空叉退出 105mm
-        (A_L, Ramp(k["insert_z"] - k["transport_z"], 0.0, 0.010)),             # 降至运输
+                   k["lift_z"] - k["transport_z"], 0.002)),                    # 4 抬离→417 (离面5mm)
+        (A_X, Ramp(X_INSERTED, X_SAFE, 0.005)),                                 # 5 带载退出 120mm
+        (A_L, Ramp(k["lift_z"] - k["transport_z"], 0.0, 0.010)),               # 6 降至运输高度(叉顶65)
+        (A_X, Ramp(X_SAFE, X_STAGE, 0.005)),                                    # 7 低位转运至暂存台
+        (A_L, Ramp(0.0, k["insert_z"] - k["transport_z"], 0.010)),             # 8 举升到插叉位
+        (A_X, Ramp(X_STAGE, X_INSERTED, 0.005)),                                # 9 带载回插
+        (A_L, Ramp(k["insert_z"] - k["transport_z"], 0.0, 0.010)),             # 10 放托: 叉降至410, 托盘落暂存台
+        (A_X, Ramp(X_INSERTED, X_INSERTED - k["withdraw_empty"], 0.005)),      # 11 空叉退出 105mm
+        (A_L, Ramp(k["insert_z"] - k["transport_z"], 0.0, 0.010)),             # 12 降至运输
     ]
     audit = ctrl.run_sequence(ramps, settle_s=0.5)
     audit["final"] = {
@@ -85,14 +86,14 @@ def test_lift_accuracy_within_1mm(result: dict):
 
 def test_pallet_carried_then_placed(result: dict):
     f = result["final"]
-    # 放置判据: 底面 400±0.5mm
-    assert abs(f["pallet_bottom_z"] - 0.400) <= 0.0005, f"托盘底面 {f['pallet_bottom_z']*1000:.2f}mm"
+    # 放置判据: 暂存台面 2mm (台面顶), 托盘底误差 ≤0.5mm
+    assert abs(f["pallet_bottom_z"] - 0.002) <= 0.0005, f"托盘底面 {f['pallet_bottom_z']*1000:.2f}mm"
     # 支撑承托 ≥90%
     assert f["support_ratio"] >= 0.90, f"支撑承托 {f['support_ratio']*100:.0f}%"
     # 空叉已退出: 无叉-托接触
     assert not f["pallet_fork_contact"], "空叉仍接触托盘"
-    # 托盘留在目标 (未被带跑): |x| ≤2mm
-    assert abs(f["pallet_x"]) <= 0.002, f"托盘漂移 {f['pallet_x']*1000:.2f}mm"
+    # 托盘留在暂存台: |x + 0.300| ≤2mm
+    assert abs(f["pallet_x"] + 0.340) <= 0.002, f"托盘位置 {f['pallet_x']*1000:.2f}mm"
 
 
 def test_step_budget(result: dict):

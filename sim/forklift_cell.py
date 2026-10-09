@@ -41,9 +41,10 @@ class ForkliftCell:
                            for s in ("l", "r")]
         self.pallet_geoms = [mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, g)
                              for g in ("pal_bottom_l", "pal_bottom_r", "pal_bottom_c",
-                                       "pal_top", "pal_back_l", "pal_back_r", "pal_back_c")]
+                                       "ceil_l", "ceil_r", "top_side_l", "top_side_r",
+                                       "top_mid", "pal_back_l", "pal_back_r")]
         self.support_gids = [mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, g)
-                             for g in ("support_l", "support_c", "support_r")]
+                             for g in ("support_l", "support_c", "support_r", "stage_top")]
         self.floor_gid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, "floor")
         self._ctrl_target = np.zeros(2)  # [x, lift] 位置目标
 
@@ -65,7 +66,7 @@ class ForkliftCell:
             "withdraw_empty": 0.105,
             "lift_travel": 0.385,        # 叉顶 65→450
             "channel_top_local": 0.012,  # 叉孔顶(托盘局部)
-            "start_axle_x": -0.340,      # 抬升安全轴: 叉尖在支撑板外
+            "start_axle_x": -0.450,      # 抬升安全轴: 叉尖在支撑板外, 底盘在暂存台后
         }
 
     # ---------- MJCF ----------
@@ -89,21 +90,29 @@ class ForkliftCell:
     <geom name="support_l" type="box" pos="0 -0.027 0.3975" size="0.20 0.003 0.0025" rgba="0.5 0.6 0.7 1"/>
     <geom name="support_c" type="box" pos="0 0 0.3975" size="0.20 0.006 0.0025" rgba="0.5 0.6 0.7 1"/>
     <geom name="support_r" type="box" pos="0 0.027 0.3975" size="0.20 0.003 0.0025" rgba="0.5 0.6 0.7 1"/>
+    <!-- 地面暂存台 (T03 取-放闭环第二货位; 台面顶 z=2mm; 前缘留 40mm 底盘净空) -->
+    <geom name="stage_top" type="box" pos="-0.340 0 0.001" size="0.060 0.050 0.001" rgba="0.4 0.5 0.4 1"/>
     <!-- 托盘 自由体, 原点=底面(底条局部z 0..4) -->
     <body name="pallet" pos="0 0 0.401">
       <freejoint name="pal"/>
       <geom name="pal_bottom_l" type="box" pos="0 -0.027 0.002" size="0.040 0.003 0.002" mass="0.006"/>
       <geom name="pal_bottom_r" type="box" pos="0 0.027 0.002" size="0.040 0.003 0.002" mass="0.006"/>
       <geom name="pal_bottom_c" type="box" pos="0 0 0.002" size="0.040 0.006 0.002" mass="0.010"/>
-      <geom name="pal_top" type="box" pos="0 0 0.015" size="0.040 0.030 0.003" mass="0.020"/>
-      <!-- 叉从 -X 侧贯通进入; 托盘背面不设挡块(真实叉孔贯通结构) -->
+      <!-- 通道顶壁: 独立条带 (y=±15±5, z 12..15mm)。叉顶面推的是通道顶壁而非整块顶板,
+           独立几何才能让接触求解生成多点分布接触 (整块顶板底面只会在叉尖成线)。 -->
+      <geom name="ceil_l" type="box" pos="0 -0.015 0.0135" size="0.040 0.005 0.0015" mass="0.008"/>
+      <geom name="ceil_r" type="box" pos="0 0.015 0.0135" size="0.040 0.005 0.0015" mass="0.008"/>
+      <!-- 顶板其余部分: 通道两侧边带 + 中桥, 避开叉的插入面 -->
+      <geom name="top_side_l" type="box" pos="0 -0.027 0.015" size="0.040 0.003 0.003" mass="0.002"/>
+      <geom name="top_side_r" type="box" pos="0 0.027 0.015" size="0.040 0.003 0.003" mass="0.002"/>
+      <geom name="top_mid" type="box" pos="0 0 0.017" size="0.040 0.010 0.001" mass="0.002"/>
+      <!-- 叉从 -X 侧贯通进入; 真实叉孔贯通结构无背面挡块 -->
       <geom name="pal_back_l" type="box" pos="-0.0375 -0.027 0.002" size="0.0025 0.003 0.002" mass="0.0005" condim="1"/>
       <geom name="pal_back_r" type="box" pos="-0.0375 0.027 0.002" size="0.0025 0.003 0.002" mass="0.0005" condim="1"/>
-      <geom name="pal_back_c" type="box" pos="-0.0375 0 0.009" size="0.0025 0.006 0.009" mass="0.002" condim="1"/>
     </body>
     <!-- 叉车: 平面底盘(滑动x+铰z) + 升降滑轨; T05 稳定性另用自由体变体 -->
     <body name="chassis" pos="{k['start_axle_x']} 0 0">
-      <joint name="chassis_x" type="slide" axis="1 0 0" range="-0.6 0.2" damping="20"/>
+      <joint name="chassis_x" type="slide" axis="1 0 0" range="-0.8 0.5" damping="20"/>
       <joint name="chassis_yaw" type="hinge" axis="0 0 1" range="-0.2 0.2" damping="5"/>
       <geom name="chassis_body" type="box" pos="-0.085 0 0.0175"
             size="0.110 0.075 0.0175" mass="1.50"/>
