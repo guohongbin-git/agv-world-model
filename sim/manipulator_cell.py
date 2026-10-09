@@ -36,6 +36,7 @@ class ManipulatorCell:
     CTRL_HZ = 100
 
     _SOLREF = (0.005, 0.0005, 0.995)
+    _PAD_W = None   # 覆盖 config 的指垫宽度 (扫描用)
 
     def __init__(self, timestep_s: float = 0.0005, arm: str = "M01", seed: int = 0):
         self.cfg = load()
@@ -301,13 +302,17 @@ class ManipulatorCell:
         return False
 
     def hold_grip(self, q_target: np.ndarray) -> None:
-        """按锁存的夹持指令维持夹爪 (运动/保持阶段用)。
+        """按当前夹持状态维持夹爪 (运动/保持阶段用)。
 
-        必须沿用闭爪瞬间锁存的关节指令: 每帧按实测 gap 反算会在箱件
-        挡住手指时逐帧松开 (实测 60→66.6mm, 夹持丢失)。
+        已夹住 → 沿用闭爪时锁存的关节指令 (每帧按实测 gap 反算会在箱件
+        挡住手指时逐帧松开, 实测 60→66.6mm 丢夹持); 未夹住 → 维持当前
+        实测净间距对应的指令。
         """
         self.set_joint_targets(q_target)
-        q_hold = self._grip_hold if self._grip_hold is not None else 0.0
+        span = self.cfg["manipulators"]["gripper"]["gap_range_m"][1]
+        travel = (span - self.finger_thickness) / 2.0
+        q_hold = (self._grip_hold if (self.gripping and self._grip_hold is not None)
+                  else float(np.clip((span - self.gap) / 2.0, 0.0, travel)))
         for a in self.act_f:
             self.data.ctrl[a] = q_hold
 
@@ -442,23 +447,35 @@ class ManipulatorCell:
 
     def move_tcp_incremental(self, target: np.ndarray, max_joint_step: float = 0.05,
                              settle_s: float = 0.3, max_iters: int = 80,
-                             keep_grip: bool = True) -> dict:
+                             keep_grip: bool = True,
+                             mat: np.ndarray | None = None) -> dict:
         """关节空间小步推进 — 已验证可用的运动原语。
 
         逐步把当前位形推向 IK 解, 每步 |Δq| ≤ max_joint_step 并等伺服稳定。
         相比单步大幅摆动 (会冲到限位, 实测偏差 300mm+), 逐步推进
         不撞限位。仿真时间开销可接受 (数百 ms 仿真时间)。
 
-        keep_grip=True (默认): 全程沿用闭爪时锁存的夹持指令。传 False
-        才会按实测 gap 重新反算 —— 那会在箱件挡住手指时逐帧松开
-        (实测 60→66.6mm) 或在空爪时把手指压到行程下限。
+        mat 给定时按**位姿**求解。抓取类动作必须传: 只解位置的 IK 允许
+        腕部任意自旋, 实际执行时连杆会摆到错误方位 —— 实测下降途中 TCP
+        跑到 (280,107,12.9) 扎进桌面, 指垫以 27N 撞地把箱件弹飞。
+
+        keep_grip=True (默认): 夹持中沿用闭爪时锁存的夹持指令; 未夹持时
+        按当前实测净间距, 避免过期的锁定指令让空爪中途闭合。
         """
-        q_goal, ok, _ = self._ik_best(target, self.q.copy(), seeds=8, max_iter=300)
+        q_goal, ok, _ = self._ik_best(target, self.q.copy(), mat=mat,
+                                       seeds=8, max_iter=300)
         if q_goal is None:
             return {"ok": False, "err_m": float(np.linalg.norm(self.tcp_pos - target))}
         lo = np.array([self.model.jnt_range[j][0] for j in self.jidx])
         hi = np.array([self.model.jnt_range[j][1] for j in self.jidx])
-        hold = self._grip_hold if (keep_grip and self._grip_hold is not None) else self.gap
+        # 运动期间保持**当前实测**净间距。锁存指令只在已夹持 (gripping)
+        # 时才可信: 开爪状态下锁存值可能是过期的 (实测开爪后仍保留旧的
+        # 闭合指令 → 空爪在移动途中收到 "闭合到 6mm" 的指令, 复位时
+        # 指垫横扫把箱件打飞)。夹持中才用锁存值避免逐帧松开。
+        if keep_grip and self.gripping and self._grip_hold is not None:
+            hold = self._grip_hold
+        else:
+            hold = self.gap
         for _ in range(max_iters):
             delta = q_goal - self.q
             n = float(np.max(np.abs(delta)))
@@ -478,6 +495,66 @@ class ManipulatorCell:
         return {"ok": True, "tcp": self.tcp_pos.copy(), "q": self.q.copy(),
                 "err_m": float(np.linalg.norm(self.tcp_pos - target)),
                 "q_goal": q_goal}
+
+    def grasp_box(self, standoff_m: float = 0.22, pregrasp_m: float = 0.050,
+                  close_gap_m: float = 0.030, settle_s: float = 0.3) -> dict:
+        """完整抓取序列 (设计 25.3): 安全位 → 预抓位 → 抓取位 → 闭爪。
+
+        每段都用 move_tcp_incremental 沿**同一关节分支**推进, 并保持
+        夹爪当前净间距; 闭爪后锁存关节指令, 供后续运动维持预紧。
+        这是实测唯一能建立双指对夹 (每指 4 接触点、8N) 的序列。
+        """
+        self.open_gripper()
+        self.set_joint_targets(self.q, 0.070)
+        for _ in range(1500):
+            self.step(self.substeps)
+
+        bx, by, bz = self.box_pos[0], self.box_pos[1], self.box_bottom_z
+        pose, mat = self.grasp_target_pose(np.array([bx, by]), bz)
+        seq = [
+            (np.array([bx, by, standoff_m]), None),
+            (pose + np.array([0.0, 0.0, pregrasp_m]), mat),
+            (pose, mat),
+        ]
+        last = None
+        for pos, m in seq:
+            # 每段在关节空间小步推进到"离当前位形最近的 IK 解", 位姿一起
+            # 解 (只解位置会让腕部自旋、连杆摆到错误方位), 运动期间保持
+            # 当前净间距。到位后再按该段目标净间距稳定。
+            q_goal, ok, _ = self._ik_best(pos, self.q.copy(), mat=m,
+                                          seeds=12, max_iter=400)
+            if q_goal is None:
+                return {"ok": False, "two_finger": False, "force_l": 0.0,
+                        "force_r": 0.0, "gap": self.gap, "q": self.q.copy()}
+            hold = self.gap
+            for _ in range(100):
+                delta = q_goal - self.q
+                n = float(np.max(np.abs(delta)))
+                if n < 5e-4:
+                    break
+                q_step = self.q + delta * min(1.0, 0.05 / n)
+                for _ in range(120):
+                    self.set_joint_targets(q_step, hold)
+                    self.step(self.substeps)
+                    if float(np.max(np.abs(q_step - self.q))) < 5e-3:
+                        break
+            for _ in range(int(settle_s * self.CTRL_HZ)):
+                self.set_joint_targets(q_goal, hold)
+                self.step(self.substeps)
+            self.set_joint_targets(q_goal, 0.070)
+            for _ in range(600):
+                self.step(self.substeps)
+            last = {"ok": ok, "err_m": float(np.linalg.norm(self.tcp_pos - pos))}
+        # 闭爪: 指令穿透物体, 限力伺服饱和到设计 8N/指并维持预紧
+        q_hold = self.q.copy()
+        self._command_gap(close_gap_m)
+        for _ in range(2500):
+            self.set_joint_targets(q_hold, close_gap_m)
+            self.step(self.substeps)
+        lc, lr, fl, fr = self.finger_contacts()
+        return {"ok": last is not None and last["ok"], "q": self.q.copy(),
+                "two_finger": lc and lr, "force_l": fl, "force_r": fr,
+                "gap": self.gap}
 
     def move_tcp_path(self, waypoints: list[tuple[np.ndarray, np.ndarray | None]],
                        max_joint_step: float = 0.05, settle_s: float = 0.3) -> dict:
@@ -616,7 +693,8 @@ class ManipulatorCell:
 
         tcp = mp["tcp_offset_m"]
         palm = gr["palm_size_m"]                                       # 70×20×15 mm
-        pad_w, pad_h = gr["pad_size_m"][0], gr["pad_size_m"][1]       # 10 × 15 mm
+        pad_w = self._PAD_W if self._PAD_W is not None else gr["pad_size_m"][0]
+        pad_h = gr["pad_size_m"][1]
         fng = gr["finger_size_m"]                                      # 6 × 10 × 45 mm
         palm_above = gr["palm_center_above_tcp_z_m"]                   # 0.045 m
         # 设计 25.3 的工具系几何 (工具 +X = 进给轴, 工具 +Y = 闭合方向):
@@ -752,11 +830,14 @@ class ManipulatorCell:
   <!-- 碰撞掩码 (设计 25.4 要求检查全连杆自碰撞, 但桌面臂的伺服控制
        已保证关节不越位; 白模阶段禁用手臂自碰与手臂-环境碰, 只保留
        指垫-箱件的夹持接触):
-       contype/conaffinity 位: bit0=手臂指垫, bit1=箱件/托台, bit2=地面 -->
+       contype/conaffinity 位: bit0=指垫, bit1=箱件/托台, bit2=地面
+       指垫 contype=bit0 / conaffinity=bit1 → 只与"箱件/托台"组碰撞,
+       **不与地面碰撞**。否则 (实测) 下探途中指垫扫到桌面边缘会把箱件
+       弹飞出台面 (箱从台面 z=80mm 掉到地面 z=25mm)。 -->
   <worldbody>
     <light pos="{base[0]} {base[1]} 0.9" dir="0 0 -1" diffuse="0.7 0.7 0.7"/>
     <geom name="floor" type="plane" size="2 2 0.05" friction="0.5"
-          contype="2" conaffinity="6"/>
+          contype="4" conaffinity="4"/>
     <!-- 入料托台 (面 z=55mm): 扁平托盘贴桌面, 支腿在 y 远端;
          机械臂从 -Y 侧接近时不与支腿干涉 (支腿仅占台后缘)。
          设计 25.3: 托盘主体高 18mm, 定位凸边高 3mm, 内侧净区 70×50mm,
