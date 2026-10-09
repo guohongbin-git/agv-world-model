@@ -85,13 +85,16 @@ def test_ik_respects_joint_limits(cell: ManipulatorCell, grasp_tcp: np.ndarray):
 
 
 def test_gripper_gap_range(cell: ManipulatorCell):
-    """关节行程对应设计 gap 0-75mm (q 以指中心为原点, 行程 ±37.5mm)。"""
-    lo, hi = cell.cfg["manipulators"]["gripper"]["gap_range_m"]
-    offset = (hi - lo) / 4          # 0.0375: gap 0-75mm ↔ 关节行程 ±37.5mm
+    """关节行程对应设计净间距 0-75mm。
+
+    关节零位 = 全开 (gap 75mm), 单指行程 34.5mm 收到 gap 6mm (指厚下限)。
+    """
+    span, thick = cell.cfg["manipulators"]["gripper"]["gap_range_m"][1], cell.finger_thickness
+    travel = (span - thick) / 2.0
     for j in cell.f_jidx:
         jlo, jhi = cell.model.jnt_range[j]
-        assert abs(jlo + offset) < 1e-9, f"下限 {jlo} ≠ {-offset}"
-        assert abs(jhi - offset) < 1e-9, f"上限 {jhi} ≠ {offset}"
+        assert abs(jlo) < 1e-9, f"下限 {jlo} ≠ 0"
+        assert abs(jhi - travel) < 1e-9, f"上限 {jhi} ≠ {travel}"
 
 
 def test_gripper_opens_and_closes(cell: ManipulatorCell):

@@ -114,15 +114,20 @@ class ManipulatorCell:
         return self.data.site_xmat[self.tcp_sid].reshape(3, 3).copy()
 
     @property
-    def gap(self) -> float:
-        """两指垫**内表面**间距 (设计 25.3)。
+    def finger_thickness(self) -> float:
+        """指体厚度 (设计 25.3: 指体厚 6 mm)。"""
+        return float(self.cfg["manipulators"]["gripper"]["finger_size_m"][0])
 
-        直接由两指体在世界系的间距减去指垫厚度计算 (不依赖关节 q,
-        因为两指共用一个 ctrl 值, q 本身不含分离信息)。
+    @property
+    def gap(self) -> float:
+        """两指垫**内表面**间距 (设计 25.3: 净间距 = 两内侧面的距离)。
+
+        直接由两指体在世界系的间距减去指体厚度得到 (两指共用一个 ctrl 值,
+        关节 q 本身不含分离信息)。
         """
         bl = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, f"{self.arm}_finger_l")
         br = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, f"{self.arm}_finger_r")
-        return float(np.linalg.norm(self.data.xpos[bl] - self.data.xpos[br]) - 0.003)
+        return float(np.linalg.norm(self.data.xpos[bl] - self.data.xpos[br]) - self.finger_thickness)
 
     @property
     def box_pos(self) -> np.ndarray:
@@ -243,12 +248,19 @@ class ManipulatorCell:
             err = q_target[i] - self.data.qpos[self.qadr[i]]
             self.data.ctrl[a] = kp * err
         if fingers is not None:
-            # fingers = 设计 gap (指垫内表面间距, 0-75mm)。
-            # 关节 q 为指体沿 axis 的位移; axis 与 body 初始偏移反向,
-            # 故 q = +0.0375 − gap/2 (gap 越大 → q 越负 → 指外移)。
-            q_cmd = float(np.clip(0.0375 - fingers / 2.0, -0.0375, 0.0375))
+            # fingers = 设计净间距 (两指垫内表面距离, 0-75mm)。
+            # 传 None 表示保持当前净间距 —— 运动途中夹爪不得开合,
+            # 否则 (实测) 运动后 gap 会回到 68mm 并释放已夹持的箱件。
+            span = self.cfg["manipulators"]["gripper"]["gap_range_m"][1]
+            travel = (span - self.finger_thickness) / 2.0     # 单指行程
+            q_cmd = float(np.clip((span - fingers) / 2.0, 0.0, travel))
             for a in self.act_f:
                 self.data.ctrl[a] = q_cmd
+
+    def hold_grip(self, q_target: np.ndarray) -> None:
+        """按当前实测净间距维持夹持 (运动/保持阶段用)。"""
+        self.set_joint_targets(q_target, self.gap)
+
     def step(self, n: int = 1) -> None:
         for _ in range(n):
             mujoco.mj_step(self.model, self.data)
@@ -320,7 +332,7 @@ class ManipulatorCell:
                 "err_m": float(np.linalg.norm(self.tcp_pos - target)),
                 "planned": len(plan)}
 
-    def _ik_best(self, target: np.ndarray, q_init: np.ndarray,
+    def _ik_best(self, target: np.ndarray, q_init: np.ndarray, mat: np.ndarray | None = None,
                  seeds: int = 8, max_iter: int = 200):
         """多种子 IK + 规划态 FK 复核, 返回 (q, ok, err)。
 
@@ -328,17 +340,26 @@ class ManipulatorCell:
         确定性随机种子, 用规划态 FK 复核残差后取最优。
         多个解都精确时取**离当前位形最近**者 (最小关节范数), 保证分支
         连续性 —— 否则会选到运动学可达但执行时撞限位的另一分支。
+
+        给定 mat 时追加姿态约束 (设计 25.4 要求位置/旋转误差分别归一化)。
         """
         lo = np.array([self.model.jnt_range[j][0] for j in self.jidx])
         hi = np.array([self.model.jnt_range[j][1] for j in self.jidx])
         rng = np.random.default_rng(0)
         cands: list[np.ndarray] = []
+        rot_tol = self.cfg["manipulators"]["ik"]["rot_tol_rad"]
         for q0 in [q_init] + [lo + rng.random(6) * (hi - lo) for _ in range(seeds - 1)]:
-            q, ok, _ = self.ik(target, q_init=q0, seeds=1, max_iter=max_iter)
+            q, ok, _ = self.ik(target, q_init=q0, seeds=1, max_iter=max_iter,
+                               target_mat=mat)
             if not ok:
                 continue
-            if float(np.linalg.norm(self.fk(q).tcp_pos - target)) > 1e-3:
+            st = self.fk(q)
+            if float(np.linalg.norm(st.tcp_pos - target)) > 1e-3:
                 continue                      # 规划态复核不通过
+            if mat is not None:
+                rerr = float(np.linalg.norm(_rotvec(st.tcp_mat.T @ mat)))
+                if rerr > rot_tol:
+                    continue
             cands.append(q.copy())
         if not cands:
             return None, False, float("inf")
@@ -402,17 +423,45 @@ class ManipulatorCell:
                 "err_m": float(np.linalg.norm(self.tcp_pos - target)),
                 "q_goal": q_goal}
 
+    def move_tcp_path(self, waypoints: list[tuple[np.ndarray, np.ndarray | None]],
+                       max_joint_step: float = 0.05, settle_s: float = 0.3) -> dict:
+        """沿连续关节轨迹经过一串位姿目标 (设计 25.4: 保持同一关节分支)。
+
+        每个路点把位置与姿态**一次性**交给 _ik_best 求解, 再以
+        move_tcp_incremental 小步推进并稳定; 下一路点以稳定后的实际 q
+        为种子, 因此整段留在同一关节分支 —— 分支跳变是抓取过程中
+        指垫丢失接触的首要原因 (实测: 每步只按位置重解会让 TCP 漂移数十 mm)。
+        """
+        q_goal = self.q.copy()
+        for pos, mat in waypoints:
+            # 位置+姿态一次求解 (带姿态时先取位姿解, 再用增量法推进到位)
+            q_pose, ok_pose, _ = self._ik_best(pos, q_goal, mat=mat,
+                                               seeds=8, max_iter=300)
+            step = self.move_tcp_incremental(pos, max_joint_step=max_joint_step,
+                                             settle_s=settle_s)
+            if not step["ok"]:
+                return {"ok": False, "err_m": step.get("err_m", float("nan"))}
+            q_goal = step["q_goal"]
+            if ok_pose and mat is not None:
+                q_goal = q_pose
+                for _ in range(int(settle_s * self.CTRL_HZ)):
+                    self.set_joint_targets(q_goal, self.gap)
+                    self.step(self.substeps)
+        return {"ok": True, "q": q_goal, "tcp": self.tcp_pos.copy(),
+                "err_m": float(np.linalg.norm(self.tcp_pos - waypoints[-1][0]))}
+
     def grasp_target_pose(self, box_center_xy: np.ndarray, box_bottom_z: float) -> tuple[np.ndarray, np.ndarray]:
         """抓取 TCP 目标位姿 (设计 25.3/25.4)。
 
-        位置: 箱中心 xy, z = 箱底 + 25mm (指垫中心高)
-        姿态: 工具 +X 朝世界 −Z (垂直下探), 工具 +Y 对齐箱体 +X
+        位置: 箱中心 xy, z = 箱底 + 25mm (指垫接触中心高度)
+        姿态: 设计 25.3 规定抓取时工具 +X 朝世界 −Z (垂直下探),
+              工具 Y 与箱体 X 对齐 —— 工具 Y 即夹爪闭合方向,
+              故两指沿箱体 X 两侧夹持 60 mm 宽的箱件。
         """
         pos = np.array([box_center_xy[0], box_center_xy[1], box_bottom_z + 0.025])
-        # 列向量为工具坐标轴在世界系下的表示
-        x_tool = np.array([0.0, 0.0, -1.0])          # 工具 +X → 世界 −Z
-        y_tool = np.array([1.0, 0.0, 0.0])           # 工具 +Y → 世界 +X
-        z_tool = np.cross(x_tool, y_tool)             # 右手系
+        x_tool = np.array([0.0, 0.0, -1.0])          # 工具 +X (进给) → 世界 −Z
+        y_tool = np.array([1.0, 0.0, 0.0])           # 工具 +Y (闭合) → 世界 +X
+        z_tool = np.cross(x_tool, y_tool)             # 右手正交
         mat = np.column_stack([x_tool, y_tool, z_tool])
         return pos, mat
 
@@ -510,35 +559,50 @@ class ManipulatorCell:
                 diaginertia="0.0002 0.0002 0.0001"/>"""
 
         tcp = mp["tcp_offset_m"]
-        palm = gr["palm_size_m"]
-        pad_x, pad_z = gr["pad_size_m"][0], gr["pad_size_m"][1]      # 10 × 15mm
-        fng = gr["finger_size_m"]                                    # 6 × 10 × 45mm
-        # 指垫中心在 TCP 下方 25mm (抓取 TCP z = 箱底 + 25mm, 设计 25.3)
-        pad_center_z = -0.025
+        palm = gr["palm_size_m"]                                       # 70×20×15 mm
+        pad_w, pad_h = gr["pad_size_m"][0], gr["pad_size_m"][1]       # 10 × 15 mm
+        fng = gr["finger_size_m"]                                      # 6 × 10 × 45 mm
+        palm_above = gr["palm_center_above_tcp_z_m"]                   # 0.045 m
+        # 设计 25.3 的工具系几何 (工具 +X = 进给轴, 工具 +Y = 闭合方向):
+        #   掌体中心在 TCP 后方 45mm (= 抓取姿态下世界 +Z 45mm), 沿进给轴厚 15mm,
+        #   故掌底 = TCP 后 37.5mm; 箱顶在 TCP 前 25mm → 掌底高出箱顶 12.5mm。
+        #   指体 6mm 厚 (沿闭合轴) × 10mm 宽 × 45mm 长, 自掌底沿进给轴前伸 45mm。
+        #   指垫 10 × 15mm, 15mm 沿进给轴且居中于 TCP。
+        #   指体中心 = ±(gap/2 + 3mm); 关节零位取 gap = 75mm (张开上限)。
+        # 抓取姿态 (工具 +X → 世界 −Z) 下, 上方 = 工具 −X, 故掌体在 −X 侧。
+        palm_cx = -palm_above                       # 掌体中心沿进给轴
+        palm_half = (palm[2] / 2, palm[0] / 2, palm[1] / 2)   # 沿 (进给, 闭合, 宽)
+        fng_half = (fng[2] / 2, fng[0] / 2, fng[1] / 2)       # 45×6×10
+        fng_cx = palm_cx + palm[2] / 2 + fng[2] / 2  # 掌底 + 指半长
+        half_open = (gr["gap_range_m"][1] - 0) / 2 + fng[0] / 2   # 40.5mm
+        # 单指行程 = (全开净间距 − 全闭净间距)/2, 全闭净间距受指厚限制为 0
+        fng_travel = gr["gap_range_m"][1] / 2 - fng[0] / 2       # 34.5mm
+        pad_thick = 0.003
         fi = "        "          # 手指位于 tool 内 (8 空格)
         fingers = ""
-        # 关节 axis 与 body 初始偏移反向: q 增加 → 指向中心移动 → gap 减小
-        # (设计 25.3: gap = 指垫内表面间距, 0-75mm, 目标 5N/指)
+        # axis 与 body 偏移反向 (axis=+Y for 左指), q<0 → 指体移向中心 → gap 减小
         for sign, side in ((1, "l"), (-1, "r")):
             fingers += f"""
-{fi}<body name="{a}_finger_{side}" pos="0 {sign * 0.0375} 0">
+{fi}<body name="{a}_finger_{side}" pos="0 {sign * half_open} 0">
 {fi}  <joint name="{a}_finger_{side}_jn" type="slide" axis="0 {-sign} 0"
-{fi}         range="-0.0375 {gr['gap_range_m'][1] - 0.0375}" damping="1" armature="0.001"/>
-{fi}  <geom name="{a}_finger_{side}_link" type="box" size="{fng[0]/2} {fng[1]/2} {fng[2]/2}"
-{fi}        pos="0 0 {-fng[2]/2 + 0.0075}" mass="0.02" contype="0" conaffinity="0"/>
-{fi}  <geom name="{a}_pad_{side}" type="box" size="{pad_x/2} 0.0015 {pad_z/2}"
-{fi}        pos="0 {sign * 0.0015} {pad_center_z}" mass="0.005" friction="0.6 0.01 0.0002"
+{fi}         range="0 {fng_travel:.4f}" damping="1" armature="0.001"/>
+{fi}  <geom name="{a}_finger_{side}_link" type="box"
+{fi}        size="{fng_half[0]} {fng_half[1]} {fng_half[2]}"
+{fi}        pos="{fng_cx} 0 0" mass="0.02" contype="0" conaffinity="0"/>
+{fi}  <geom name="{a}_pad_{side}" type="box"
+{fi}        size="{pad_h/2} {pad_thick/2} {pad_w/2}"
+{fi}        pos="0 {-sign * pad_thick/2} 0" mass="0.005"
+{fi}        friction="{gr['pad_friction_initial']} 0.01 0.0002"
 {fi}        contype="4" conaffinity="2"/>
 {fi}</body>"""
 
         def make_tool_block(indent: str) -> str:
             return f"""
 {indent}  <body name="{a}_tool" pos="{tcp[0]} 0 0">
-{indent}    <geom name="{a}_palm" type="box" size="{palm[0]/2} {palm[1]/2} {palm[2]/2}"
-{indent}          pos="0 0 {gr['palm_center_above_tcp_z_m']}" mass="0.08"
-{indent}          contype="0" conaffinity="0"/>
-{indent}    <inertial pos="0 0 {gr['palm_center_above_tcp_z_m']}" mass="0.08"
-{indent}              diaginertia="1e-4 1e-4 1e-4"/>
+{indent}    <geom name="{a}_palm" type="box" size="{palm_half[0]} {palm_half[1]} {palm_half[2]}"
+{indent}          pos="{palm_cx} 0 0" mass="0.08" contype="0" conaffinity="0"/>
+{indent}    <inertial pos="{palm_cx} 0 0" mass="0.08"
+{indent}              diaginertia="1e-4 3e-4 3e-4"/>
 {indent}    <site name="{a}_tcp" pos="0 0 0" size="0.005" rgba="0 1 0 0.6"/>
 {fingers}
 {indent}  </body>"""
@@ -588,6 +652,24 @@ class ManipulatorCell:
 
         chain_open = emit_chain(0, "    ") + "\n    </body>"   # base body 闭合
 
+        # 定位凸边 (设计 25.3): 高 3mm, 内侧净区 70×50mm。
+        # 基准箱件 60×40mm 在净区内每方向留 5mm 余量, 凸边内壁即箱件
+        # 的横向约束 —— 指垫接近时箱件不会在光滑台面上滑移。
+        ridge_h = 0.003
+        net_x, net_y = 0.070, 0.050
+        wall = 0.006
+        ridge_xml = "\n".join(
+            f'    <geom name="{a}_tray_ridge_{idx}" type="box" '
+            f'pos="{feed["x_m"] + rx} {feed["y_m"] + ry} {feed["top_z_m"] + ridge_h/2:.4f}" '
+            f'size="{sx} {sy} {ridge_h/2:.4f}" rgba="0.45 0.5 0.55 1" '
+            f'contype="2" conaffinity="6"/>'
+            for idx, (rx, ry, sx, sy) in enumerate([
+                (0, +(net_y/2 + wall/2), net_x/2 + wall, wall/2),   # +Y 侧
+                (0, -(net_y/2 + wall/2), net_x/2 + wall, wall/2),   # -Y 侧
+                (+(net_x/2 + wall/2), 0, wall/2, net_y/2),          # +X 侧
+                (-(net_x/2 + wall/2), 0, wall/2, net_y/2),          # -X 侧
+            ]))
+
         return f"""
 <mujoco model="{a}_cell">
   <!-- MuJoCo 3.15 起 <compiler angle> 默认为 degree; 本项目统一 SI 弧度 -->
@@ -608,13 +690,18 @@ class ManipulatorCell:
     <geom name="floor" type="plane" size="2 2 0.05" friction="0.5"
           contype="2" conaffinity="6"/>
     <!-- 入料托台 (面 z=55mm): 扁平托盘贴桌面, 支腿在 y 远端;
-         机械臂从 -Y 侧接近时不与支腿干涉 (支腿仅占台后缘) -->
+         机械臂从 -Y 侧接近时不与支腿干涉 (支腿仅占台后缘)。
+         设计 25.3: 托盘主体高 18mm, 定位凸边高 3mm, 内侧净区 70×50mm,
+         基准箱件两方向各留 5mm 名义余量。凸边与货箱接触 → 限制抓取时
+         箱件被指垫扫开的横向位移 (无凸边时箱件在光滑台面上自由滑移 30mm)。 -->
     <geom name="{a}_tray_leg" type="box" pos="{feed['x_m']} {feed['y_m'] - 0.045} 0.0265"
           size="0.045 0.004 0.0265" rgba="0.4 0.45 0.5 1"
           contype="0" conaffinity="0"/>
     <geom name="{a}_tray_top" type="box" pos="{feed['x_m']} {feed['y_m']} {feed['top_z_m'] - 0.0025}"
           size="0.05 0.04 0.0025" rgba="0.55 0.6 0.65 1"
           contype="2" conaffinity="6"/>
+    <!-- 定位凸边: 4 条, 高 3mm (台面以上), 围成 70×50mm 净区 -->
+{ridge_xml}
     <!-- 箱件 (自由刚体 200g, 设计 25.3) -->
     <body name="{a}_goods" pos="{feed['x_m']} {feed['y_m']} {box_z}">
       <freejoint name="{a}_goods_fj"/>
