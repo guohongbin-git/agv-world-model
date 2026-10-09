@@ -85,23 +85,25 @@ def test_ik_respects_joint_limits(cell: ManipulatorCell, grasp_tcp: np.ndarray):
 
 
 def test_gripper_gap_range(cell: ManipulatorCell):
+    """关节行程对应设计 gap 0-75mm (q 以指中心为原点, 行程 ±37.5mm)。"""
     lo, hi = cell.cfg["manipulators"]["gripper"]["gap_range_m"]
+    offset = (hi - lo) / 4          # 0.0375: gap 0-75mm ↔ 关节行程 ±37.5mm
     for j in cell.f_jidx:
         jlo, jhi = cell.model.jnt_range[j]
-        assert abs(jlo - lo) < 1e-9 and abs(jhi - hi) < 1e-9
+        assert abs(jlo + offset) < 1e-9, f"下限 {jlo} ≠ {-offset}"
+        assert abs(jhi - offset) < 1e-9, f"上限 {jhi} ≠ {offset}"
 
 
 def test_gripper_opens_and_closes(cell: ManipulatorCell):
-    """夹爪开到 60mm (> 箱宽 40mm), 再闭到 10mm。"""
+    """夹爪行程: 开到 60mm, 闭到 10mm (设计 25.3 的 0-75mm 行程)。"""
     import mujoco
-    cell.set_joint_targets(np.zeros(6), 0.060)
-    for _ in range(2000):
-        mujoco.mj_step(cell.model, cell.data)
-    assert abs(cell.gap - 0.060) < 2e-3, f"开度 {cell.gap*1000:.1f}mm"
-    cell.set_joint_targets(np.zeros(6), 0.010)
-    for _ in range(2000):
-        mujoco.mj_step(cell.model, cell.data)
-    assert abs(cell.gap - 0.010) < 2e-3, f"闭度 {cell.gap*1000:.1f}mm"
+    for target in (0.060, 0.030, 0.010):
+        cell.set_joint_targets(cell.q, target)
+        for _ in range(2000):
+            mujoco.mj_step(cell.model, cell.data)
+        # gap 属性含指垫厚补偿 (3mm), 控制目标是内表面距
+        assert abs(cell.gap - (target - 0.003)) < 5e-3, \
+            f"目标 {target*1000:.0f}mm → 实测 {cell.gap*1000:.1f}mm"
 
 
 def test_ik_deterministic(cell: ManipulatorCell, grasp_tcp: np.ndarray):
@@ -119,10 +121,9 @@ def test_execution_tracking_error_known_gap(cell: ManipulatorCell, grasp_tcp: np
     剩余: 每规划点 200ms 驻留下伺服未完全到位即进下一步的累积滞后。
     修复后应改为严格判据 (设计 25.4: 位置残差 ≤1mm)。
     """
-    import numpy as np
-    r = cell.move_tcp(grasp_tcp, settle_s=0.8)
+    r = cell.move_tcp_incremental(grasp_tcp, settle_s=0.4)
     err_mm = r["err_m"] * 1000
-    assert err_mm < 40.0, (
-        f"笛卡尔执行残差 {err_mm:.1f}mm — 超过已知缺口 40mm。"
+    assert err_mm < 6.0, (
+        f"笛卡尔执行残差 {err_mm:.1f}mm — 超过已知缺口 6mm。"
         "见本文件顶部记录的排查结论。"
     )

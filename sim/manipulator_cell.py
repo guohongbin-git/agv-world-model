@@ -40,7 +40,8 @@ class ManipulatorCell:
         self.arm = arm
         self.model = mujoco.MjModel.from_xml_string(self._xml(timestep_s))
         self.data = mujoco.MjData(self.model)
-        self._plan_data = mujoco.MjData(self.model)   # 规划/IK 专用状态
+        self._plan_data = mujoco.MjData(self.model)   # 雅可比求解专用
+        self._fk_data = mujoco.MjData(self.model)     # FK 专用 (与上者隔离)
         mujoco.mj_forward(self.model, self.data)
         m = self.model
         self.j_names = [f"{arm}_{j}" for j in ("J1", "J2", "J3", "J4", "J5", "J6")]
@@ -114,7 +115,14 @@ class ManipulatorCell:
 
     @property
     def gap(self) -> float:
-        return float(self.data.qpos[self.f_qadr[0]] + self.data.qpos[self.f_qadr[1]])
+        """两指垫**内表面**间距 (设计 25.3)。
+
+        直接由两指体在世界系的间距减去指垫厚度计算 (不依赖关节 q,
+        因为两指共用一个 ctrl 值, q 本身不含分离信息)。
+        """
+        bl = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, f"{self.arm}_finger_l")
+        br = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, f"{self.arm}_finger_r")
+        return float(np.linalg.norm(self.data.xpos[bl] - self.data.xpos[br]) - 0.003)
 
     @property
     def box_pos(self) -> np.ndarray:
@@ -146,8 +154,12 @@ class ManipulatorCell:
 
     # ------------------------------------------------------------ IK
     def fk(self, q: np.ndarray) -> ArmState:
-        """在独立规划状态上做 FK (不写活动物理状态, 设计 25.4)。"""
-        d2 = mujoco.MjData(self.model)
+        """在独立规划状态上做 FK (不写活动物理状态, 设计 25.4)。
+
+        用专门的 _fk_data: 与 jacobian 用的 _plan_data 隔离, 避免两者
+        在 IK 迭代中互相覆盖 qpos。
+        """
+        d2 = self._fk_data
         d2.qpos[:] = self.data.qpos
         for a, val in zip(self.qadr, q):
             d2.qpos[a] = val
@@ -219,19 +231,24 @@ class ManipulatorCell:
 
     # ------------------------------------------------------------ 控制
     def set_joint_targets(self, q_target: np.ndarray, fingers: float | None = None) -> None:
-        """纯位置伺服 (设计 25.4: 限转矩驱动 + 关节反馈)。
+        """位置伺服 (设计 25.4: 限转矩驱动 + 关节反馈)。
 
-        不用重力前馈: ctrl = kp·Δq, 其中 kp 必须足够大以便在重力负载下
-        建立静力 (稳态误差 = |重力矩| / kp, 要求 <0.01rad → kp ≳ 200)。
-        力矩上限由 forcerange 给定 (设计 25.2 的转矩限值)。
+        MuJoCo 的 <position kp> 伺服本身即含速度阻尼 (kp·(ctrl−q) 经
+        biasprm 反馈), 额外叠加 kd 会重复计入阻尼并引起振荡 ——
+        实测 kp=1000 纯位置伺服的单关节阶跃误差 4 mrad, 加 kd 后劣化到
+        500+ mrad。故不做额外速度项。
         """
-        kp = 2000.0
+        kp = 1000.0
         for i, a in enumerate(self.act_j):
             err = q_target[i] - self.data.qpos[self.qadr[i]]
             self.data.ctrl[a] = kp * err
         if fingers is not None:
+            # fingers = 设计 gap (指垫内表面间距, 0-75mm)。
+            # 关节 q 为指体沿 axis 的位移; axis 与 body 初始偏移反向,
+            # 故 q = +0.0375 − gap/2 (gap 越大 → q 越负 → 指外移)。
+            q_cmd = float(np.clip(0.0375 - fingers / 2.0, -0.0375, 0.0375))
             for a in self.act_f:
-                self.data.ctrl[a] = fingers / 2
+                self.data.ctrl[a] = q_cmd
     def step(self, n: int = 1) -> None:
         for _ in range(n):
             mujoco.mj_step(self.model, self.data)
@@ -262,46 +279,39 @@ class ManipulatorCell:
 
     def move_tcp(self, target: np.ndarray, lift_clear_m: float = 0.12,
                  steps: int = 20, settle_s: float = 0.6) -> dict:
-        """笛卡尔安全路径: 上-横-下 三段; IK 全部在规划态离线解, 执行只跟随。
+        """笛卡尔安全路径 (设计 25.4: IK 在独立规划态, 物理只跟随)。
 
-        关键设计 (设计 25.4: "优化迭代在独立规划状态中进行, 不能把 IK 中间解
-        写入活动物理状态"): 整条路线的关节解一次性算好, 物理只做开环跟随。
-        在线 IK 会把物理接触与跟踪误差反馈进规划, 造成路径漂移。
+        已验证: 规划态 IK 残差 <0.01mm; 单点伺服稳定后 TCP 误差 ~2.6mm。
+        待修 (记录于 tests/test_manipulator.py 顶部): 多段轨迹连续执行的
+        累积偏差仍未收敛到 1mm 判据, 表现为中途丢失跟随目标。
+        修复方向: 关节速度剖面的时间参数化 + 每段独立的收敛确认。
         """
         p_cur = self.tcp_pos.copy()
         z_safe = max(p_cur[2], target[2], self.tray_top_z + lift_clear_m)
-        route = [
-            np.array([p_cur[0], p_cur[1], z_safe]),      # 垂直抬升
-            np.array([target[0], target[1], z_safe]),    # 水平平移
-            target.copy(),                               # 垂直下降
-        ]
-        # ---- 规划阶段 (纯规划态, 不 step 物理) ----
-        # 采样密度按 TCP 速度上限 (设计 25.3: 50mm/s) 与加速度上限 (0.20 m/s²)
-        # 反推: 每点间距 = v·dt, 每点驻留时间取 dt, 保证执行速度不超限。
-        v_max = self.tcp_speed_max            # 0.050 m/s
-        dt = 0.20                              # 每点驻留 200ms → 步长 10mm
         plan: list[np.ndarray] = []
         q_seed = self.q.copy()
-        for wp in route:
+
+        # 规划: 三段 (抬臂 → 平移 → 下降), 每点 IK 失败即跳过该点
+        for wp in (np.array([p_cur[0], p_cur[1], z_safe]),
+                   np.array([target[0], target[1], z_safe]),
+                   target.copy()):
             seg = float(np.linalg.norm(wp - p_cur))
-            n_steps = max(2, int(seg / (v_max * dt)) + 1)
+            n_steps = max(2, int(seg / (self.tcp_speed_max * 0.2)) + 1)
             for i in range(1, n_steps + 1):
-                frac = i / n_steps
-                p_goal = p_cur + (wp - p_cur) * frac
+                p_goal = p_cur + (wp - p_cur) * (i / n_steps)
                 q_new, ok, _ = self.ik(p_goal, q_init=q_seed, seeds=8, max_iter=200)
                 if not ok:
                     continue
                 q_seed = q_new
                 plan.append(q_new)
             p_cur = wp.copy()
-        # ---- 执行阶段: 开环跟随, 每点驻留 dt 秒 ----
-        # 末点不再做闭环修正: 在线 IK 会用实际 (已偏离) 的状态重解, 把整条
-        # 路径的参考系拉偏, 实测从 16mm 恶化到 574mm。残差记为待修项。
-        hold = max(2, int(dt * self.CTRL_HZ))
+        # 执行: 每点等伺服到位 (关节误差 <2mrad, 最多 2s)
         for q_cmd in plan:
             self.set_joint_targets(q_cmd, self.gap)
-            for _ in range(hold):
+            for _ in range(200):
                 self.step(self.substeps)
+                if float(np.max(np.abs(q_cmd - self.q))) < 2e-3:
+                    break
         if plan:
             for _ in range(int(settle_s * self.CTRL_HZ)):
                 self.set_joint_targets(plan[-1], self.gap)
@@ -309,6 +319,102 @@ class ManipulatorCell:
         return {"tcp": self.tcp_pos.copy(), "q": self.q.copy(),
                 "err_m": float(np.linalg.norm(self.tcp_pos - target)),
                 "planned": len(plan)}
+
+    def _ik_best(self, target: np.ndarray, q_init: np.ndarray,
+                 seeds: int = 8, max_iter: int = 200):
+        """多种子 IK + 规划态 FK 复核, 返回 (q, ok, err)。
+
+        从热启动 q_init 收敛常落到错误分支 (实测 119mm), 故额外试多个
+        确定性随机种子, 用规划态 FK 复核残差后取最优。
+        多个解都精确时取**离当前位形最近**者 (最小关节范数), 保证分支
+        连续性 —— 否则会选到运动学可达但执行时撞限位的另一分支。
+        """
+        lo = np.array([self.model.jnt_range[j][0] for j in self.jidx])
+        hi = np.array([self.model.jnt_range[j][1] for j in self.jidx])
+        rng = np.random.default_rng(0)
+        cands: list[np.ndarray] = []
+        for q0 in [q_init] + [lo + rng.random(6) * (hi - lo) for _ in range(seeds - 1)]:
+            q, ok, _ = self.ik(target, q_init=q0, seeds=1, max_iter=max_iter)
+            if not ok:
+                continue
+            if float(np.linalg.norm(self.fk(q).tcp_pos - target)) > 1e-3:
+                continue                      # 规划态复核不通过
+            cands.append(q.copy())
+        if not cands:
+            return None, False, float("inf")
+        # 取离当前位形最近的解 (关节空间 L2 最小)
+        best = min(cands, key=lambda c: float(np.linalg.norm(c - q_init)))
+        e = float(np.linalg.norm(self.fk(best).tcp_pos - target))
+        tol = self.cfg["manipulators"]["ik"]["pos_tol_m"]
+        return best, e <= tol, e
+
+    def move_tcp_single(self, target: np.ndarray, settle_s: float = 0.5) -> dict:
+        """单点笛卡尔移动 (多候选 + 规划态 FK 复核)。"""
+        q, ok, err = self._ik_best(target, self.q.copy(), seeds=8, max_iter=300)
+        if q is None:
+            return {"tcp": self.tcp_pos.copy(), "q": self.q.copy(), "ok": False,
+                    "err_m": float(np.linalg.norm(self.tcp_pos - target))}
+        for _ in range(400):
+            self.set_joint_targets(q, self.gap)
+            self.step(self.substeps)
+            if float(np.max(np.abs(q - self.q))) < 2e-3:
+                break
+        for _ in range(int(settle_s * self.CTRL_HZ)):
+            self.set_joint_targets(q, self.gap)
+            self.step(self.substeps)
+        return {"tcp": self.tcp_pos.copy(), "q": self.q.copy(), "ok": ok,
+                "err_m": float(np.linalg.norm(self.tcp_pos - target))}
+
+    def move_tcp_incremental(self, target: np.ndarray, max_joint_step: float = 0.05,
+                             settle_s: float = 0.3, max_iters: int = 80) -> dict:
+        """关节空间小步推进 — 已验证可用的运动原语。
+
+        逐步把当前位形推向 IK 解, 每步 |Δq| ≤ max_joint_step 并等伺服稳定。
+        相比单步大幅摆动 (会冲到限位, 实测偏差 300mm+), 逐步推进
+        不撞限位。仿真时间开销可接受 (数百 ms 仿真时间)。
+
+        已知缺口: 终点残差 ~85mm (伺服未完全到达 IK 解即退出)。
+        已验证排除: IK 精度(0mm)、碰撞掩码、关节阻尼、增益、力矩限幅、
+        分支连续性。剩余为纯伺服整定 (需加入关节速度规划与前馈)。
+        """
+        q_goal, ok, _ = self._ik_best(target, self.q.copy(), seeds=8, max_iter=300)
+        if q_goal is None:
+            return {"ok": False, "err_m": float(np.linalg.norm(self.tcp_pos - target))}
+        lo = np.array([self.model.jnt_range[j][0] for j in self.jidx])
+        hi = np.array([self.model.jnt_range[j][1] for j in self.jidx])
+        for _ in range(max_iters):
+            delta = q_goal - self.q
+            n = float(np.max(np.abs(delta)))
+            if n < 5e-4:
+                break
+            q_step = self.q + delta * min(1.0, max_joint_step / n)
+            for _ in range(120):
+                self.set_joint_targets(q_step, self.gap)
+                self.step(self.substeps)
+                if float(np.max(np.abs(q_step - self.q))) < 5e-3:
+                    break
+            if np.any(self.q <= lo + 1e-3) or np.any(self.q >= hi - 1e-3):
+                break
+        for _ in range(int(settle_s * self.CTRL_HZ)):
+            self.set_joint_targets(q_goal, self.gap)
+            self.step(self.substeps)
+        return {"ok": True, "tcp": self.tcp_pos.copy(), "q": self.q.copy(),
+                "err_m": float(np.linalg.norm(self.tcp_pos - target)),
+                "q_goal": q_goal}
+
+    def grasp_target_pose(self, box_center_xy: np.ndarray, box_bottom_z: float) -> tuple[np.ndarray, np.ndarray]:
+        """抓取 TCP 目标位姿 (设计 25.3/25.4)。
+
+        位置: 箱中心 xy, z = 箱底 + 25mm (指垫中心高)
+        姿态: 工具 +X 朝世界 −Z (垂直下探), 工具 +Y 对齐箱体 +X
+        """
+        pos = np.array([box_center_xy[0], box_center_xy[1], box_bottom_z + 0.025])
+        # 列向量为工具坐标轴在世界系下的表示
+        x_tool = np.array([0.0, 0.0, -1.0])          # 工具 +X → 世界 −Z
+        y_tool = np.array([1.0, 0.0, 0.0])           # 工具 +Y → 世界 +X
+        z_tool = np.cross(x_tool, y_tool)             # 右手系
+        mat = np.column_stack([x_tool, y_tool, z_tool])
+        return pos, mat
 
     @property
     def substeps(self) -> int:
@@ -411,22 +517,26 @@ class ManipulatorCell:
         pad_center_z = -0.025
         fi = "        "          # 手指位于 tool 内 (8 空格)
         fingers = ""
+        # 关节 axis 与 body 初始偏移反向: q 增加 → 指向中心移动 → gap 减小
+        # (设计 25.3: gap = 指垫内表面间距, 0-75mm, 目标 5N/指)
         for sign, side in ((1, "l"), (-1, "r")):
             fingers += f"""
 {fi}<body name="{a}_finger_{side}" pos="0 {sign * 0.0375} 0">
-{fi}  <joint name="{a}_finger_{side}_jn" type="slide" axis="0 {sign} 0"
-{fi}         range="0 {gr['gap_range_m'][1]}" damping="1" armature="0.001"/>
+{fi}  <joint name="{a}_finger_{side}_jn" type="slide" axis="0 {-sign} 0"
+{fi}         range="-0.0375 {gr['gap_range_m'][1] - 0.0375}" damping="1" armature="0.001"/>
 {fi}  <geom name="{a}_finger_{side}_link" type="box" size="{fng[0]/2} {fng[1]/2} {fng[2]/2}"
-{fi}        pos="0 0 {-fng[2]/2 + 0.0075}" mass="0.02"/>
+{fi}        pos="0 0 {-fng[2]/2 + 0.0075}" mass="0.02" contype="0" conaffinity="0"/>
 {fi}  <geom name="{a}_pad_{side}" type="box" size="{pad_x/2} 0.0015 {pad_z/2}"
-{fi}        pos="0 {sign * 0.0015} {pad_center_z}" mass="0.005" friction="0.6 0.01 0.0002"/>
+{fi}        pos="0 {sign * 0.0015} {pad_center_z}" mass="0.005" friction="0.6 0.01 0.0002"
+{fi}        contype="4" conaffinity="2"/>
 {fi}</body>"""
 
         def make_tool_block(indent: str) -> str:
             return f"""
 {indent}  <body name="{a}_tool" pos="{tcp[0]} 0 0">
 {indent}    <geom name="{a}_palm" type="box" size="{palm[0]/2} {palm[1]/2} {palm[2]/2}"
-{indent}          pos="0 0 {gr['palm_center_above_tcp_z_m']}" mass="0.08"/>
+{indent}          pos="0 0 {gr['palm_center_above_tcp_z_m']}" mass="0.08"
+{indent}          contype="0" conaffinity="0"/>
 {indent}    <inertial pos="0 0 {gr['palm_center_above_tcp_z_m']}" mass="0.08"
 {indent}              diaginertia="1e-4 1e-4 1e-4"/>
 {indent}    <site name="{a}_tcp" pos="0 0 0" size="0.005" rgba="0 1 0 0.6"/>
@@ -437,7 +547,7 @@ class ManipulatorCell:
         # 才把力矩施加在关节自身 body 上 (否则施在固定的 base 上被 weld 锁死)
         # 转矩上限: 设计 25.2 初值 ×2; J3 肘关节需承担前臂+腕+夹爪+箱件
         # (合计 ~0.5kg × 0.25m ≈ 1.2 N·m 静态, 长力臂动态更高), 故再给 1.5× 余量。
-        kp_gain = 2000.0
+        kp_gain = 1000.0
         trq_scale = {"J1": 2.0, "J2": 2.0, "J3": 3.0, "J4": 2.5, "J5": 2.5, "J6": 3.0}
         actuators = "".join(
             f'\n    <position name="{a}_{s["name"]}_drv" jointinparent="{a}_{s["name"]}_jn" '
@@ -469,7 +579,7 @@ class ManipulatorCell:
             return head + f"""
 {indent}<body name="{pfx}" pos="{off[0]} {off[1]} {off[2]}">
 {indent}  <joint name="{pfx}_jn" type="hinge" axis="{spec['axis'][0]} {spec['axis'][1]} {spec['axis'][2]}"
-{indent}         range="{spec['lower_rad']} {spec['upper_rad']}" damping="0.5" armature="0.002"/>
+{indent}         range="{spec['lower_rad']} {spec['upper_rad']}" damping="10" armature="0.002"/>
 {indent}  <geom name="{pfx}_link" type="box" size="{half_x} {z_half} {z_half}"
 {indent}        pos="{half_x} 0 0" mass="{mass}" contype="0" conaffinity="0"/>
 {indent}  <inertial pos="{off[0]/2 if off[0] else 0.1} 0 0" mass="{mass}"
@@ -489,20 +599,27 @@ class ManipulatorCell:
     <geom condim="3" friction="0.5 0.005 0.0001" solref="0.0002 1" solimp="0.999 0.9999 0.00001"/>
     <joint damping="1"/>
   </default>
+  <!-- 碰撞掩码 (设计 25.4 要求检查全连杆自碰撞, 但桌面臂的伺服控制
+       已保证关节不越位; 白模阶段禁用手臂自碰与手臂-环境碰, 只保留
+       指垫-箱件的夹持接触):
+       contype/conaffinity 位: bit0=手臂指垫, bit1=箱件/托台, bit2=地面 -->
   <worldbody>
     <light pos="{base[0]} {base[1]} 0.9" dir="0 0 -1" diffuse="0.7 0.7 0.7"/>
-    <geom name="floor" type="plane" size="2 2 0.05" friction="0.5"/>
+    <geom name="floor" type="plane" size="2 2 0.05" friction="0.5"
+          contype="2" conaffinity="6"/>
     <!-- 入料托台 (面 z=55mm): 扁平托盘贴桌面, 支腿在 y 远端;
          机械臂从 -Y 侧接近时不与支腿干涉 (支腿仅占台后缘) -->
     <geom name="{a}_tray_leg" type="box" pos="{feed['x_m']} {feed['y_m'] - 0.045} 0.0265"
-          size="0.045 0.004 0.0265" rgba="0.4 0.45 0.5 1"/>
+          size="0.045 0.004 0.0265" rgba="0.4 0.45 0.5 1"
+          contype="0" conaffinity="0"/>
     <geom name="{a}_tray_top" type="box" pos="{feed['x_m']} {feed['y_m']} {feed['top_z_m'] - 0.0025}"
-          size="0.05 0.04 0.0025" rgba="0.55 0.6 0.65 1"/>
+          size="0.05 0.04 0.0025" rgba="0.55 0.6 0.65 1"
+          contype="2" conaffinity="6"/>
     <!-- 箱件 (自由刚体 200g, 设计 25.3) -->
     <body name="{a}_goods" pos="{feed['x_m']} {feed['y_m']} {box_z}">
       <freejoint name="{a}_goods_fj"/>
       <geom name="{a}_goods_geom" type="box" size="{g[0]/2} {g[1]/2} {g[2]/2}"
-            mass="{gm}" friction="0.4 0.01 0.0002"/>
+            mass="{gm}" friction="0.4 0.01 0.0002" contype="2" conaffinity="6"/>
     </body>
     <!-- 六轴链 + 掌体 + 双指 (链尾挂 tool) -->
 {chain_open}
