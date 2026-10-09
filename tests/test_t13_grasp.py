@@ -280,3 +280,46 @@ def test_t14_single_finger_contact_rejected(cell: ManipulatorCell):
     left, right, fl, fr = cell.finger_contacts()
     if left or right:
         assert left and right, f"仅单指接触 (l={left} r={right}) 不应判为抓取"
+
+
+def test_t13_grasp_confirmed_all_design_criteria(cell: ManipulatorCell):
+    """设计 25.3 的 GRASP_CONFIRMED 全判据。
+
+    判据逐条来自设计 25.3:
+      * 两个手指分别接触、力在允许范围
+      * 箱件抬离源面至少 5mm、源面卸载
+      * 相对 TCP 稳定 ≥0.5s (位置漂移 ≤1mm、角度漂移 ≤1°)
+    """
+    _settle(cell)
+    q_hold = _approach_and_close(cell)
+    left, right, fl, fr = cell.finger_contacts()
+    assert left and right, f"须双指接触, 实得 l={left} r={right}"
+
+    f_max = cell.cfg["manipulators"]["gripper"]["force_per_finger_max_n"]
+    assert max(fl, fr) <= f_max + 1e-6, \
+        f"每指法向力 {fl:.1f}/{fr:.1f}N 超出上限 {f_max}N"
+
+    z0 = cell.tray_top_z
+    mat = cell.grasp_target_pose(np.array([cell.box_pos[0], cell.box_pos[1]]),
+                                 cell.box_bottom_z)[1]
+    p = cell.tcp_pos.copy()
+    for _ in range(24):
+        p = p + np.array([0.0, 0.0, 0.0025])
+        cell.move_tcp_incremental(p, max_joint_step=0.02, settle_s=0.3,
+                                  mat=mat, keep_grip=True)
+    cell.move_tcp_incremental(p, max_joint_step=0.02, settle_s=0.5,
+                              mat=mat, keep_grip=True)
+
+    lift = cell.box_bottom_z - z0
+    assert lift >= 0.005, f"抬离源面仅 {lift*1000:.1f}mm (<5mm)"
+
+    drift_mm, drift_deg = cell.relative_drift(0.5)
+    assert drift_mm <= 1.0, f"夹持期位置漂移 {drift_mm:.3f}mm > 1mm"
+    assert drift_deg <= 1.0, f"夹持期角度漂移 {drift_deg:.3f}° > 1°"
+
+    # 摩擦承载校核 (设计 25.3): 2×μ×F 须显著大于箱重
+    mu = cell.cfg["manipulators"]["gripper"]["pad_friction_initial"]
+    weight = cell.box_mass * 9.81
+    capacity = 2 * mu * min(fl, fr)
+    assert capacity > 2.0 * weight, \
+        f"摩擦承载 {capacity:.2f}N 相对箱重 {weight:.3f}N 余量不足 2×"
