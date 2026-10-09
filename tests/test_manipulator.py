@@ -112,20 +112,17 @@ def test_ik_deterministic(cell: ManipulatorCell, grasp_tcp: np.ndarray):
 
 
 def test_execution_tracking_error_known_gap(cell: ManipulatorCell, grasp_tcp: np.ndarray):
-    """已知缺口: 物理执行后 TCP 偏差 (待修, 保留可见)。
+    """已知缺口: 笛卡尔移动的执行残差 (待修, 保留可见)。
 
-    该断言记录当前实测偏差上限, 防止恶化; 修复后应改为严格 1mm 判据
-    (设计 R07: 举升定位误差 ≤1mm)。
+    规划态 IK 残差 <0.01mm; 开环执行后残差约 16mm。已排除:
+    IK 精度、力矩饱和、增益振荡、armature、自碰、托台干涉、TCP 速度超限。
+    剩余: 每规划点 200ms 驻留下伺服未完全到位即进下一步的累积滞后。
+    修复后应改为严格判据 (设计 25.4: 位置残差 ≤1mm)。
     """
-    import mujoco
-    c = ManipulatorCell(timestep_s=0.0005)
-    q, ok, _ = c.ik(grasp_tcp, q_init=np.zeros(6))
-    assert ok
-    for _ in range(12000):
-        c.set_joint_targets(q, c.gap)
-        c.step(c.substeps)
-    err_mm = float(np.linalg.norm(c.tcp_pos - grasp_tcp)) * 1000
-    assert err_mm < 60.0, (
-        f"执行跟踪误差 {err_mm:.1f}mm — 超过已知缺口 60mm。"
-        "见本文件顶部记录的排查结论: 已排除力矩/增益/armature/自碰/托台干涉。"
+    import numpy as np
+    r = cell.move_tcp(grasp_tcp, settle_s=0.8)
+    err_mm = r["err_m"] * 1000
+    assert err_mm < 40.0, (
+        f"笛卡尔执行残差 {err_mm:.1f}mm — 超过已知缺口 40mm。"
+        "见本文件顶部记录的排查结论。"
     )

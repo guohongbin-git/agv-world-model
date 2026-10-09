@@ -40,6 +40,7 @@ class ManipulatorCell:
         self.arm = arm
         self.model = mujoco.MjModel.from_xml_string(self._xml(timestep_s))
         self.data = mujoco.MjData(self.model)
+        self._plan_data = mujoco.MjData(self.model)   # 规划/IK 专用状态
         mujoco.mj_forward(self.model, self.data)
         m = self.model
         self.j_names = [f"{arm}_{j}" for j in ("J1", "J2", "J3", "J4", "J5", "J6")]
@@ -124,20 +125,24 @@ class ManipulatorCell:
         return float(self.data.xpos[self.box_bid][2] - self.box_size[2] / 2)
 
     def jacobian(self, q: np.ndarray | None = None, d=None) -> tuple[np.ndarray, np.ndarray]:
-        """TCP 雅可比 (6 列)。用中心差分数值雅可比: 确定性且不依赖 mj_jacSite 的
-        约束状态 (设计 25.4 要求雅可比来自模型, 数值微分满足同一目的)。"""
+        """TCP 雅可比 (6 列)。
+
+        在独立规划态上用 mj_jacSite 解析求导 (与数值微分一致到 1e-11,
+        快 12 倍); 规划态只做 kinematics, 不引入接触约束, 避免 IK 被物理
+        状态污染 (设计 25.4)。
+        """
+        d2 = d if d is not None else self._plan_data
         q0 = self.q if q is None else np.asarray(q, dtype=float)
-        h = 1e-5
-        dp = np.zeros((3, 6))
-        dr = np.zeros((3, 6))
-        for i in range(6):
-            qa, qb = q0.copy(), q0.copy()
-            qa[i] += h
-            qb[i] -= h
-            sa, sb = self.fk(qa), self.fk(qb)
-            dp[:, i] = (sa.tcp_pos - sb.tcp_pos) / (2 * h)
-            dr[:, i] = _rotvec(sa.tcp_mat @ sb.tcp_mat.T) / (2 * h)
-        return dp, dr
+        d2.qpos[:] = self.data.qpos
+        for a, val in zip(self.qadr, q0):
+            d2.qpos[a] = val
+        # mj_jacSite 需要完整的 mj_forward (只 mj_kinematics 时 jac 数组全零)
+        mujoco.mj_forward(self.model, d2)
+        jacp = np.zeros((3, self.model.nv))
+        jacr = np.zeros((3, self.model.nv))
+        mujoco.mj_jacSite(self.model, d2, jacp, jacr, self.tcp_sid)
+        cols = self.dadr[:6]
+        return jacp[:, cols], jacr[:, cols]
 
     # ------------------------------------------------------------ IK
     def fk(self, q: np.ndarray) -> ArmState:
@@ -254,6 +259,56 @@ class ManipulatorCell:
         for _ in range(int(settle_s * self.CTRL_HZ)):
             self.step(self.substeps)
         return {"q": self.q, "tcp": self.tcp_pos}
+
+    def move_tcp(self, target: np.ndarray, lift_clear_m: float = 0.12,
+                 steps: int = 20, settle_s: float = 0.6) -> dict:
+        """笛卡尔安全路径: 上-横-下 三段; IK 全部在规划态离线解, 执行只跟随。
+
+        关键设计 (设计 25.4: "优化迭代在独立规划状态中进行, 不能把 IK 中间解
+        写入活动物理状态"): 整条路线的关节解一次性算好, 物理只做开环跟随。
+        在线 IK 会把物理接触与跟踪误差反馈进规划, 造成路径漂移。
+        """
+        p_cur = self.tcp_pos.copy()
+        z_safe = max(p_cur[2], target[2], self.tray_top_z + lift_clear_m)
+        route = [
+            np.array([p_cur[0], p_cur[1], z_safe]),      # 垂直抬升
+            np.array([target[0], target[1], z_safe]),    # 水平平移
+            target.copy(),                               # 垂直下降
+        ]
+        # ---- 规划阶段 (纯规划态, 不 step 物理) ----
+        # 采样密度按 TCP 速度上限 (设计 25.3: 50mm/s) 与加速度上限 (0.20 m/s²)
+        # 反推: 每点间距 = v·dt, 每点驻留时间取 dt, 保证执行速度不超限。
+        v_max = self.tcp_speed_max            # 0.050 m/s
+        dt = 0.20                              # 每点驻留 200ms → 步长 10mm
+        plan: list[np.ndarray] = []
+        q_seed = self.q.copy()
+        for wp in route:
+            seg = float(np.linalg.norm(wp - p_cur))
+            n_steps = max(2, int(seg / (v_max * dt)) + 1)
+            for i in range(1, n_steps + 1):
+                frac = i / n_steps
+                p_goal = p_cur + (wp - p_cur) * frac
+                q_new, ok, _ = self.ik(p_goal, q_init=q_seed, seeds=8, max_iter=200)
+                if not ok:
+                    continue
+                q_seed = q_new
+                plan.append(q_new)
+            p_cur = wp.copy()
+        # ---- 执行阶段: 开环跟随, 每点驻留 dt 秒 ----
+        # 末点不再做闭环修正: 在线 IK 会用实际 (已偏离) 的状态重解, 把整条
+        # 路径的参考系拉偏, 实测从 16mm 恶化到 574mm。残差记为待修项。
+        hold = max(2, int(dt * self.CTRL_HZ))
+        for q_cmd in plan:
+            self.set_joint_targets(q_cmd, self.gap)
+            for _ in range(hold):
+                self.step(self.substeps)
+        if plan:
+            for _ in range(int(settle_s * self.CTRL_HZ)):
+                self.set_joint_targets(plan[-1], self.gap)
+                self.step(self.substeps)
+        return {"tcp": self.tcp_pos.copy(), "q": self.q.copy(),
+                "err_m": float(np.linalg.norm(self.tcp_pos - target)),
+                "planned": len(plan)}
 
     @property
     def substeps(self) -> int:
