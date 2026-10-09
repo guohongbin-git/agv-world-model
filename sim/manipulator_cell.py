@@ -127,12 +127,15 @@ class ManipulatorCell:
     def gap(self) -> float:
         """两指垫**内表面**间距 (设计 25.3: 净间距 = 两内侧面的距离)。
 
-        直接由两指体在世界系的间距减去指体厚度得到 (两指共用一个 ctrl 值,
-        关节 q 本身不含分离信息)。
+        由两**指垫 geom** 的世界位置直接算, 不经指体间接换算 —— 指垫贴在
+        指体内表面外侧 (3mm 厚), 用指体中心距减指厚会系统性多算 6mm
+        (实测箱宽 60mm 时 gap 属性报 65.7mm)。
         """
-        bl = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, f"{self.arm}_finger_l")
-        br = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, f"{self.arm}_finger_r")
-        return float(np.linalg.norm(self.data.xpos[bl] - self.data.xpos[br]) - self.finger_thickness)
+        gl, gr = self.pad_gids
+        # 指垫沿闭合轴半厚 (3mm 垫厚的一半), 两垫相向 → 减去两侧各半厚
+        pad_half = float(self.model.geom_size[gl][1])
+        return (float(np.linalg.norm(self.data.geom_xpos[gl] - self.data.geom_xpos[gr]))
+                - 2 * pad_half)
 
     @property
     def box_pos(self) -> np.ndarray:
@@ -256,6 +259,18 @@ class ManipulatorCell:
             self._command_gap(fingers)
 
     # ------------------------------------------------------- 夹爪力控状态机
+    def _gap_to_q(self, gap_m: float) -> float:
+        """设计净间距 → 指关节位移 (实测标定 gap(q) = 69mm − 2000·q)。
+
+        几何依据: q=0 时两指垫内表面距 = 设计上限 75mm 减去指垫贴出指体
+        内表面的偏移 (指厚 6mm)。两指共用一个 ctrl 但 axis 相反、各自行程
+        q, 故间距变化 2q → 斜率 −2000 mm/m。
+        """
+        span = float(self.cfg["manipulators"]["gripper"]["gap_range_m"][1])
+        open_gap = span - self.finger_thickness
+        return (open_gap - gap_m) / 2.0
+
+
     def _command_gap(self, target_gap: float) -> None:
         """把设计净间距目标落到力控执行器上 (设计 25.3)。
 
@@ -271,7 +286,10 @@ class ManipulatorCell:
         travel = (span - self.finger_thickness) / 2.0      # 单指行程
         # 净间距 → 关节指令。指令低于物体实际宽度时, 限力伺服在物体上
         # 饱和到 forcerange 上限并维持预紧 (设计的力上限语义)。
-        q_cmd = float(np.clip((span - target_gap) / 2.0, 0.0, travel))
+        # gap 属性由**指垫内表面**算出 (设计定义), 指垫贴在指体内表面
+        # 外侧, 故与指体中心距差一个指厚 —— 这里的换算必须与 gap 属性的
+        # 几何一致, 否则实测会系统性差 6mm。
+        q_cmd = float(np.clip(self._gap_to_q(target_gap), 0.0, travel))
         for a in self.act_f:
             self.data.ctrl[a] = q_cmd
         # 锁存: 夹持后运动途中必须沿用同一指令。若每帧按实测 gap 反算,
@@ -312,7 +330,7 @@ class ManipulatorCell:
         span = self.cfg["manipulators"]["gripper"]["gap_range_m"][1]
         travel = (span - self.finger_thickness) / 2.0
         q_hold = (self._grip_hold if (self.gripping and self._grip_hold is not None)
-                  else float(np.clip((span - self.gap) / 2.0, 0.0, travel)))
+                  else float(np.clip(self._gap_to_q(self.gap), 0.0, travel)))
         for a in self.act_f:
             self.data.ctrl[a] = q_hold
 
@@ -709,8 +727,9 @@ class ManipulatorCell:
         fng_half = (fng[2] / 2, fng[0] / 2, fng[1] / 2)       # 45×6×10
         fng_cx = palm_cx + palm[2] / 2 + fng[2] / 2  # 掌底 + 指半长
         half_open = (gr["gap_range_m"][1] - 0) / 2 + fng[0] / 2   # 40.5mm
-        # 单指行程 = (全开净间距 − 全闭净间距)/2, 全闭净间距受指厚限制为 0
-        fng_travel = gr["gap_range_m"][1] / 2 - fng[0] / 2       # 34.5mm
+        # 单指行程: q=0 时净间距 = 75−6 = 69mm (实测标定), 全闭 0mm,
+        # 故单指行程 = 69/2 = 34.5mm
+        fng_travel = (gr["gap_range_m"][1] - fng[0]) / 2       # 34.5mm
         pad_thick = 0.003
         fi = "        "          # 手指位于 tool 内 (8 空格)
         fingers = ""
@@ -753,13 +772,17 @@ class ManipulatorCell:
             f'{trq_scale[s["name"]] * s["torque_max_nm"]:.1f}"/>'
             for s in j) + "".join(
             # 手指是**限力位置伺服** (设计 25.3: 每指目标法向力 5N, 上限 8N)。
-            # kp 必须足够大才能让指令穿透物体、在箱件上饱和到 forcerange 上限:
+            # kp 必须足够大才能让指令穿透物体、在箱件上饱和到 forcerange:
             # kp=400 时伺服稳态误差 0.0076 rad, 实际法向力仅 1.5-3N, 摩擦承载
             # 1.8N < 箱重 1.962N → 实测指垫相对箱面滑移 1.2mm/3s、箱件在夹持
-            # 中反复丢失。取 kp=4000 使 8N 上限真正生效 (forcerange 仍是硬上限)。
+            # 中反复丢失。取 kp=4000 使力上限真正生效。
+            # forcerange 取**目标 5N** 而非上限 8N: 200g 箱在 8N 下被两片
+            # 10mm 指垫挤得沿闭合面法向反复游走 (实测箱 y 在 121-150mm 间
+            # 跳动、单指接触时有时无)。5N 仍在设计承载校核 2×0.6×5=6N > 1.96N
+            # 之内, 但对轻箱更稳。
             f'\n    <position name="{a}_finger_{sd}_drv" jointinparent="{a}_finger_{sd}_jn" '
             f'kp="4000" '
-            f'forcerange="-{gr["force_per_finger_max_n"]} {gr["force_per_finger_max_n"]}"/>'
+            f'forcerange="-{gr["force_per_finger_target_n"]} {gr["force_per_finger_target_n"]}"/>'
             for sd in ("l", "r"))
 
         # 关节链: 递归生成, 保证开闭配对; tool 挂在最后一个关节 (J6) 内
