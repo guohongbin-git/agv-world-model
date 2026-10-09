@@ -66,7 +66,7 @@ class ForkliftCell:
             "withdraw_empty": 0.105,
             "lift_travel": 0.385,        # 叉顶 65→450
             "channel_top_local": 0.012,  # 叉孔顶(托盘局部)
-            "start_axle_x": -0.450,      # 抬升安全轴: 叉尖在支撑板外, 底盘在暂存台后
+            "start_axle_x": -0.560,      # 抬升安全轴: 全程无干涉
         }
 
     # ---------- MJCF ----------
@@ -90,8 +90,11 @@ class ForkliftCell:
     <geom name="support_l" type="box" pos="0 -0.027 0.3975" size="0.20 0.003 0.0025" rgba="0.5 0.6 0.7 1"/>
     <geom name="support_c" type="box" pos="0 0 0.3975" size="0.20 0.006 0.0025" rgba="0.5 0.6 0.7 1"/>
     <geom name="support_r" type="box" pos="0 0.027 0.3975" size="0.20 0.003 0.0025" rgba="0.5 0.6 0.7 1"/>
-    <!-- 地面暂存台 (T03 取-放闭环第二货位; 台面顶 z=2mm; 前缘留 40mm 底盘净空) -->
-    <geom name="stage_top" type="box" pos="-0.340 0 0.001" size="0.060 0.050 0.001" rgba="0.4 0.5 0.4 1"/>
+    <!-- 暂存站 (T03 第二货位): 台面顶 z=45mm; 台下净空 z=0..44mm 供底盘通过,
+         叉(±15mm)从台下中心穿过; 立柱在台面四角 y=±48mm, 高于底盘宽度的叉通道两侧 -->
+    <geom name="stage_top" type="box" pos="-0.340 0 0.0445" size="0.060 0.050 0.0005" rgba="0.4 0.5 0.4 1"/>
+    <geom name="stage_leg_l" type="box" pos="-0.395 -0.048 0.022" size="0.003 0.003 0.022" rgba="0.3 0.4 0.3 1"/>
+    <geom name="stage_leg_r" type="box" pos="-0.395 0.048 0.022" size="0.003 0.003 0.022" rgba="0.3 0.4 0.3 1"/>
     <!-- 托盘 自由体, 原点=底面(底条局部z 0..4) -->
     <body name="pallet" pos="0 0 0.401">
       <freejoint name="pal"/>

@@ -12,7 +12,7 @@ import pytest
 from sim.controllers import CellController, Ramp
 from sim.forklift_cell import ForkliftCell
 
-X_START = -0.450     # 叉尖 -0.33, 完全在支撑板(-0.20)与暂存台(-0.40)之外; 底盘不碰暂存台
+X_START = -0.560     # 叉尖 -0.44, 完全在支撑板(-0.20)、暂存台(-0.40..-0.28)与其立柱(-0.398)之外
 X_TIP_AT_EDGE = -0.160
 X_INSERTED = -0.095  # 轴心在托盘中心后 95mm
 
@@ -86,8 +86,8 @@ def test_lift_accuracy_within_1mm(result: dict):
 
 def test_pallet_carried_then_placed(result: dict):
     f = result["final"]
-    # 放置判据: 暂存台面 2mm (台面顶), 托盘底误差 ≤0.5mm
-    assert abs(f["pallet_bottom_z"] - 0.002) <= 0.0005, f"托盘底面 {f['pallet_bottom_z']*1000:.2f}mm"
+    # 放置判据: 暂存台面 45mm (平板顶升台面), 托盘底误差 ≤0.5mm
+    assert abs(f["pallet_bottom_z"] - 0.045) <= 0.0005, f"托盘底面 {f['pallet_bottom_z']*1000:.2f}mm"
     # 支撑承托 ≥90%
     assert f["support_ratio"] >= 0.90, f"支撑承托 {f['support_ratio']*100:.0f}%"
     # 空叉已退出: 无叉-托接触
