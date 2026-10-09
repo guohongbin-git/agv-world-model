@@ -206,7 +206,7 @@ models:
         - -0.06
         - 0.025
         joint:
-          name: forklift_wheel_drive_0_spin
+          name: wheel_drive_0_spin
           kind: hinge
           axis:
           - 0.0
@@ -215,7 +215,7 @@ models:
           drive_max: 0.5
         mass_kg: 0.05
         primitives:
-        - name: forklift_wheel_drive_0
+        - name: wheel_drive_0
           type: cylinder
           center_m:
           - 0.0
@@ -230,7 +230,7 @@ models:
         - 0.06
         - 0.025
         joint:
-          name: forklift_wheel_drive_1_spin
+          name: wheel_drive_1_spin
           kind: hinge
           axis:
           - 0.0
@@ -239,7 +239,7 @@ models:
           drive_max: 0.5
         mass_kg: 0.05
         primitives:
-        - name: forklift_wheel_drive_1
+        - name: wheel_drive_1
           type: cylinder
           center_m:
           - 0.0
@@ -254,7 +254,7 @@ models:
         - -0.055
         - 0.025
         joint:
-          name: forklift_wheel_rear_0_spin
+          name: wheel_rear_0_spin
           kind: hinge
           axis:
           - 0.0
@@ -263,7 +263,7 @@ models:
           drive_max: 0.5
         mass_kg: 0.05
         primitives:
-        - name: forklift_wheel_rear_0
+        - name: wheel_rear_0
           type: cylinder
           center_m:
           - 0.0
@@ -278,7 +278,7 @@ models:
         - 0.055
         - 0.025
         joint:
-          name: forklift_wheel_rear_1_spin
+          name: wheel_rear_1_spin
           kind: hinge
           axis:
           - 0.0
@@ -287,7 +287,7 @@ models:
           drive_max: 0.5
         mass_kg: 0.05
         primitives:
-        - name: forklift_wheel_rear_1
+        - name: wheel_rear_1
           type: cylinder
           center_m:
           - 0.0

@@ -121,7 +121,10 @@ def _add_body(parent: ET.Element, node: BodyNode, name: str, pos: Sequence[float
         if joint.kind == "free":
             ET.SubElement(body, "freejoint", name=f"{prefix}_root")
         else:
-            jattrs = {"name": f"{prefix}_{joint.name}", "type": joint.kind, "pos": "0 0 0",
+            # design.yaml 用 revolute/slide/hinge 语义名; MJCF 只认 hinge/slide/ball
+            mjcf_type = {"revolute": "hinge", "hinge": "hinge",
+                         "prismatic": "slide", "slide": "slide"}.get(joint.kind, joint.kind)
+            jattrs = {"name": f"{prefix}_{joint.name}", "type": mjcf_type, "pos": "0 0 0",
                       "axis": _fmt(joint.axis)}
             if joint.range_rad_or_m is not None:
                 jattrs["range"] = _fmt(joint.range_rad_or_m)

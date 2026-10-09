@@ -91,27 +91,27 @@
     <body name="M01" pos="0.15 0.47 0">
       <geom name="M01_manipulator_base" type="cylinder" size="0.04 0.035" friction="0.5 0.005 0.0001" pos="0 0 0.035" />
       <body name="M01_J1" pos="0 0 0.07">
-        <joint name="M01_J1_J1" type="revolute" pos="0 0 0" axis="0 0 1" range="-3.14159265 3.14159265" />
+        <joint name="M01_J1_J1" type="hinge" pos="0 0 0" axis="0 0 1" range="-3.14159265 3.14159265" />
         <inertial pos="0 0 0.03" mass="0.1" diaginertia="0.000105 0.000105 9e-05" />
         <geom name="M01_J1_manipulator_j1_column" type="cylinder" size="0.03 0.03" friction="0.5 0.005 0.0001" pos="0 0 0.03" />
         <body name="M01_J1_J2" pos="0 0 0">
-          <joint name="M01_J1_J2_J2" type="revolute" pos="0 0 0" axis="0 1 0" range="-2.4 2.4" />
+          <joint name="M01_J1_J2_J2" type="hinge" pos="0 0 0" axis="0 1 0" range="-2.4 2.4" />
           <inertial pos="0 0 0" mass="0.1" diaginertia="0.000137916667 6.25e-05 0.000137916667" />
           <geom name="M01_J1_J2_manipulator_shoulder" type="cylinder" size="0.025 0.04" euler="90 0 0" friction="0.5 0.005 0.0001" pos="0 0 0" />
           <body name="M01_J1_J2_J3" pos="0.2 0 0">
-            <joint name="M01_J1_J2_J3_J3" type="revolute" pos="0 0 0" axis="0 1 0" range="-2.6 2.6" />
+            <joint name="M01_J1_J2_J3_J3" type="hinge" pos="0 0 0" axis="0 1 0" range="-2.6 2.6" />
             <inertial pos="-0.1 0 0" mass="0.3" diaginertia="0.00016 0.00208 0.00208" />
             <geom name="M01_J1_J2_J3_manipulator_upper_arm" type="box" size="0.1 0.02 0.02" friction="0.5 0.005 0.0001" pos="-0.1 0 0" />
             <body name="M01_J1_J2_J3_J4" pos="0.18 0 0">
-              <joint name="M01_J1_J2_J3_J4_J4" type="revolute" pos="0 0 0" axis="1 0 0" range="-3.14159265 3.14159265" />
+              <joint name="M01_J1_J2_J3_J4_J4" type="hinge" pos="0 0 0" axis="1 0 0" range="-3.14159265 3.14159265" />
               <inertial pos="-0.09 0 0" mass="0.25" diaginertia="7.5e-05 0.0013875 0.0013875" />
               <geom name="M01_J1_J2_J3_J4_manipulator_forearm" type="box" size="0.09 0.015 0.015" friction="0.5 0.005 0.0001" pos="-0.09 0 0" />
               <body name="M01_J1_J2_J3_J4_J5" pos="0.035 0 0">
-                <joint name="M01_J1_J2_J3_J4_J5_J5" type="revolute" pos="0 0 0" axis="0 1 0" range="-2.4 2.4" />
+                <joint name="M01_J1_J2_J3_J4_J5_J5" type="hinge" pos="0 0 0" axis="0 1 0" range="-2.4 2.4" />
                 <inertial pos="-0.0175 0 0" mass="0.05" diaginertia="3.08333333e-05 2e-05 3.08333333e-05" />
                 <geom name="M01_J1_J2_J3_J4_J5_manipulator_wrist1" type="cylinder" size="0.02 0.025" euler="90 0 0" friction="0.5 0.005 0.0001" pos="-0.0175 0 0" />
                 <body name="M01_J1_J2_J3_J4_J5_J6" pos="0.025 0 0">
-                  <joint name="M01_J1_J2_J3_J4_J5_J6_J6" type="revolute" pos="0 0 0" axis="1 0 0" range="-3.14159265 3.14159265" />
+                  <joint name="M01_J1_J2_J3_J4_J5_J6_J6" type="hinge" pos="0 0 0" axis="1 0 0" range="-3.14159265 3.14159265" />
                   <inertial pos="-0.0125 0 0" mass="0.05" diaginertia="1.3125e-05 1.125e-05 1.3125e-05" />
                   <geom name="M01_J1_J2_J3_J4_J5_J6_manipulator_wrist2" type="cylinder" size="0.015 0.015" euler="90 0 0" friction="0.5 0.005 0.0001" pos="-0.0125 0 0" />
                   <body name="M01_J1_J2_J3_J4_J5_J6_tool" pos="0.04 0 0">
@@ -141,27 +141,27 @@
     <body name="M02" pos="1.65 0.47 0">
       <geom name="M02_manipulator_base" type="cylinder" size="0.04 0.035" friction="0.5 0.005 0.0001" pos="0 0 0.035" />
       <body name="M02_J1" pos="0 0 0.07">
-        <joint name="M02_J1_J1" type="revolute" pos="0 0 0" axis="0 0 1" range="-3.14159265 3.14159265" />
+        <joint name="M02_J1_J1" type="hinge" pos="0 0 0" axis="0 0 1" range="-3.14159265 3.14159265" />
         <inertial pos="0 0 0.03" mass="0.1" diaginertia="0.000105 0.000105 9e-05" />
         <geom name="M02_J1_manipulator_j1_column" type="cylinder" size="0.03 0.03" friction="0.5 0.005 0.0001" pos="0 0 0.03" />
         <body name="M02_J1_J2" pos="0 0 0">
-          <joint name="M02_J1_J2_J2" type="revolute" pos="0 0 0" axis="0 1 0" range="-2.4 2.4" />
+          <joint name="M02_J1_J2_J2" type="hinge" pos="0 0 0" axis="0 1 0" range="-2.4 2.4" />
           <inertial pos="0 0 0" mass="0.1" diaginertia="0.000137916667 6.25e-05 0.000137916667" />
           <geom name="M02_J1_J2_manipulator_shoulder" type="cylinder" size="0.025 0.04" euler="90 0 0" friction="0.5 0.005 0.0001" pos="0 0 0" />
           <body name="M02_J1_J2_J3" pos="0.2 0 0">
-            <joint name="M02_J1_J2_J3_J3" type="revolute" pos="0 0 0" axis="0 1 0" range="-2.6 2.6" />
+            <joint name="M02_J1_J2_J3_J3" type="hinge" pos="0 0 0" axis="0 1 0" range="-2.6 2.6" />
             <inertial pos="-0.1 0 0" mass="0.3" diaginertia="0.00016 0.00208 0.00208" />
             <geom name="M02_J1_J2_J3_manipulator_upper_arm" type="box" size="0.1 0.02 0.02" friction="0.5 0.005 0.0001" pos="-0.1 0 0" />
             <body name="M02_J1_J2_J3_J4" pos="0.18 0 0">
-              <joint name="M02_J1_J2_J3_J4_J4" type="revolute" pos="0 0 0" axis="1 0 0" range="-3.14159265 3.14159265" />
+              <joint name="M02_J1_J2_J3_J4_J4" type="hinge" pos="0 0 0" axis="1 0 0" range="-3.14159265 3.14159265" />
               <inertial pos="-0.09 0 0" mass="0.25" diaginertia="7.5e-05 0.0013875 0.0013875" />
               <geom name="M02_J1_J2_J3_J4_manipulator_forearm" type="box" size="0.09 0.015 0.015" friction="0.5 0.005 0.0001" pos="-0.09 0 0" />
               <body name="M02_J1_J2_J3_J4_J5" pos="0.035 0 0">
-                <joint name="M02_J1_J2_J3_J4_J5_J5" type="revolute" pos="0 0 0" axis="0 1 0" range="-2.4 2.4" />
+                <joint name="M02_J1_J2_J3_J4_J5_J5" type="hinge" pos="0 0 0" axis="0 1 0" range="-2.4 2.4" />
                 <inertial pos="-0.0175 0 0" mass="0.05" diaginertia="3.08333333e-05 2e-05 3.08333333e-05" />
                 <geom name="M02_J1_J2_J3_J4_J5_manipulator_wrist1" type="cylinder" size="0.02 0.025" euler="90 0 0" friction="0.5 0.005 0.0001" pos="-0.0175 0 0" />
                 <body name="M02_J1_J2_J3_J4_J5_J6" pos="0.025 0 0">
-                  <joint name="M02_J1_J2_J3_J4_J5_J6_J6" type="revolute" pos="0 0 0" axis="1 0 0" range="-3.14159265 3.14159265" />
+                  <joint name="M02_J1_J2_J3_J4_J5_J6_J6" type="hinge" pos="0 0 0" axis="1 0 0" range="-3.14159265 3.14159265" />
                   <inertial pos="-0.0125 0 0" mass="0.05" diaginertia="1.3125e-05 1.125e-05 1.3125e-05" />
                   <geom name="M02_J1_J2_J3_J4_J5_J6_manipulator_wrist2" type="cylinder" size="0.015 0.015" euler="90 0 0" friction="0.5 0.005 0.0001" pos="-0.0125 0 0" />
                   <body name="M02_J1_J2_J3_J4_J5_J6_tool" pos="0.04 0 0">
@@ -225,24 +225,24 @@
       <geom name="F01_forklift_mast_rail_l" type="box" size="0.01 0.01 0.2325" friction="0.5 0.005 0.0001" pos="0.035 -0.045 0.3075" />
       <geom name="F01_forklift_mast_rail_r" type="box" size="0.01 0.01 0.2325" friction="0.5 0.005 0.0001" pos="0.035 0.045 0.3075" />
       <body name="F01_wheel_drive_0" pos="0 -0.06 0.025">
-        <joint name="F01_wheel_drive_0_forklift_wheel_drive_0_spin" type="hinge" pos="0 0 0" axis="0 1 0" />
+        <joint name="F01_wheel_drive_0_wheel_drive_0_spin" type="hinge" pos="0 0 0" axis="0 1 0" />
         <inertial pos="0 0 0" mass="0.05" diaginertia="1.75e-05 3.125e-05 1.75e-05" />
-        <geom name="F01_wheel_drive_0_forklift_wheel_drive_0" type="cylinder" size="0.025 0.0075" euler="90 0 0" friction="0.5 0.005 0.0001" pos="0 0 0" />
+        <geom name="F01_wheel_drive_0_wheel_drive_0" type="cylinder" size="0.025 0.0075" euler="90 0 0" friction="0.5 0.005 0.0001" pos="0 0 0" />
       </body>
       <body name="F01_wheel_drive_1" pos="0 0.06 0.025">
-        <joint name="F01_wheel_drive_1_forklift_wheel_drive_1_spin" type="hinge" pos="0 0 0" axis="0 1 0" />
+        <joint name="F01_wheel_drive_1_wheel_drive_1_spin" type="hinge" pos="0 0 0" axis="0 1 0" />
         <inertial pos="0 0 0" mass="0.05" diaginertia="1.75e-05 3.125e-05 1.75e-05" />
-        <geom name="F01_wheel_drive_1_forklift_wheel_drive_1" type="cylinder" size="0.025 0.0075" euler="90 0 0" friction="0.5 0.005 0.0001" pos="0 0 0" />
+        <geom name="F01_wheel_drive_1_wheel_drive_1" type="cylinder" size="0.025 0.0075" euler="90 0 0" friction="0.5 0.005 0.0001" pos="0 0 0" />
       </body>
       <body name="F01_wheel_rear_0" pos="-0.16 -0.055 0.025">
-        <joint name="F01_wheel_rear_0_forklift_wheel_rear_0_spin" type="hinge" pos="0 0 0" axis="0 1 0" />
+        <joint name="F01_wheel_rear_0_wheel_rear_0_spin" type="hinge" pos="0 0 0" axis="0 1 0" />
         <inertial pos="0 0 0" mass="0.05" diaginertia="1.75e-05 3.125e-05 1.75e-05" />
-        <geom name="F01_wheel_rear_0_forklift_wheel_rear_0" type="cylinder" size="0.025 0.0075" euler="90 0 0" friction="0.5 0.005 0.0001" pos="0 0 0" />
+        <geom name="F01_wheel_rear_0_wheel_rear_0" type="cylinder" size="0.025 0.0075" euler="90 0 0" friction="0.5 0.005 0.0001" pos="0 0 0" />
       </body>
       <body name="F01_wheel_rear_1" pos="-0.16 0.055 0.025">
-        <joint name="F01_wheel_rear_1_forklift_wheel_rear_1_spin" type="hinge" pos="0 0 0" axis="0 1 0" />
+        <joint name="F01_wheel_rear_1_wheel_rear_1_spin" type="hinge" pos="0 0 0" axis="0 1 0" />
         <inertial pos="0 0 0" mass="0.05" diaginertia="1.75e-05 3.125e-05 1.75e-05" />
-        <geom name="F01_wheel_rear_1_forklift_wheel_rear_1" type="cylinder" size="0.025 0.0075" euler="90 0 0" friction="0.5 0.005 0.0001" pos="0 0 0" />
+        <geom name="F01_wheel_rear_1_wheel_rear_1" type="cylinder" size="0.025 0.0075" euler="90 0 0" friction="0.5 0.005 0.0001" pos="0 0 0" />
       </body>
       <body name="F01_forklift_carriage" pos="0 0 0">
         <joint name="F01_forklift_carriage_forklift_lift" type="slide" pos="0 0 0" axis="0 0 1" range="0 0.43" />
@@ -296,10 +296,10 @@
     <motor name="R01_flat_agv_wheel_10_flat_agv_wheel_10_spin_drv" joint="R01_flat_agv_wheel_10_flat_agv_wheel_10_spin" gear="1" forcerange="-0.3 0.3" />
     <motor name="R01_flat_agv_wheel_11_flat_agv_wheel_11_spin_drv" joint="R01_flat_agv_wheel_11_flat_agv_wheel_11_spin" gear="1" forcerange="-0.3 0.3" />
     <motor name="R01_flat_agv_platform_flat_agv_lift_drv" joint="R01_flat_agv_platform_flat_agv_lift" gear="1" forcerange="-15 15" />
-    <motor name="F01_wheel_drive_0_forklift_wheel_drive_0_spin_drv" joint="F01_wheel_drive_0_forklift_wheel_drive_0_spin" gear="1" forcerange="-0.5 0.5" />
-    <motor name="F01_wheel_drive_1_forklift_wheel_drive_1_spin_drv" joint="F01_wheel_drive_1_forklift_wheel_drive_1_spin" gear="1" forcerange="-0.5 0.5" />
-    <motor name="F01_wheel_rear_0_forklift_wheel_rear_0_spin_drv" joint="F01_wheel_rear_0_forklift_wheel_rear_0_spin" gear="1" forcerange="-0.5 0.5" />
-    <motor name="F01_wheel_rear_1_forklift_wheel_rear_1_spin_drv" joint="F01_wheel_rear_1_forklift_wheel_rear_1_spin" gear="1" forcerange="-0.5 0.5" />
+    <motor name="F01_wheel_drive_0_wheel_drive_0_spin_drv" joint="F01_wheel_drive_0_wheel_drive_0_spin" gear="1" forcerange="-0.5 0.5" />
+    <motor name="F01_wheel_drive_1_wheel_drive_1_spin_drv" joint="F01_wheel_drive_1_wheel_drive_1_spin" gear="1" forcerange="-0.5 0.5" />
+    <motor name="F01_wheel_rear_0_wheel_rear_0_spin_drv" joint="F01_wheel_rear_0_wheel_rear_0_spin" gear="1" forcerange="-0.5 0.5" />
+    <motor name="F01_wheel_rear_1_wheel_rear_1_spin_drv" joint="F01_wheel_rear_1_wheel_rear_1_spin" gear="1" forcerange="-0.5 0.5" />
     <motor name="F01_forklift_carriage_forklift_lift_drv" joint="F01_forklift_carriage_forklift_lift" gear="1" forcerange="-14.7 14.7" />
   </actuator>
 </mujoco>
