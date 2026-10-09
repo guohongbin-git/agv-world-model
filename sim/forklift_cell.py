@@ -75,6 +75,8 @@ class ForkliftCell:
         # 托盘: 三条底条(z0-4) + 顶板(z12-18) + 背块; 总 45g
         return f"""
 <mujoco model="S00_bench">
+  <!-- MuJoCo 3.15 起 <compiler angle> 默认为 degree; 本项目统一 SI 弧度 -->
+  <compiler angle="radian"/>
   <option timestep="{dt}" gravity="0 0 -9.81" iterations="200"
           tolerance="1e-10" noslip_iterations="30" noslip_tolerance="1e-8"/>
   <size nconmax="200" njmax="300"/>
