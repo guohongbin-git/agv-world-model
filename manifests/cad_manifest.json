@@ -1,0 +1,402 @@
+{
+  "manifest_version": "1",
+  "stage": "W02",
+  "design_version": "2.0.0",
+  "generated_at_utc": "2026-10-09T09:12:22+00:00",
+  "units": {
+    "length": "m",
+    "mass": "kg",
+    "angle": "rad",
+    "time": "s"
+  },
+  "export_units": {
+    "step": "mm（由米制模型在导出边界一次转换）",
+    "stl": "m"
+  },
+  "inputs": {
+    "config": "configs/design.yaml",
+    "config_sha256": "c17991e0cc28827d067e2ea1af77d50f46d0ff41c0cc1c94d105d6521516efa5"
+  },
+  "tools": {
+    "generator": "cad.build",
+    "python": "3.12.13",
+    "build123d": "0.13.0"
+  },
+  "derived_parameters": {
+    "values": {
+      "table": {
+        "thickness_m": 0.018
+      },
+      "forklift": {
+        "chassis_z_range_m": [
+          0.025,
+          0.07500000000000001
+        ],
+        "chassis_x_range_m": [
+          -0.195,
+          0.025
+        ],
+        "wheel_width_m": 0.015,
+        "mast_rail_section_m": 0.020000000000000004,
+        "mast_rail_x_range_m": [
+          0.025,
+          0.045000000000000005
+        ],
+        "mast_rail_y_m": 0.045,
+        "mast_rail_z_range_m": [
+          0.07500000000000001,
+          0.54
+        ],
+        "carriage_plate_x_range_m": [
+          0.025,
+          0.045000000000000005
+        ],
+        "carriage_plate_z_range_m": [
+          0.01,
+          0.09
+        ],
+        "fork_x_range_m": [
+          0.045000000000000005,
+          0.125
+        ],
+        "fork_top_z_m": 0.065,
+        "wheel_mass_kg": 0.05,
+        "mast_rail_mass_kg": 0.05,
+        "fork_mass_kg": 0.015,
+        "chassis_mass_kg": 1.2,
+        "carriage_plate_mass_kg": 0.22,
+        "wheel_drive_torque_max_nm": 0.5
+      },
+      "flat_agv": {
+        "chassis_z_range_m": [
+          0.015,
+          0.035
+        ],
+        "wheel_x_offset_m": 0.05,
+        "wheel_y_offset_m": 0.04,
+        "wheel_width_m": 0.01,
+        "platform_thickness_m": 0.009999999999999995,
+        "chassis_mass_kg": 0.8,
+        "platform_mass_kg": 0.1,
+        "wheel_mass_kg": 0.03,
+        "wheel_drive_torque_max_nm": 0.3
+      },
+      "station": {
+        "rail_length_m": 0.12,
+        "rail_z_range_m": [
+          0.045,
+          0.055
+        ],
+        "leg_size_m": 0.01,
+        "leg_x_offset_m": 0.055,
+        "leg_y_offset_m": 0.07500000000000001,
+        "leg_z_range_m": [
+          0.0,
+          0.045
+        ]
+      },
+      "rack": {
+        "post_section_m": 0.02,
+        "shelf_thickness_m": 0.008,
+        "column_pitch_m": 0.13000000000000006,
+        "post_z_range_m": [
+          0.0,
+          0.54
+        ]
+      },
+      "feed_tray": {
+        "plate_size_m": [
+          0.08,
+          0.06
+        ],
+        "plate_thickness_m": 0.008,
+        "leg_size_m": 0.01,
+        "top_z_m": 0.055
+      },
+      "manipulator": {
+        "j1_column_r_m": 0.03,
+        "shoulder_r_m": 0.025,
+        "upper_arm_section_m": 0.04,
+        "forearm_section_m": 0.03,
+        "wrist_r_m": [
+          0.02,
+          0.015
+        ],
+        "mass_split_kg": {
+          "J1": 0.1,
+          "J2": 0.1,
+          "J3": 0.3,
+          "J4": 0.25,
+          "J5": 0.05,
+          "J6": 0.05,
+          "tool": 0.08,
+          "finger_each": 0.01
+        }
+      },
+      "gripper": {
+        "palm_center_tool_m": [
+          -0.045,
+          0.0,
+          0.0
+        ],
+        "palm_size_tool_m": [
+          0.015,
+          0.02,
+          0.07
+        ],
+        "finger_size_tool_m": [
+          0.045,
+          0.006,
+          0.01
+        ],
+        "finger_center_x_tool_m": -0.015,
+        "finger_center_y_tool_m": 0.003,
+        "pad_size_tool_m": [
+          0.015,
+          0.002,
+          0.01
+        ],
+        "pad_center_finger_m": [
+          0.0,
+          -0.002,
+          0.0
+        ]
+      }
+    },
+    "notes": {
+      "convention": "design.yaml 未覆盖的尺寸: formula=由配置参数推导; initial=设计初值(AGENTS.md 规则3)。",
+      "gripper_axis_mapping": {
+        "palm": "palm_size_m=[70,20,15]mm → 工具系(Z宽,Y厚,X厚); 掌底=TCP上方37.5mm=箱顶+12.5mm。",
+        "finger": "finger_size_m=[6,10,45]mm → 工具系(Y厚,Z宽,X长); 指心±3mm@gap=0, 内侧面距=gap。",
+        "pad": "pad_size_m=[10,15]mm → 工具系(Z宽,X高); 垫厚2mm嵌入指内侧齐平, 接触面即指内侧面。"
+      }
+    }
+  },
+  "models": {
+    "pallet": {
+      "step": "assets/cad/pallet.step",
+      "stl": "assets/cad/pallet.stl",
+      "mass_kg": 0.045,
+      "bodies": 1,
+      "primitives": 9,
+      "sites": [
+        "pallet_label"
+      ],
+      "note": "叉孔 y=±15, z 4→12, X 贯通; 凸边内净区 70×50, 总高 21mm。"
+    },
+    "goods_box": {
+      "step": "assets/cad/goods_box.step",
+      "stl": "assets/cad/goods_box.stl",
+      "mass_kg": 0.2,
+      "bodies": 1,
+      "primitives": 1,
+      "sites": [
+        "goods_label"
+      ],
+      "note": "X 两侧供夹持, Y 侧贴 25mm 产品码。"
+    },
+    "forklift": {
+      "step": "assets/cad/forklift.step",
+      "stl": "assets/cad/forklift.stl",
+      "mass_kg": 1.5,
+      "bodies": 6,
+      "primitives": 10,
+      "sites": [
+        "forklift_carriage.fork_tip"
+      ],
+      "note": "固定车体质量含 4 轮与 2 导轨（拆分见派生参数）。"
+    },
+    "flat_agv": {
+      "step": "assets/cad/flat_agv.step",
+      "stl": "assets/cad/flat_agv.stl",
+      "mass_kg": 0.8,
+      "bodies": 6,
+      "primitives": 6,
+      "sites": [],
+      "note": "固定车体高度 ≤35mm（顶升台除外）。"
+    },
+    "station": {
+      "step": "assets/cad/station.step",
+      "stl": "assets/cad/station.stl",
+      "mass_kg": null,
+      "bodies": 1,
+      "primitives": 6,
+      "sites": [
+        "pallet_center"
+      ],
+      "note": "轨面 55mm; 托盘 80×60 承托于 y=±27mm; 中间顶升窗口=轨间净空, 支腿净宽≥140mm。"
+    },
+    "rack_group": {
+      "step": "assets/cad/rack_group.step",
+      "stl": "assets/cad/rack_group.stl",
+      "mass_kg": null,
+      "bodies": 1,
+      "primitives": 7,
+      "sites": [
+        "slot_c0_l0",
+        "slot_c0_l1",
+        "slot_c0_l2",
+        "slot_c1_l0",
+        "slot_c1_l1",
+        "slot_c1_l2",
+        "slot_c2_l0",
+        "slot_c2_l1",
+        "slot_c2_l2"
+      ],
+      "note": "3列×3层; 层板顶=支撑面; slot site=货位中心。"
+    },
+    "feed_tray": {
+      "step": "assets/cad/feed_tray.step",
+      "stl": "assets/cad/feed_tray.stl",
+      "mass_kg": null,
+      "bodies": 1,
+      "primitives": 5,
+      "sites": [
+        "tray_center"
+      ],
+      "note": "台面顶 55mm; 箱件底面承托面。"
+    },
+    "manipulator": {
+      "step": "assets/cad/manipulator.step",
+      "stl": "assets/cad/manipulator.stl",
+      "mass_kg": null,
+      "bodies": 10,
+      "primitives": 12,
+      "sites": [
+        "tool.tcp"
+      ],
+      "note": "基座固定（静体）; 链: base→J1..J6→tool→双指。"
+    },
+    "table": {
+      "step": "assets/cad/table.step",
+      "stl": "assets/cad/table.stl",
+      "mass_kg": null,
+      "bodies": 1,
+      "primitives": 1,
+      "sites": [],
+      "note": "静体; 世界 z=0 = 桌面上表面。"
+    }
+  },
+  "files": [
+    {
+      "path": "assets/cad/pallet.step",
+      "kind": "step",
+      "bytes": 58146,
+      "sha256": "cc61c0da7fb3daab37640f124c4c8e452d78345e816a655eafa22c94358f64b9"
+    },
+    {
+      "path": "assets/cad/pallet.stl",
+      "kind": "stl",
+      "bytes": 3484,
+      "sha256": "075284e4bd6d429fc4d559b1bb8504af2c06a3b8af686a29dc4a4feb5cc4aa23"
+    },
+    {
+      "path": "assets/cad/goods_box.step",
+      "kind": "step",
+      "bytes": 17044,
+      "sha256": "0115085ed3059719a948e36a2dfc86f1dbded9e94758eaf6bc675fed94114f8d"
+    },
+    {
+      "path": "assets/cad/goods_box.stl",
+      "kind": "stl",
+      "bytes": 684,
+      "sha256": "315d0623e6f722060cdf8077bea559b21bc8d90a87b6ff69ce454546eceb6a20"
+    },
+    {
+      "path": "assets/cad/forklift.step",
+      "kind": "step",
+      "bytes": 132160,
+      "sha256": "6022f4e6453add4dce6b6ed9447f1ba771ce66f22c7cf403474f6ee3c10f6cea"
+    },
+    {
+      "path": "assets/cad/forklift.stl",
+      "kind": "stl",
+      "bytes": 129284,
+      "sha256": "8bad168677d9a5b8aaf905b1952ac5f0c31701e97ece237329d9ae9e05869387"
+    },
+    {
+      "path": "assets/cad/flat_agv.step",
+      "kind": "step",
+      "bytes": 66093,
+      "sha256": "43509a80d6ef580a9e289349813a683a6f24dc82fdbf23543e9af197e332b44b"
+    },
+    {
+      "path": "assets/cad/flat_agv.stl",
+      "kind": "stl",
+      "bytes": 126884,
+      "sha256": "d13753c14f54eb33f5d1fe6c489b4ca68a2a565c5b7d756c4d77f66978114964"
+    },
+    {
+      "path": "assets/cad/station.step",
+      "kind": "step",
+      "bytes": 97594,
+      "sha256": "a1e227d1f2d99caf96cc7c79e59f69d02e6b724d0c022b5d2b4ef229fb762d51"
+    },
+    {
+      "path": "assets/cad/station.stl",
+      "kind": "stl",
+      "bytes": 3684,
+      "sha256": "fdc79746b9ab1bb2520c5646d64ceef9ac79e4a489ffde7b0f11e7490201fb14"
+    },
+    {
+      "path": "assets/cad/rack_group.step",
+      "kind": "step",
+      "bytes": 114324,
+      "sha256": "d762ec6489e93d5811c234a0582340680dc6a8af8e0313e018aa8db96306b039"
+    },
+    {
+      "path": "assets/cad/rack_group.stl",
+      "kind": "stl",
+      "bytes": 4284,
+      "sha256": "244cdd6aba078085b88d159f786090facba516e5cf85f27c0371a14d49221e35"
+    },
+    {
+      "path": "assets/cad/feed_tray.step",
+      "kind": "step",
+      "bytes": 81282,
+      "sha256": "5b65bc87bdc269c65a9ddf318aa5cd2fffdba7e52c0222e3c68fbb728d2c2eec"
+    },
+    {
+      "path": "assets/cad/feed_tray.stl",
+      "kind": "stl",
+      "bytes": 3084,
+      "sha256": "1f8a05790e1c5c13114eb1dd88b234348096a964779988c2d706440671a7a8b8"
+    },
+    {
+      "path": "assets/cad/manipulator.step",
+      "kind": "step",
+      "bytes": 160673,
+      "sha256": "47f3238bb9bc52853b501d5b68d7c59b3e4aba89bcda7a26f3aa99ad1d2e3e5e"
+    },
+    {
+      "path": "assets/cad/manipulator.stl",
+      "kind": "stl",
+      "bytes": 161284,
+      "sha256": "0842261afd7897e417a119870f66b6680197e120aac4a82d2e9f79966f14b110"
+    },
+    {
+      "path": "assets/cad/table.step",
+      "kind": "step",
+      "bytes": 17088,
+      "sha256": "16028d82dfdcc37874af7b91dff28b6102e3d77c83ef23c2d009c96bb6a8eb9e"
+    },
+    {
+      "path": "assets/cad/table.stl",
+      "kind": "stl",
+      "bytes": 684,
+      "sha256": "6dfd4b2b7795a4a8eb6e60bfacfe1ee6d781f3b3379c67e484f1663630fba8ea"
+    },
+    {
+      "path": "assets/collision/collision.yaml",
+      "kind": "collision",
+      "bytes": 22713,
+      "sha256": "8e6e82885aefcbd403f59b6ef1560da40a050023149499820fd7bb3d328320c1"
+    },
+    {
+      "path": "assets/cad/mjcf_skeleton.xml",
+      "kind": "mjcf",
+      "bytes": 28864,
+      "sha256": "cf31459bc972e456736b5612cf93ad0239aa705511705dc318c66abbc4dbddf8"
+    }
+  ]
+}

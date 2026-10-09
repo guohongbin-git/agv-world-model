@@ -1,0 +1,1069 @@
+design_version: 2.0.0
+units:
+  length: m
+  mass: kg
+conventions: 模型局部坐标系见 cad/models.py 模块文档; 原点约定与 MJCF body 帧一致。非凸体（托盘）已分解为多 box, 叉孔空隙保留;
+  圆柱轴向见 axis 字段。
+models:
+  pallet:
+    origin_note: 叉孔 y=±15, z 4→12, X 贯通; 凸边内净区 70×50, 总高 21mm。
+    bodies:
+      pallet:
+        pos_m:
+        - 0.0
+        - 0.0
+        - 0.0
+        joint:
+          name: pallet_root
+          kind: free
+          axis:
+          - 0.0
+          - 0.0
+          - 1.0
+        mass_kg: 0.045
+        primitives:
+        - name: pallet_bottom_plate
+          type: box
+          center_m:
+          - 0.0
+          - 0.0
+          - 0.002
+          size_m:
+          - 0.08
+          - 0.06
+          - 0.004
+        - name: pallet_top_plate
+          type: box
+          center_m:
+          - 0.0
+          - 0.0
+          - 0.015
+          size_m:
+          - 0.08
+          - 0.06
+          - 0.005999999999999998
+        - name: pallet_rib_0
+          type: box
+          center_m:
+          - 0.0
+          - -0.027
+          - 0.008
+          size_m:
+          - 0.08
+          - 0.005999999999999998
+          - 0.008
+        - name: pallet_rib_1
+          type: box
+          center_m:
+          - 0.0
+          - 0.0
+          - 0.008
+          size_m:
+          - 0.08
+          - 0.012
+          - 0.008
+        - name: pallet_rib_2
+          type: box
+          center_m:
+          - 0.0
+          - 0.027
+          - 0.008
+          size_m:
+          - 0.08
+          - 0.005999999999999998
+          - 0.008
+        - name: pallet_locator_n
+          type: box
+          center_m:
+          - 0.0
+          - 0.0275
+          - 0.019499999999999997
+          size_m:
+          - 0.08
+          - 0.0049999999999999975
+          - 0.002999999999999999
+        - name: pallet_locator_s
+          type: box
+          center_m:
+          - 0.0
+          - -0.0275
+          - 0.019499999999999997
+          size_m:
+          - 0.08
+          - 0.0049999999999999975
+          - 0.002999999999999999
+        - name: pallet_locator_e
+          type: box
+          center_m:
+          - 0.037500000000000006
+          - 0.0
+          - 0.019499999999999997
+          size_m:
+          - 0.0049999999999999975
+          - 0.05
+          - 0.002999999999999999
+        - name: pallet_locator_w
+          type: box
+          center_m:
+          - -0.037500000000000006
+          - 0.0
+          - 0.019499999999999997
+          size_m:
+          - 0.0049999999999999975
+          - 0.05
+          - 0.002999999999999999
+        sites:
+          pallet_label:
+          - 0.0
+          - 0.03
+          - 0.009
+        note: 叉孔 y=±15, z 4→12, X 贯通; 凸边内净区 70×50, 总高 21mm。
+  goods_box:
+    origin_note: X 两侧供夹持, Y 侧贴 25mm 产品码。
+    bodies:
+      goods_box:
+        pos_m:
+        - 0.0
+        - 0.0
+        - 0.0
+        joint:
+          name: goods_root
+          kind: free
+          axis:
+          - 0.0
+          - 0.0
+          - 1.0
+        mass_kg: 0.2
+        primitives:
+        - name: goods_body
+          type: box
+          center_m:
+          - 0.0
+          - 0.0
+          - 0.025
+          size_m:
+          - 0.06
+          - 0.04
+          - 0.05
+        sites:
+          goods_label:
+          - 0.0
+          - 0.02
+          - 0.025
+        note: X 两侧供夹持, Y 侧贴 25mm 产品码。
+  forklift:
+    origin_note: 固定车体质量含 4 轮与 2 导轨（拆分见派生参数）。
+    bodies:
+      forklift:
+        pos_m:
+        - 0.0
+        - 0.0
+        - 0.0
+        joint:
+          name: forklift_root
+          kind: free
+          axis:
+          - 0.0
+          - 0.0
+          - 1.0
+        mass_kg: 1.5
+        com_x_m: -0.05
+        primitives:
+        - name: forklift_chassis
+          type: box
+          center_m:
+          - -0.085
+          - 0.0
+          - 0.05
+          size_m:
+          - 0.22
+          - 0.15
+          - 0.05000000000000001
+        - name: forklift_mast_rail_l
+          type: box
+          center_m:
+          - 0.035
+          - -0.045
+          - 0.3075
+          size_m:
+          - 0.020000000000000004
+          - 0.020000000000000004
+          - 0.465
+        - name: forklift_mast_rail_r
+          type: box
+          center_m:
+          - 0.035
+          - 0.045
+          - 0.3075
+          size_m:
+          - 0.020000000000000004
+          - 0.020000000000000004
+          - 0.465
+        note: 固定车体质量含 4 轮与 2 导轨（拆分见派生参数）。
+      forklift.wheel_drive_0:
+        pos_m:
+        - 0.0
+        - -0.06
+        - 0.025
+        joint:
+          name: forklift_wheel_drive_0_spin
+          kind: hinge
+          axis:
+          - 0.0
+          - 1.0
+          - 0.0
+          drive_max: 0.5
+        mass_kg: 0.05
+        primitives:
+        - name: forklift_wheel_drive_0
+          type: cylinder
+          center_m:
+          - 0.0
+          - 0.0
+          - 0.0
+          radius_m: 0.025
+          height_m: 0.015
+          axis: y
+      forklift.wheel_drive_1:
+        pos_m:
+        - 0.0
+        - 0.06
+        - 0.025
+        joint:
+          name: forklift_wheel_drive_1_spin
+          kind: hinge
+          axis:
+          - 0.0
+          - 1.0
+          - 0.0
+          drive_max: 0.5
+        mass_kg: 0.05
+        primitives:
+        - name: forklift_wheel_drive_1
+          type: cylinder
+          center_m:
+          - 0.0
+          - 0.0
+          - 0.0
+          radius_m: 0.025
+          height_m: 0.015
+          axis: y
+      forklift.wheel_rear_0:
+        pos_m:
+        - -0.16
+        - -0.055
+        - 0.025
+        joint:
+          name: forklift_wheel_rear_0_spin
+          kind: hinge
+          axis:
+          - 0.0
+          - 1.0
+          - 0.0
+          drive_max: 0.5
+        mass_kg: 0.05
+        primitives:
+        - name: forklift_wheel_rear_0
+          type: cylinder
+          center_m:
+          - 0.0
+          - 0.0
+          - 0.0
+          radius_m: 0.025
+          height_m: 0.015
+          axis: y
+      forklift.wheel_rear_1:
+        pos_m:
+        - -0.16
+        - 0.055
+        - 0.025
+        joint:
+          name: forklift_wheel_rear_1_spin
+          kind: hinge
+          axis:
+          - 0.0
+          - 1.0
+          - 0.0
+          drive_max: 0.5
+        mass_kg: 0.05
+        primitives:
+        - name: forklift_wheel_rear_1
+          type: cylinder
+          center_m:
+          - 0.0
+          - 0.0
+          - 0.0
+          radius_m: 0.025
+          height_m: 0.015
+          axis: y
+      forklift.forklift_carriage:
+        pos_m:
+        - 0.0
+        - 0.0
+        - 0.0
+        joint:
+          name: forklift_lift
+          kind: slide
+          axis:
+          - 0.0
+          - 0.0
+          - 1.0
+          range:
+          - 0.0
+          - 0.43
+          drive_max: 14.7
+        mass_kg: 0.25
+        com_x_m: 0.045
+        primitives:
+        - name: forklift_carriage_plate
+          type: box
+          center_m:
+          - 0.035
+          - 0.0
+          - 0.049999999999999996
+          size_m:
+          - 0.020000000000000004
+          - 0.15
+          - 0.08
+        - name: forklift_fork_l
+          type: box
+          center_m:
+          - 0.085
+          - -0.015
+          - 0.06375
+          size_m:
+          - 0.08
+          - 0.01
+          - 0.0025
+        - name: forklift_fork_r
+          type: box
+          center_m:
+          - 0.085
+          - 0.015
+          - 0.06375
+          size_m:
+          - 0.08
+          - 0.01
+          - 0.0025
+        sites:
+          fork_tip:
+          - 0.125
+          - 0.0
+          - 0.065
+        note: 举升零位时叉顶面=transport_fork_top_z_m=65mm; fork_tip 在叉尖中心。
+  flat_agv:
+    origin_note: 固定车体高度 ≤35mm（顶升台除外）。
+    bodies:
+      flat_agv:
+        pos_m:
+        - 0.0
+        - 0.0
+        - 0.0
+        joint:
+          name: flat_agv_root
+          kind: free
+          axis:
+          - 0.0
+          - 0.0
+          - 1.0
+        mass_kg: 0.8
+        primitives:
+        - name: flat_agv_chassis
+          type: box
+          center_m:
+          - 0.0
+          - 0.0
+          - 0.025
+          size_m:
+          - 0.16
+          - 0.11
+          - 0.020000000000000004
+        note: 固定车体高度 ≤35mm（顶升台除外）。
+      flat_agv.flat_agv_wheel_00:
+        pos_m:
+        - -0.05
+        - -0.04
+        - 0.015
+        joint:
+          name: flat_agv_wheel_00_spin
+          kind: hinge
+          axis:
+          - 0.0
+          - 1.0
+          - 0.0
+          drive_max: 0.3
+        mass_kg: 0.03
+        primitives:
+        - name: flat_agv_wheel_00
+          type: cylinder
+          center_m:
+          - 0.0
+          - 0.0
+          - 0.0
+          radius_m: 0.015
+          height_m: 0.01
+          axis: y
+      flat_agv.flat_agv_wheel_01:
+        pos_m:
+        - 0.05
+        - -0.04
+        - 0.015
+        joint:
+          name: flat_agv_wheel_01_spin
+          kind: hinge
+          axis:
+          - 0.0
+          - 1.0
+          - 0.0
+          drive_max: 0.3
+        mass_kg: 0.03
+        primitives:
+        - name: flat_agv_wheel_01
+          type: cylinder
+          center_m:
+          - 0.0
+          - 0.0
+          - 0.0
+          radius_m: 0.015
+          height_m: 0.01
+          axis: y
+      flat_agv.flat_agv_wheel_10:
+        pos_m:
+        - -0.05
+        - 0.04
+        - 0.015
+        joint:
+          name: flat_agv_wheel_10_spin
+          kind: hinge
+          axis:
+          - 0.0
+          - 1.0
+          - 0.0
+          drive_max: 0.3
+        mass_kg: 0.03
+        primitives:
+        - name: flat_agv_wheel_10
+          type: cylinder
+          center_m:
+          - 0.0
+          - 0.0
+          - 0.0
+          radius_m: 0.015
+          height_m: 0.01
+          axis: y
+      flat_agv.flat_agv_wheel_11:
+        pos_m:
+        - 0.05
+        - 0.04
+        - 0.015
+        joint:
+          name: flat_agv_wheel_11_spin
+          kind: hinge
+          axis:
+          - 0.0
+          - 1.0
+          - 0.0
+          drive_max: 0.3
+        mass_kg: 0.03
+        primitives:
+        - name: flat_agv_wheel_11
+          type: cylinder
+          center_m:
+          - 0.0
+          - 0.0
+          - 0.0
+          radius_m: 0.015
+          height_m: 0.01
+          axis: y
+      flat_agv.flat_agv_platform:
+        pos_m:
+        - 0.0
+        - 0.0
+        - 0.0
+        joint:
+          name: flat_agv_lift
+          kind: slide
+          axis:
+          - 0.0
+          - 0.0
+          - 1.0
+          range:
+          - 0.0
+          - 0.02
+          drive_max: 15.0
+        mass_kg: 0.1
+        primitives:
+        - name: flat_agv_platform
+          type: box
+          center_m:
+          - 0.0
+          - 0.0
+          - 0.04
+          size_m:
+          - 0.07
+          - 0.04
+          - 0.009999999999999995
+        note: 低位台面顶=45mm, 高位=65mm。
+  station:
+    origin_note: 轨面 55mm; 托盘 80×60 承托于 y=±27mm; 中间顶升窗口=轨间净空, 支腿净宽≥140mm。
+    bodies:
+      station:
+        pos_m:
+        - 0.0
+        - 0.0
+        - 0.0
+        primitives:
+        - name: station_rail_l
+          type: box
+          center_m:
+          - 0.0
+          - -0.027
+          - 0.05
+          size_m:
+          - 0.12
+          - 0.006
+          - 0.010000000000000002
+        - name: station_rail_r
+          type: box
+          center_m:
+          - 0.0
+          - 0.027
+          - 0.05
+          size_m:
+          - 0.12
+          - 0.006
+          - 0.010000000000000002
+        - name: station_leg_ws
+          type: box
+          center_m:
+          - -0.055
+          - -0.07500000000000001
+          - 0.0225
+          size_m:
+          - 0.01
+          - 0.01
+          - 0.045
+        - name: station_leg_wn
+          type: box
+          center_m:
+          - -0.055
+          - 0.07500000000000001
+          - 0.0225
+          size_m:
+          - 0.01
+          - 0.01
+          - 0.045
+        - name: station_leg_es
+          type: box
+          center_m:
+          - 0.055
+          - -0.07500000000000001
+          - 0.0225
+          size_m:
+          - 0.01
+          - 0.01
+          - 0.045
+        - name: station_leg_en
+          type: box
+          center_m:
+          - 0.055
+          - 0.07500000000000001
+          - 0.0225
+          size_m:
+          - 0.01
+          - 0.01
+          - 0.045
+        sites:
+          pallet_center:
+          - 0.0
+          - 0.0
+          - 0.055
+        note: 轨面 55mm; 托盘 80×60 承托于 y=±27mm; 中间顶升窗口=轨间净空, 支腿净宽≥140mm。
+  rack_group:
+    origin_note: 3列×3层; 层板顶=支撑面; slot site=货位中心。
+    bodies:
+      rack_group:
+        pos_m:
+        - 0.0
+        - 0.0
+        - 0.0
+        primitives:
+        - name: rack_post_ws
+          type: box
+          center_m:
+          - -0.185
+          - -0.07
+          - 0.27
+          size_m:
+          - 0.02
+          - 0.02
+          - 0.54
+        - name: rack_post_wn
+          type: box
+          center_m:
+          - -0.185
+          - 0.07
+          - 0.27
+          size_m:
+          - 0.02
+          - 0.02
+          - 0.54
+        - name: rack_post_es
+          type: box
+          center_m:
+          - 0.185
+          - -0.07
+          - 0.27
+          size_m:
+          - 0.02
+          - 0.02
+          - 0.54
+        - name: rack_post_en
+          type: box
+          center_m:
+          - 0.185
+          - 0.07
+          - 0.27
+          size_m:
+          - 0.02
+          - 0.02
+          - 0.54
+        - name: rack_shelf_l0
+          type: box
+          center_m:
+          - 0.0
+          - 0.0
+          - 0.096
+          size_m:
+          - 0.39
+          - 0.16
+          - 0.008
+        - name: rack_shelf_l1
+          type: box
+          center_m:
+          - 0.0
+          - 0.0
+          - 0.246
+          size_m:
+          - 0.39
+          - 0.16
+          - 0.008
+        - name: rack_shelf_l2
+          type: box
+          center_m:
+          - 0.0
+          - 0.0
+          - 0.396
+          size_m:
+          - 0.39
+          - 0.16
+          - 0.008
+        sites:
+          slot_c0_l0:
+          - -0.13000000000000006
+          - 0.0
+          - 0.1
+          slot_c0_l1:
+          - -0.13000000000000006
+          - 0.0
+          - 0.25
+          slot_c0_l2:
+          - -0.13000000000000006
+          - 0.0
+          - 0.4
+          slot_c1_l0:
+          - 0.0
+          - 0.0
+          - 0.1
+          slot_c1_l1:
+          - 0.0
+          - 0.0
+          - 0.25
+          slot_c1_l2:
+          - 0.0
+          - 0.0
+          - 0.4
+          slot_c2_l0:
+          - 0.13000000000000006
+          - 0.0
+          - 0.1
+          slot_c2_l1:
+          - 0.13000000000000006
+          - 0.0
+          - 0.25
+          slot_c2_l2:
+          - 0.13000000000000006
+          - 0.0
+          - 0.4
+        note: 3列×3层; 层板顶=支撑面; slot site=货位中心。
+  feed_tray:
+    origin_note: 台面顶 55mm; 箱件底面承托面。
+    bodies:
+      feed_tray:
+        pos_m:
+        - 0.0
+        - 0.0
+        - 0.0
+        primitives:
+        - name: feed_tray_plate
+          type: box
+          center_m:
+          - 0.0
+          - 0.0
+          - 0.051000000000000004
+          size_m:
+          - 0.08
+          - 0.06
+          - 0.008
+        - name: feed_tray_leg_ws
+          type: box
+          center_m:
+          - -0.035
+          - -0.024999999999999998
+          - 0.0235
+          size_m:
+          - 0.01
+          - 0.01
+          - 0.047
+        - name: feed_tray_leg_wn
+          type: box
+          center_m:
+          - -0.035
+          - 0.024999999999999998
+          - 0.0235
+          size_m:
+          - 0.01
+          - 0.01
+          - 0.047
+        - name: feed_tray_leg_es
+          type: box
+          center_m:
+          - 0.035
+          - -0.024999999999999998
+          - 0.0235
+          size_m:
+          - 0.01
+          - 0.01
+          - 0.047
+        - name: feed_tray_leg_en
+          type: box
+          center_m:
+          - 0.035
+          - 0.024999999999999998
+          - 0.0235
+          size_m:
+          - 0.01
+          - 0.01
+          - 0.047
+        sites:
+          tray_center:
+          - 0.0
+          - 0.0
+          - 0.055
+        note: 台面顶 55mm; 箱件底面承托面。
+  manipulator:
+    origin_note: '基座固定（静体）; 链: base→J1..J6→tool→双指。'
+    bodies:
+      manipulator:
+        pos_m:
+        - 0.0
+        - 0.0
+        - 0.0
+        primitives:
+        - name: manipulator_base
+          type: cylinder
+          center_m:
+          - 0.0
+          - 0.0
+          - 0.035
+          radius_m: 0.04
+          height_m: 0.07
+          axis: z
+        note: '基座固定（静体）; 链: base→J1..J6→tool→双指。'
+      manipulator.J1:
+        pos_m:
+        - 0
+        - 0
+        - 0.07
+        joint:
+          name: J1
+          kind: revolute
+          axis:
+          - 0
+          - 0
+          - 1
+          range:
+          - -3.141592653589793
+          - 3.141592653589793
+          drive_max: 3.0
+        mass_kg: 0.1
+        primitives:
+        - name: manipulator_j1_column
+          type: cylinder
+          center_m:
+          - 0.0
+          - 0.0
+          - 0.03
+          radius_m: 0.03
+          height_m: 0.06
+          axis: z
+      manipulator.J1.J2:
+        pos_m:
+        - 0
+        - 0
+        - 0
+        joint:
+          name: J2
+          kind: revolute
+          axis:
+          - 0
+          - 1
+          - 0
+          range:
+          - -2.4
+          - 2.4
+          drive_max: 5.0
+        mass_kg: 0.1
+        primitives:
+        - name: manipulator_shoulder
+          type: cylinder
+          center_m:
+          - 0.0
+          - 0.0
+          - 0.0
+          radius_m: 0.025
+          height_m: 0.08
+          axis: y
+      manipulator.J1.J2.J3:
+        pos_m:
+        - 0.2
+        - 0
+        - 0
+        joint:
+          name: J3
+          kind: revolute
+          axis:
+          - 0
+          - 1
+          - 0
+          range:
+          - -2.6
+          - 2.6
+          drive_max: 2.0
+        mass_kg: 0.3
+        primitives:
+        - name: manipulator_upper_arm
+          type: box
+          center_m:
+          - -0.1
+          - 0.0
+          - 0.0
+          size_m:
+          - 0.2
+          - 0.04
+          - 0.04
+      manipulator.J1.J2.J3.J4:
+        pos_m:
+        - 0.18
+        - 0
+        - 0
+        joint:
+          name: J4
+          kind: revolute
+          axis:
+          - 1
+          - 0
+          - 0
+          range:
+          - -3.141592653589793
+          - 3.141592653589793
+          drive_max: 0.8
+        mass_kg: 0.25
+        primitives:
+        - name: manipulator_forearm
+          type: box
+          center_m:
+          - -0.09
+          - 0.0
+          - 0.0
+          size_m:
+          - 0.18
+          - 0.03
+          - 0.03
+      manipulator.J1.J2.J3.J4.J5:
+        pos_m:
+        - 0.035
+        - 0
+        - 0
+        joint:
+          name: J5
+          kind: revolute
+          axis:
+          - 0
+          - 1
+          - 0
+          range:
+          - -2.4
+          - 2.4
+          drive_max: 0.8
+        mass_kg: 0.05
+        primitives:
+        - name: manipulator_wrist1
+          type: cylinder
+          center_m:
+          - -0.0175
+          - 0.0
+          - 0.0
+          radius_m: 0.02
+          height_m: 0.05
+          axis: y
+      manipulator.J1.J2.J3.J4.J5.J6:
+        pos_m:
+        - 0.025
+        - 0
+        - 0
+        joint:
+          name: J6
+          kind: revolute
+          axis:
+          - 1
+          - 0
+          - 0
+          range:
+          - -3.141592653589793
+          - 3.141592653589793
+          drive_max: 0.5
+        mass_kg: 0.05
+        primitives:
+        - name: manipulator_wrist2
+          type: cylinder
+          center_m:
+          - -0.0125
+          - 0.0
+          - 0.0
+          radius_m: 0.015
+          height_m: 0.03
+          axis: y
+      manipulator.J1.J2.J3.J4.J5.J6.tool:
+        pos_m:
+        - 0.04
+        - 0
+        - 0
+        mass_kg: 0.08
+        primitives:
+        - name: manipulator_palm
+          type: box
+          center_m:
+          - -0.045
+          - 0.0
+          - 0.0
+          size_m:
+          - 0.015
+          - 0.02
+          - 0.07
+        sites:
+          tcp:
+          - 0.0
+          - 0.0
+          - 0.0
+        note: 掌底=TCP 上方 37.5mm=箱顶+12.5mm; tcp site=两指夹持中心。
+      manipulator.J1.J2.J3.J4.J5.J6.tool.finger_l:
+        pos_m:
+        - -0.015
+        - 0.003
+        - 0.0
+        joint:
+          name: gripper_finger_l
+          kind: slide
+          axis:
+          - 0.0
+          - 1.0
+          - 0.0
+          range:
+          - 0.0
+          - 0.075
+          drive_max: 8.0
+        mass_kg: 0.01
+        primitives:
+        - name: manipulator_finger_l
+          type: box
+          center_m:
+          - 0.0
+          - 0.003
+          - 0.0
+          size_m:
+          - 0.045
+          - 0.006
+          - 0.01
+        - name: manipulator_pad_l
+          type: box
+          center_m:
+          - 0.0
+          - -0.002
+          - 0.0
+          size_m:
+          - 0.015
+          - 0.002
+          - 0.01
+          friction: 0.6
+        note: 零位 gap=0 指内侧贴合; 滑动关节开距 75mm。
+      manipulator.J1.J2.J3.J4.J5.J6.tool.finger_r:
+        pos_m:
+        - -0.015
+        - -0.003
+        - 0.0
+        joint:
+          name: gripper_finger_r
+          kind: slide
+          axis:
+          - 0.0
+          - -1.0
+          - 0.0
+          range:
+          - 0.0
+          - 0.075
+          drive_max: 8.0
+        mass_kg: 0.01
+        primitives:
+        - name: manipulator_finger_r
+          type: box
+          center_m:
+          - 0.0
+          - -0.003
+          - 0.0
+          size_m:
+          - 0.045
+          - 0.006
+          - 0.01
+        - name: manipulator_pad_r
+          type: box
+          center_m:
+          - 0.0
+          - 0.002
+          - 0.0
+          size_m:
+          - 0.015
+          - 0.002
+          - 0.01
+          friction: 0.6
+        note: 零位 gap=0 指内侧贴合; 滑动关节开距 75mm。
+  table:
+    origin_note: 静体; 世界 z=0 = 桌面上表面。
+    bodies:
+      table:
+        pos_m:
+        - 0.0
+        - 0.0
+        - 0.0
+        primitives:
+        - name: table_top
+          type: box
+          center_m:
+          - 0.0
+          - 0.0
+          - -0.009
+          size_m:
+          - 1.8
+          - 1.2
+          - 0.018
+        note: 静体; 世界 z=0 = 桌面上表面。

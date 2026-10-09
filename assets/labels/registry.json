@@ -1,0 +1,178 @@
+{
+  "format": "desktop-agv-demo/label-registry/1",
+  "crc8": {
+    "poly": 7,
+    "init": 0,
+    "xorout": 0,
+    "reflect": false
+  },
+  "qr": {
+    "version": 1,
+    "ecc": "M",
+    "quiet_zone_modules": 4
+  },
+  "labels": [
+    {
+      "token": "G0000|C0",
+      "kind": "G",
+      "number": 0,
+      "entity_id": "G-000"
+    },
+    {
+      "token": "G0001|C7",
+      "kind": "G",
+      "number": 1,
+      "entity_id": "G-001"
+    },
+    {
+      "token": "G0002|CE",
+      "kind": "G",
+      "number": 2,
+      "entity_id": "G-002"
+    },
+    {
+      "token": "G0003|C9",
+      "kind": "G",
+      "number": 3,
+      "entity_id": "G-003"
+    },
+    {
+      "token": "G0004|DC",
+      "kind": "G",
+      "number": 4,
+      "entity_id": "G-004"
+    },
+    {
+      "token": "G0005|DB",
+      "kind": "G",
+      "number": 5,
+      "entity_id": "G-005"
+    },
+    {
+      "token": "G0006|D2",
+      "kind": "G",
+      "number": 6,
+      "entity_id": "G-006"
+    },
+    {
+      "token": "G0007|D5",
+      "kind": "G",
+      "number": 7,
+      "entity_id": "G-007"
+    },
+    {
+      "token": "L0000|7F",
+      "kind": "L",
+      "number": 0,
+      "entity_id": "A-L0-C0"
+    },
+    {
+      "token": "L0001|78",
+      "kind": "L",
+      "number": 1,
+      "entity_id": "A-L0-C1"
+    },
+    {
+      "token": "L0002|71",
+      "kind": "L",
+      "number": 2,
+      "entity_id": "A-L0-C2"
+    },
+    {
+      "token": "L0003|76",
+      "kind": "L",
+      "number": 3,
+      "entity_id": "A-L0-C3"
+    },
+    {
+      "token": "L0004|63",
+      "kind": "L",
+      "number": 4,
+      "entity_id": "A-L0-C4"
+    },
+    {
+      "token": "L0005|64",
+      "kind": "L",
+      "number": 5,
+      "entity_id": "A-L0-C5"
+    },
+    {
+      "token": "L0006|6D",
+      "kind": "L",
+      "number": 6,
+      "entity_id": "A-L0-C6"
+    },
+    {
+      "token": "L0007|6A",
+      "kind": "L",
+      "number": 7,
+      "entity_id": "A-L0-C7"
+    },
+    {
+      "token": "L0008|47",
+      "kind": "L",
+      "number": 8,
+      "entity_id": "A-L0-C8"
+    },
+    {
+      "token": "L0009|40",
+      "kind": "L",
+      "number": 9,
+      "entity_id": "A-L0-C9"
+    },
+    {
+      "token": "L0010|6A",
+      "kind": "L",
+      "number": 10,
+      "entity_id": "A-L1-C0"
+    },
+    {
+      "token": "L0011|6D",
+      "kind": "L",
+      "number": 11,
+      "entity_id": "A-L1-C1"
+    },
+    {
+      "token": "P0000|DB",
+      "kind": "P",
+      "number": 0,
+      "entity_id": "PAL-000"
+    },
+    {
+      "token": "P0001|DC",
+      "kind": "P",
+      "number": 1,
+      "entity_id": "PAL-001"
+    },
+    {
+      "token": "P0002|D5",
+      "kind": "P",
+      "number": 2,
+      "entity_id": "PAL-002"
+    },
+    {
+      "token": "P0003|D2",
+      "kind": "P",
+      "number": 3,
+      "entity_id": "PAL-003"
+    },
+    {
+      "token": "S0000|7D",
+      "kind": "S",
+      "number": 0,
+      "entity_id": "SKU-000"
+    },
+    {
+      "token": "S0001|7A",
+      "kind": "S",
+      "number": 1,
+      "entity_id": "SKU-001"
+    },
+    {
+      "token": "S0002|73",
+      "kind": "S",
+      "number": 2,
+      "entity_id": "SKU-002"
+    }
+  ]
+}
