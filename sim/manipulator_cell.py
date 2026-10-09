@@ -35,6 +35,8 @@ class ManipulatorCell:
 
     CTRL_HZ = 100
 
+    _SOLREF = (0.005, 0.0005, 0.995)
+
     def __init__(self, timestep_s: float = 0.0005, arm: str = "M01", seed: int = 0):
         self.cfg = load()
         self.arm = arm
@@ -439,22 +441,24 @@ class ManipulatorCell:
                 "err_m": float(np.linalg.norm(self.tcp_pos - target))}
 
     def move_tcp_incremental(self, target: np.ndarray, max_joint_step: float = 0.05,
-                             settle_s: float = 0.3, max_iters: int = 80) -> dict:
+                             settle_s: float = 0.3, max_iters: int = 80,
+                             keep_grip: bool = True) -> dict:
         """关节空间小步推进 — 已验证可用的运动原语。
 
         逐步把当前位形推向 IK 解, 每步 |Δq| ≤ max_joint_step 并等伺服稳定。
         相比单步大幅摆动 (会冲到限位, 实测偏差 300mm+), 逐步推进
         不撞限位。仿真时间开销可接受 (数百 ms 仿真时间)。
 
-        已知缺口: 终点残差 ~85mm (伺服未完全到达 IK 解即退出)。
-        已验证排除: IK 精度(0mm)、碰撞掩码、关节阻尼、增益、力矩限幅、
-        分支连续性。剩余为纯伺服整定 (需加入关节速度规划与前馈)。
+        keep_grip=True (默认): 全程沿用闭爪时锁存的夹持指令。传 False
+        才会按实测 gap 重新反算 —— 那会在箱件挡住手指时逐帧松开
+        (实测 60→66.6mm) 或在空爪时把手指压到行程下限。
         """
         q_goal, ok, _ = self._ik_best(target, self.q.copy(), seeds=8, max_iter=300)
         if q_goal is None:
             return {"ok": False, "err_m": float(np.linalg.norm(self.tcp_pos - target))}
         lo = np.array([self.model.jnt_range[j][0] for j in self.jidx])
         hi = np.array([self.model.jnt_range[j][1] for j in self.jidx])
+        hold = self._grip_hold if (keep_grip and self._grip_hold is not None) else self.gap
         for _ in range(max_iters):
             delta = q_goal - self.q
             n = float(np.max(np.abs(delta)))
@@ -462,14 +466,14 @@ class ManipulatorCell:
                 break
             q_step = self.q + delta * min(1.0, max_joint_step / n)
             for _ in range(120):
-                self.set_joint_targets(q_step, self.gap)
+                self.set_joint_targets(q_step, hold)
                 self.step(self.substeps)
                 if float(np.max(np.abs(q_step - self.q))) < 5e-3:
                     break
             if np.any(self.q <= lo + 1e-3) or np.any(self.q >= hi - 1e-3):
                 break
         for _ in range(int(settle_s * self.CTRL_HZ)):
-            self.set_joint_targets(q_goal, self.gap)
+            self.set_joint_targets(q_goal, hold)
             self.step(self.substeps)
         return {"ok": True, "tcp": self.tcp_pos.copy(), "q": self.q.copy(),
                 "err_m": float(np.linalg.norm(self.tcp_pos - target)),
@@ -671,12 +675,12 @@ class ManipulatorCell:
             f'{trq_scale[s["name"]] * s["torque_max_nm"]:.1f}"/>'
             for s in j) + "".join(
             # 手指是**限力位置伺服** (设计 25.3: 每指目标法向力 5N, 上限 8N)。
-            # 纯力控 (ctrl 单位 N) 无法在零力时把手指推回张开位, 故仍用
-            # <position> 并由 forcerange 把接触后的推力饱和到上限 8N ——
-            # 这正是设计要求的"力上限"语义。实测: 指令净间距低于物体宽度时,
-            # 伺服在箱件上饱和出力并维持预紧, 夹持稳定不脱手。
+            # kp 必须足够大才能让指令穿透物体、在箱件上饱和到 forcerange 上限:
+            # kp=400 时伺服稳态误差 0.0076 rad, 实际法向力仅 1.5-3N, 摩擦承载
+            # 1.8N < 箱重 1.962N → 实测指垫相对箱面滑移 1.2mm/3s、箱件在夹持
+            # 中反复丢失。取 kp=4000 使 8N 上限真正生效 (forcerange 仍是硬上限)。
             f'\n    <position name="{a}_finger_{sd}_drv" jointinparent="{a}_finger_{sd}_jn" '
-            f'kp="400" '
+            f'kp="4000" '
             f'forcerange="-{gr["force_per_finger_max_n"]} {gr["force_per_finger_max_n"]}"/>'
             for sd in ("l", "r"))
 
@@ -737,10 +741,12 @@ class ManipulatorCell:
           tolerance="1e-10" noslip_iterations="30"/>
   <size nconmax="300" njmax="400"/>
   <default>
-    <!-- 接触参数: 200g 轻箱在默认 solref(0.0002, 1) 下被指垫挤得弹跳
-         (实测箱底 z 在 55.0-55.7mm 间振荡, 接触力在 0-16N 间跳变, 无法
-         建立稳定预紧)。放宽接触刚度并提高阻尼, 使 5N 预紧可稳定保持。 -->
-    <geom condim="3" friction="0.5 0.005 0.0001" solref="0.01 1" solimp="0.95 0.99 0.001"/>
+    <!-- 接触参数整定 (实测):
+         默认 solref(0.0002,1) 过硬 → 200g 轻箱被挤得弹跳 (接触力 0-16N 跳变);
+         但 solref(0.01,1) 又过软 → 法向力被摊薄, 单指实际接触力仅
+         1.2-2.0N, 摩擦承载 2×0.6×1.5=1.8N < 箱重 1.962N, 夹不住。
+         取中间值: 接触刚度足以传递 5N/指, 阻尼抑制弹跳。 -->
+    <geom condim="3" friction="0.5 0.005 0.0001" solref="{self._SOLREF[0]} 1" solimp="0.98 {self._SOLREF[2]} {self._SOLREF[1]}"/>
     <joint damping="1"/>
   </default>
   <!-- 碰撞掩码 (设计 25.4 要求检查全连杆自碰撞, 但桌面臂的伺服控制
@@ -764,11 +770,14 @@ class ManipulatorCell:
           contype="2" conaffinity="6"/>
     <!-- 定位凸边: 4 条, 高 3mm (台面以上), 围成 70×50mm 净区 -->
 {ridge_xml}
-    <!-- 箱件 (自由刚体 200g, 设计 25.3) -->
+    <!-- 箱件 (自由刚体 200g, 设计 25.3): 指垫摩擦 μ=0.6 是设计额定值,
+         承载校核 2×0.6×5N=6N vs 箱重 1.962N。箱体自身摩擦取同一额定值,
+         避免"指垫 μ 达标但箱侧 μ 偏低"导致混合摩擦低于设计假设。 -->
     <body name="{a}_goods" pos="{feed['x_m']} {feed['y_m']} {box_z}">
       <freejoint name="{a}_goods_fj"/>
       <geom name="{a}_goods_geom" type="box" size="{g[0]/2} {g[1]/2} {g[2]/2}"
-            mass="{gm}" friction="0.4 0.01 0.0002" contype="2" conaffinity="6"/>
+            mass="{gm}" friction="{gr['pad_friction_initial']} 0.01 0.0002"
+            contype="2" conaffinity="6"/>
     </body>
     <!-- 六轴链 + 掌体 + 双指 (链尾挂 tool) -->
 {chain_open}
