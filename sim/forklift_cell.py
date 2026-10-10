@@ -19,8 +19,13 @@ from configs.loader import load  # 参数单一来源
 class ForkliftCell:
     """S00: 单叉车 + 单托盘 + 400mm 支撑面。坐标: 托盘中心=原点, 车沿 -X 侧接近。"""
 
-    def __init__(self, timestep_s: float = 0.001, seed: int = 0):
+    def __init__(self, timestep_s: float = 0.001, seed: int = 0,
+                 support_z: float | None = None):
         self.cfg = load()
+        # 支撑面高度可参数化 (T04 三层货位 100/250/400mm)。留空则用设计默认
+        # 最高层 —— T01-T03 的单台架基准即此高度。
+        self.support_z = float(self.cfg["rack"]["support_z_m"][-1]
+                               if support_z is None else support_z)
         self.model = mujoco.MjModel.from_xml_string(self._xml(timestep_s))
         self.data = mujoco.MjData(self.model)
         mujoco.mj_forward(self.model, self.data)
@@ -50,14 +55,21 @@ class ForkliftCell:
         self._ctrl_target = np.zeros(2)  # [x, lift] 位置目标
 
     # ---------- 几何常量 (由 design.yaml 派生, mm→m) ----------
+    #
+    # insert_z / lift_z 必须随 support_z 派生: 插叉高度由**支撑面**决定
+    # (叉顶须压在托盘通道顶壁下沿), 不同层高的插入高度不同。原先两者
+    # 硬编码 0.410/0.417 只对第三层(400mm)成立。
     @property
     def k(self):
         c = self.cfg
+        sz = self.support_z
         return {
             "transport_z": 0.065,
-            "insert_z": 0.410,
-            "lift_z": 0.417,
-            "support_z": 0.400,
+            # 叉顶须托住通道顶壁下沿 (= 支撑面 + 通道顶壁高 12mm), 留 0.5mm 间隙
+            "insert_z": sz + 0.012 - 0.0005,
+            # 抬离 5mm (设计 863「离面 5mm」)
+            "lift_z": sz + 0.012 + 0.005,
+            "support_z": sz,
             "fork_root_x": 0.040,
             "fork_len": 0.080,
             "insert_depth": 0.065,
@@ -89,17 +101,17 @@ class ForkliftCell:
   <worldbody>
     <light pos="0.5 -0.5 1.0" dir="0 0 -1"/>
     <geom name="floor" type="plane" size="2 2 0.05" friction="0.5"/>
-    <!-- 支撑面 400mm: 三条横梁 (y=±27,0), 与托盘底条同位 -->
-    <geom name="support_l" type="box" pos="0 -0.027 0.3975" size="0.20 0.003 0.0025" rgba="0.5 0.6 0.7 1"/>
-    <geom name="support_c" type="box" pos="0 0 0.3975" size="0.20 0.006 0.0025" rgba="0.5 0.6 0.7 1"/>
-    <geom name="support_r" type="box" pos="0 0.027 0.3975" size="0.20 0.003 0.0025" rgba="0.5 0.6 0.7 1"/>
+    <!-- 支撑面: 三条横梁 (y=±27,0), 与托盘底条同位; 高度随 support_z 参数化 -->
+    <geom name="support_l" type="box" pos="0 -0.027 {k['support_z'] - 0.0025}" size="0.20 0.003 0.0025" rgba="0.5 0.6 0.7 1"/>
+    <geom name="support_c" type="box" pos="0 0 {k['support_z'] - 0.0025}" size="0.20 0.006 0.0025" rgba="0.5 0.6 0.7 1"/>
+    <geom name="support_r" type="box" pos="0 0.027 {k['support_z'] - 0.0025}" size="0.20 0.003 0.0025" rgba="0.5 0.6 0.7 1"/>
     <!-- 暂存站 (T03 第二货位): 台面顶 z=45mm; 台下净空 z=0..44mm 供底盘(宽±75mm)通过,
          立柱 y=±85mm 在底盘宽度之外; 叉(±20mm)从台下中心贯通 -->
     <geom name="stage_top" type="box" pos="-0.340 0 0.0445" size="0.060 0.050 0.0005" rgba="0.4 0.5 0.4 1"/>
     <geom name="stage_leg_l" type="box" pos="-0.395 -0.085 0.022" size="0.003 0.003 0.022" rgba="0.3 0.4 0.3 1"/>
     <geom name="stage_leg_r" type="box" pos="-0.395 0.085 0.022" size="0.003 0.003 0.022" rgba="0.3 0.4 0.3 1"/>
     <!-- 托盘 自由体, 原点=底面(底条局部z 0..4) -->
-    <body name="pallet" pos="0 0 0.401">
+    <body name="pallet" pos="0 0 {k['support_z'] + 0.001}">
       <freejoint name="pal"/>
       <geom name="pal_bottom_l" type="box" pos="0 -0.027 0.002" size="0.040 0.003 0.002" mass="0.006"/>
       <geom name="pal_bottom_r" type="box" pos="0 0.027 0.002" size="0.040 0.003 0.002" mass="0.006"/>
