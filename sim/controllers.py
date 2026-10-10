@@ -70,12 +70,19 @@ class CellController:
         self.cell = cell
         self.substeps = max(1, round(0.01 / cell.model.opt.timestep))
 
-    def run_sequence(self, ramps: list[tuple[int, Ramp]], settle_s: float = 0.5,
+    def run_sequence(self, ramps: list[tuple[int, "Ramp | Callable[[], Ramp]"]],
+                     settle_s: float = 0.5,
                      max_pen_m: float = 5e-4) -> dict:
-        """顺序执行各段 (actuator_idx, ramp); 每段结束再 settle。返回审计数据。"""
+        """顺序执行各段 (actuator_idx, ramp); 每段结束再 settle。返回审计数据。
+
+        第二项可以是 `Ramp`, 也可以是**零参可调用对象**返回 `Ramp`。
+        后者用于「起点须在该段开始时才取」的轨迹: 一次性构造的 Ramp 会让
+        后续各段共用同一个起点值, 轨迹全错 (T04 往返 12 段即此情形)。
+        """
         m, d = self.cell.model, self.cell.data
         audit: dict = {"segments": [], "max_pen": 0.0, "violations": []}
-        for act_idx, ramp in ramps:
+        for act_idx, ramp_spec in ramps:
+            ramp = ramp_spec() if callable(ramp_spec) else ramp_spec
             n_ctrl = int(ramp.duration * self.CTRL_HZ) + 1
             q0 = self.cell.q0_x if act_idx == self.cell.a_x else 0.0
             for _ in range(n_ctrl):

@@ -130,7 +130,10 @@ class ForkliftCell:
     </body>
     <!-- 叉车: 平面底盘(滑动x+铰z) + 升降滑轨; T05 稳定性另用自由体变体 -->
     <body name="chassis" pos="{k['start_axle_x']} 0 0">
-      <joint name="chassis_x" type="slide" axis="1 0 0" range="-0.8 0.5" damping="20"/>
+      <!-- 行程上限须覆盖满插入深度: 插叉 65mm 需 axle 到 -15mm, qpos = -15-(-560)= +545mm。
+           原 range 上限 +500mm 把 axle 挡在 -60mm, 最大只能插 20mm, 托盘根本
+           抬不起来 (T04 实测: 段3 卡在 -59.6mm, 托盘滑脱坠落)。 -->
+      <joint name="chassis_x" type="slide" axis="1 0 0" range="-0.8 0.65" damping="20"/>
       <joint name="chassis_yaw" type="hinge" axis="0 0 1" range="-0.2 0.2" damping="5"/>
       <geom name="chassis_body" type="box" pos="-0.085 0 0.0175"
             size="0.110 0.075 0.0175" mass="1.50"/>
@@ -225,3 +228,70 @@ class ForkliftCell:
             total += max(0.0, sign * f_world[2])
         weight = 0.045 * 9.81
         return total / weight if weight else 0.0
+
+    # ---------- 物理往返 (取放 + 撤离) ----------
+    def roundtrip_plan(self) -> list[tuple[int, "object"]]:
+        """一次完整取放的执行计划: (执行器idx, 轨迹)。
+
+        从架上取托盘 → 带载退出 → 降至运输位 → 转运至暂存站 → 放托盘 →
+        空叉退出。共 12 段, 与设计 848/863 行一致 (前进 ≤5 mm/s)。
+        计划按 `self.k` 动态生成, 故任意 support_z 层高都适用。
+
+        返回 (执行器idx, 构造Ramp的可调用对象) 列表 —— 每段的 Ramp 在
+        **该段开始时**才构造, 起点取当时的实际位置。若一次性构造, 12 段
+        会共用同一个起点值, 轨迹全错。
+
+        求值交给 CellController.run_sequence 的 callables 形式。
+        """
+        k = self.k
+        # 几何由**物理定义 + 实测**确定, 不引用 axle_behind_center 之类的
+        # 名义常数 (该常数与本台架实际几何不符)。
+        #
+        # 叉从托盘 -X 侧贯通插入, **承重接触面是叉根**(叉根进入通道后
+        # 托盘底条压在叉根到叉尖之间)。实测 (support_z=250mm):
+        #   axle=-15.0mm 时 叉根=+25.0mm 叉尖=+105.0mm 托盘中心=+1.2mm
+        #   → 托盘中心 ≈ 叉根 ≈ axle + fork_root_x  (偏置 40mm, 非 80mm)
+        #   → 插入深度 = 叉尖 − 托盘 +X 边 = 105−40 = 65mm, 与设计一致
+        # 我先前按「托盘重心在叉尖」取 80mm 偏置, 差了 40mm, 使暂存站
+        # 对位整体偏了一个托盘半长。
+        half_pal = 0.040
+        pal_entry_x = -half_pal                       # 通道入口 (托盘 -X 边)
+        off = k["fork_root_x"]                       # 托盘中心 = axle + off
+        x_ins = pal_entry_x + k["insert_depth"] - k["fork_root_x"]
+        x_edge = pal_entry_x - k["approach_gap"] - k["fork_len"] - k["fork_root_x"]
+        # 转运: 让托盘中心对准暂存站 (托盘中心 = axle + off)
+        x_stage = -0.340 - off
+        place_z = 0.045 + k["channel_top_local"]      # 叉顶须压过台面+通道壁
+
+        def lift(target_z: float, speed: float = 0.010):
+            """叉架 → 绝对叉顶高度 target_z。
+
+            注意空间: CellController 对 lift 通道直接写 `ramp.at(t)`,
+            **不减 transport_z 基址**, 故 Ramp 必须在**关节 qpos 相对量**
+            空间构造 (T01-T03 的既有做法)。本方法收绝对高度, 内部换算。
+            起点同样取该段开始时的实际 qpos, 保证 12 段首尾相接。
+            """
+            def build():
+                from .controllers import Ramp
+                q = float(self.data.qpos[self.qadr_lift])
+                return Ramp(q, target_z - self.k["transport_z"], speed)
+            return (self.a_lift, build)
+
+        def move(target_x: float, speed: float = 0.005):
+            """底盘 → 绝对轴位。起点取该段开始时的实际轴位。"""
+            def build():
+                from .controllers import Ramp
+                return Ramp(self.axle_x, target_x, speed)
+            return (self.a_x, build)
+
+        return [
+            lift(k["insert_z"]),                             # 1 升至插入高度
+            move(x_edge),                                    # 2 接近前沿
+            move(x_ins),                                     # 3 插叉 65mm
+            lift(k["lift_z"], 0.002),                        # 4 抬离支撑面 5mm
+            move(x_stage),                                   # 5 带载后退至暂存站(托盘中心对准 -340)
+            lift(place_z),                                   # 6 举到放托位(叉顶 57 = 台面45+通道12)
+            lift(place_z - 0.0015, 0.002),                   # 7 微降, 压到台面
+            move(x_stage + k["retreat_loaded"] + 0.060),     # 8 空叉退出并退开
+            lift(k["insert_z"]),                             # 9 举升离开
+        ]
