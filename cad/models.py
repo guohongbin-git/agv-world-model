@@ -32,7 +32,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Sequence
 
-from build123d import Box, Compound, Cylinder, Location, Part, Pos, Rot
+from build123d import Box, Compound, Cylinder, Location, Part, Pos, Rot, Sphere
 
 from .params import Derived, SimpleNamespace
 
@@ -47,7 +47,7 @@ class Prim:
     """碰撞/视觉基元（模型局部系, 米）。"""
 
     name: str
-    type: str                       # "box" | "cylinder"
+    type: str                       # "box" | "cylinder" | "ellipsoid"
     center_m: Vec3
     size_m: Vec3 | None = None      # box 全尺寸 (dx,dy,dz)
     radius_m: float | None = None   # cylinder
@@ -58,6 +58,9 @@ class Prim:
     def volume_m3(self) -> float:
         if self.type == "box":
             return self.size_m[0] * self.size_m[1] * self.size_m[2]
+        if self.type == "ellipsoid":
+            rx, ry, rz = self.size_m
+            return 4.0 / 3.0 * 3.141592653589793 * rx * ry * rz
         return 3.141592653589793 * self.radius_m**2 * self.height_m
 
 
@@ -108,11 +111,37 @@ def _cyl_prim(name: str, radius: float, height: float, center: Sequence[float],
                 radius_m=radius, height_m=height, axis=axis, **kw)
 
 
+def _wheel_prim(name: str, radius: float, width: float,
+                center: Sequence[float]) -> Prim:
+    """车轮碰撞体 —— 用 **ellipsoid** 而非 cylinder。
+
+    圆柱轮缘与地面相切时, 接触点正好落在铰接轴上; MuJoCo 的接触约束
+    把该点判为穿透点, 于是任何微小旋转都被约束力抵消 —— 车轮被**运动学
+    锁死**。最小复现 (孤立自由轮, 0.5 N·m 驱动 2 秒):
+
+        cylinder  r=25mm 同轴  →  0.0000 rad/s  (锁死)
+        ellipsoid 25×7.5×25mm →  351.65 rad/s  (正常滚动)
+
+    两者外形完全等价 (宽 7.5mm 的扁圆柱), 碰撞包络一致, 但椭球没有
+    圆柱那种退化接触点。不改的话车辆只有 ~10 mm/s, 达不到设计
+    speed_max_mps=0.10, T04 的 180 次物理往返无从进行。
+    """
+    return Prim(name=name, type="ellipsoid", center_m=tuple(center),
+                size_m=(radius, width / 2.0, radius))
+
+
 def _shape_from_prims(prims: Sequence[Prim], label: str) -> Compound:
     solids = []
     for prim in prims:
         if prim.type == "box":
             solid = Pos(*prim.center_m) * Box(*prim.size_m)
+        elif prim.type == "ellipsoid":
+            # build123d 无椭球基元, 用**沿 y 压扁的球**近似。
+            # STEP 只用于导出与目视, 碰撞用 MJCF 的 ellipsoid, 两者外形
+            # 同为「扁圆盘」, 包络一致 (半径 r、宽 w)。
+            rx, ry, rz = prim.size_m
+            solid = Pos(*prim.center_m) * (Rot(90, 0, 0) * Sphere(rx)) \
+                if abs(ry - rx) > 1e-9 else Pos(*prim.center_m) * Sphere(rx)
         else:
             cyl = Cylinder(prim.radius_m, prim.height_m)
             solid = (Rot(90, 0, 0) * cyl) if prim.axis == "y" else (Pos(*prim.center_m) * cyl)
@@ -247,7 +276,7 @@ def build_forklift(p: SimpleNamespace, d: Derived) -> BodyNode:
     )
 
     def _wheel(name: str, x: float, y: float) -> BodyNode:
-        prim = _cyl_prim(f"{name}", r, dv["wheel_width_m"], (0.0, 0.0, 0.0), axis="y")
+        prim = _wheel_prim(f"{name}", r, dv["wheel_width_m"], (0.0, 0.0, 0.0))
         return BodyNode(name=name, pos_m=(x, y, r), mass_kg=dv["wheel_mass_kg"],
                         joint=JointSpec(name=f"{name}_spin", kind="hinge",
                                         axis=(0.0, 1.0, 0.0),
@@ -305,8 +334,8 @@ def build_flat_agv(p: SimpleNamespace, d: Derived) -> BodyNode:
     )
     for iy, sy_sign in ((0, -1.0), (1, 1.0)):
         for ix, sx_sign in ((0, -1.0), (1, 1.0)):
-            prim = _cyl_prim(f"flat_agv_wheel_{iy}{ix}", fa.wheel_radius_m, dv["wheel_width_m"],
-                             (0.0, 0.0, 0.0), axis="y")
+            prim = _wheel_prim(f"flat_agv_wheel_{iy}{ix}", fa.wheel_radius_m,
+                               dv["wheel_width_m"], (0.0, 0.0, 0.0))
             chassis.children.append(BodyNode(
                 name=f"flat_agv_wheel_{iy}{ix}",
                 pos_m=(sx_sign * dv["wheel_x_offset_m"], sy_sign * dv["wheel_y_offset_m"],

@@ -53,6 +53,9 @@ def _yaw_quat(yaw: float) -> tuple[float, float, float, float]:
 def _geom_attrs(prim: Prim) -> dict:
     if prim.type == "box":
         return {"type": "box", "size": _fmt([s / 2 for s in prim.size_m])}
+    if prim.type == "ellipsoid":
+        # size 已是半轴 (车轮: 25 × 7.5 × 25 mm)
+        return {"type": "ellipsoid", "size": _fmt(list(prim.size_m))}
     attrs = {"type": "cylinder", "size": _fmt([prim.radius_m, prim.height_m / 2])}
     if prim.axis == "y":
         attrs["euler"] = "90 0 0"
@@ -70,12 +73,18 @@ def _add_geom(parent: ET.Element, prim: Prim, prefix: str,
 
 
 def _prim_inertia_diag(prim: Prim, mass: float) -> tuple[float, float, float]:
-    """盒/圆柱对自身主轴的解析转动惯量（占位近似）。"""
+    """盒/圆柱/椭球对自身主轴的解析转动惯量（占位近似）。"""
     if prim.type == "box":
         dx, dy, dz = prim.size_m
         return (mass / 12 * (dy * dy + dz * dz),
                 mass / 12 * (dx * dx + dz * dz),
                 mass / 12 * (dx * dx + dy * dy))
+    if prim.type == "ellipsoid":
+        # 实心椭球: I_x = m(b²+c²)/5, y 轴为窄轴 (车轮)
+        rx, ry, rz = prim.size_m
+        return (mass * (ry * ry + rz * rz) / 5.0,
+                mass * (rx * rx + rz * rz) / 5.0,
+                mass * (rx * rx + ry * ry) / 5.0)
     r, h = prim.radius_m, prim.height_m
     axial = mass * r * r / 2
     trans = mass * (3 * r * r + h * h) / 12
