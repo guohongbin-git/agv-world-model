@@ -48,7 +48,7 @@ class ForkliftCell:
         self.pallet_geoms = [mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, g)
                              for g in ("pal_bottom_l", "pal_bottom_r", "pal_bottom_c",
                                        "ceil_l", "ceil_r", "top_side_l", "top_side_r",
-                                       "top_mid", "pal_back_l", "pal_back_r")]
+                                       "top_mid")]
         self.support_gids = [mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, g)
                              for g in ("support_l", "support_c", "support_r", "stage_top")]
         self.floor_gid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, "floor")
@@ -65,11 +65,16 @@ class ForkliftCell:
         sz = self.support_z
         return {
             "transport_z": 0.065,
-            # 承托面是通道顶壁底面 (托盘局部 12mm): 叉 y∈[-20,-10]mm 与
-            # 通道顶壁 y∈[-20,-10]mm 对齐, 叉顶顶住它即可托起托盘。
-            "insert_z": sz + 0.012 - 0.0005,
-            # 抬离 5mm (设计 863「离面 5mm」)
-            "lift_z": sz + 0.012 + 0.005,
+            # 设计 176 行: 「插叉时货叉顶面设置为支撑面上方 10 mm, 先保留 2 mm
+            # 竖向间隙; 举升至上方 17 mm, 接触叉孔顶部后使托盘底面抬离
+            # 支撑面 5 mm。第三层因此需要货叉顶面 z = 417 mm」。
+            # 叉孔窗口 = 托盘局部 z 4~12mm; 叉厚 2.5mm。
+            # 插到 +10 时叉占 [7.5,10], 完全在窗口内, 距顶壁还有 2mm ——
+            # 撬升行程充足。此前误取「支撑面 + 通道顶壁 − 0.5」= +11.5,
+            # 距顶壁仅 0.5mm, 叉一开始就顶在通道顶壁上, 承托力恒为
+            # 0.57× 托盘重, 抬多高都不变。
+            "insert_z": sz + 0.010,
+            "lift_z": sz + 0.017,           # 支撑面 +17 = 417mm @第三层
             "support_z": sz,
             "fork_root_x": 0.040,
             "fork_len": 0.080,
@@ -117,23 +122,32 @@ class ForkliftCell:
       <geom name="pal_bottom_l" type="box" pos="0 -0.027 0.002" size="0.040 0.003 0.002" mass="0.006"/>
       <geom name="pal_bottom_r" type="box" pos="0 0.027 0.002" size="0.040 0.003 0.002" mass="0.006"/>
       <geom name="pal_bottom_c" type="box" pos="0 0 0.002" size="0.040 0.006 0.002" mass="0.010"/>
-      <!-- 通道顶壁: 独立条带 (y=±15±5, z 12..15mm)。叉顶面推的是通道顶壁而非整块顶板,
-           独立几何才能让接触求解生成多点分布接触 (整块顶板底面只会在叉尖成线)。 -->
-      <geom name="ceil_l" type="box" pos="0 -0.015 0.0135" size="0.040 0.005 0.0015" mass="0.008"/>
-      <geom name="ceil_r" type="box" pos="0 0.015 0.0135" size="0.040 0.005 0.0015" mass="0.008"/>
+      <!-- 通道顶壁: 独立条带 (y=±15±7, z 12..15mm)。叉顶面推的是通道顶壁而非整块顶板,
+           独立几何才能让接触求解生成多点分布接触 (整块顶板底面只会在叉尖成线)。
+           y 半宽 7mm (原 5mm) 是为了与叉 (y 半宽 5mm) 有 4mm 横向重叠余量:
+           插入 65mm 时叉与托盘 x 向仅重叠 15mm, 接触区窄; 插入后实测
+           fork_l 零接触、fork_r 两接触, 单齿承托使托盘绕单点翻转必掉。
+           加宽后两齿都能建立接触。 -->
+      <!-- 叉孔摩擦 1.4: T10 契约要求 0.2m/s 急停 <2mm (减速度 ≥10 m/s²),
+           载荷不滑移须 μg > 减速度, 即 μ ≥ 1.02。原 0.5/0.8 下 μg=7.8,
+           两条款数学上不可同时满足。 -->
+      <geom name="ceil_l" type="box" pos="0 -0.015 0.0135" size="0.040 0.007 0.0015"
+            mass="0.008" friction="1.4 0.005 0.0001"/>
+      <geom name="ceil_r" type="box" pos="0 0.015 0.0135" size="0.040 0.007 0.0015"
+            mass="0.008" friction="1.4 0.005 0.0001"/>
       <!-- 顶板其余部分: 通道两侧边带 + 中桥, 避开叉的插入面 -->
-      <geom name="top_side_l" type="box" pos="0 -0.027 0.015" size="0.040 0.003 0.003" mass="0.002"/>
-      <geom name="top_side_r" type="box" pos="0 0.027 0.015" size="0.040 0.003 0.003" mass="0.002"/>
-      <geom name="top_mid" type="box" pos="0 0 0.017" size="0.040 0.010 0.001" mass="0.002"/>
-      <!-- 叉从 -X 侧贯通进入; 真实叉孔贯通结构无背面挡块 -->
-      <geom name="pal_back_l" type="box" pos="-0.0375 -0.027 0.002" size="0.0025 0.003 0.002" mass="0.0005" condim="1"/>
-      <geom name="pal_back_r" type="box" pos="-0.0375 0.027 0.002" size="0.0025 0.003 0.002" mass="0.0005" condim="1"/>
+      <geom name="top_side_l" type="box" pos="0 -0.027 0.0175" size="0.040 0.003 0.0025" mass="0.002"/>
+      <geom name="top_side_r" type="box" pos="0 0.027 0.0175" size="0.040 0.003 0.0025" mass="0.002"/>
+      <geom name="top_mid" type="box" pos="0 0 0.017" size="0.040 0.008 0.001" mass="0.002"/>
+      <!-- 叉从 -X 侧贯通进入; 设计 180 行「真实叉孔贯通结构无背面挡块」。
+           原先有 pal_back_l/r 两块 condim=1 挡块, 压在货架横梁上,
+           使 support_load_ratio('beam') 长期读到非零值而误判托盘仍压梁。 -->
     </body>
     <!-- 叉车: 平面底盘(滑动x+铰z) + 升降滑轨; T05 稳定性另用自由体变体 -->
     <body name="chassis" pos="{k['start_axle_x']} 0 0">
-      <!-- 行程上限须覆盖满插入深度: 插叉 65mm 需 axle 到 -15mm, qpos = -15-(-560)= +545mm。
-           原 range 上限 +500mm 把 axle 挡在 -60mm, 最大只能插 20mm, 托盘根本
-           抬不起来 (T04 实测: 段3 卡在 -59.6mm, 托盘滑脱坠落)。 -->
+      <!-- 行程上限须覆盖满插入深度: 插叉深 65mm 指**叉尖**越过托盘近边,
+           axle 到 -95mm, qpos = -95-(-560) = +465mm。原 range 上限 +500mm
+           曾把 axle 挡在 -60mm (按叉根算的错误插深), 托盘抬不起来。 -->
       <joint name="chassis_x" type="slide" axis="1 0 0" range="-0.8 0.65" damping="20"/>
       <joint name="chassis_yaw" type="hinge" axis="0 0 1" range="-0.2 0.2" damping="5"/>
       <geom name="chassis_body" type="box" pos="-0.085 0 0.0175"
@@ -142,12 +156,21 @@ class ForkliftCell:
             size="0.010 0.060 0.0175" mass="0.0"/>
       <body name="carriage" pos="0 0 0">
         <joint name="lift" type="slide" axis="0 0 1" range="-0.050 {k['lift_travel']}" damping="60"/>
-        <geom name="carriage_plate" type="box" pos="0.020 0 0.030"
-              size="0.010 0.060 0.008" mass="0.25"/>
+        <!-- 背板 (托盘后立面挡板), 分两片置于 y∈[8,22]/[-22,-8] —— 与叉孔
+           通道顶壁 ceil_l/r 同 y, 即三条支撑横梁 (y=0±6, ±27±3) 之间的空隙:
+           - 整片 y±60 的背板升到第三层必撞横梁下沿 (实测 support_*↔背板
+             12 个接触, ctrl 打满 +5N 而 qpos 锁死 319mm, 叉顶卡 384mm);
+           - 背板还须**高于叉顶**: 放托时叉顶降到台面 45+12=57mm, 若背板
+             在叉下方会先压上暂存台面 (实测承 2.07N 整叉架重量, 叉顶死锁)。
+           两片与 ceil_l/r 接触即可阻止托盘滑向车 (刚性连接)。 -->
+        <geom name="carriage_plate_l" type="box" pos="0.020 -0.015 0.068"
+              size="0.010 0.007 0.008" mass="0.125"/>
+        <geom name="carriage_plate_r" type="box" pos="0.020 0.015 0.068"
+              size="0.010 0.007 0.008" mass="0.125"/>
         <geom name="fork_l" type="box" pos="{k['fork_root_x'] + k['fork_len']/2} -0.015 {k['transport_z'] - 0.00125}"
-              size="{k['fork_len']/2} 0.005 0.00125" mass="0.02" friction="0.8 0.02 0.0002"/>
+              size="{k['fork_len']/2} 0.005 0.00125" mass="0.02" friction="1.4 0.02 0.0002"/>
         <geom name="fork_r" type="box" pos="{k['fork_root_x'] + k['fork_len']/2} 0.015 {k['transport_z'] - 0.00125}"
-              size="{k['fork_len']/2} 0.005 0.00125" mass="0.02" friction="0.8 0.02 0.0002"/>
+              size="{k['fork_len']/2} 0.005 0.00125" mass="0.02" friction="1.4 0.02 0.0002"/>
       </body>
     </body>
   </worldbody>
@@ -257,12 +280,39 @@ class ForkliftCell:
         # 对位整体偏了一个托盘半长。
         half_pal = 0.040
         pal_entry_x = -half_pal                       # 通道入口 (托盘 -X 边)
-        off = k["fork_root_x"]                       # 托盘中心 = axle + off
-        x_ins = pal_entry_x + k["insert_depth"] - k["fork_root_x"]
+        # 托盘中心相对 axle 的偏置。**实测 94mm** (叉尖插深 65mm 时):
+        # 段7 末 axle=−403.0, 托盘中心 x=−309.4 → 偏置 93.6mm。
+        # 此前三次取错: 按几何推 80mm; 在「插深按叉根」的旧几何下测 24mm;
+        # 改按叉尖算后又沿用 63mm (那是插深尚未生效时的值)。
+        # 判据是「托盘中心对准暂存站 −340mm」, 该值直接决定对位精度,
+        # 只能实测, 不能推算。
+        off = 0.094
+        # 设计 155 行的「插叉深 65mm」指**叉尖**越过托盘近边的深度, 不是叉根
+        # 位置。此前按叉根算 (x_ins = 通道入口 + 65 − fork_root_x = −15mm),
+        # 使叉与托盘的 x 重叠只剩 15mm、承托面全落在托盘后部 (x 25~40),
+        # 而重心在 x=0 → 托盘绕承托点前倾 4.17°, 左叉零接触、离梁即掉。
+        # 按叉尖算: axle = 通道入口 + 65 − (叉根+叉长) = −95mm,
+        # 与原 T01 的 X_INSERTED=−0.095 一致。
+        x_ins = pal_entry_x + k["insert_depth"] - (k["fork_root_x"] + k["fork_len"])
         x_edge = pal_entry_x - k["approach_gap"] - k["fork_len"] - k["fork_root_x"]
         # 转运: 让托盘中心对准暂存站 (托盘中心 = axle + off)
         x_stage = -0.340 - off
-        place_z = 0.045 + k["channel_top_local"]      # 叉顶须压过台面+通道壁
+        # 脱离货架: 判据是**叉尖**完全越过货架横梁 (x ∈ [−200, +200]),
+        # 不是托盘中心。叉尖 = axle + fork_root_x + fork_len = axle + 120mm,
+        # 故 axle ≤ −320mm 才算退出。
+        # 先前用「托盘中心 ≤ −240」算出 axle=−280, 此时叉尖仍在 −160mm,
+        # 叉顶 (支撑面+17) 会撞上横梁, 托盘失去承托当坠 —— 实测三层分别
+        # 掉到地面 / 台面, 400mm 层还横向飞出 538mm。
+        # 设计 202 行: 「取托后先直线退出站体, 再把叉顶面降至运输初值」。
+        x_clear = -0.200 - k["fork_root_x"] - k["fork_len"] - 0.010
+        # 放托位: 托盘底面须落在暂存台面顶面 45mm。叉顶托在通道顶壁底面(托盘
+        # 局部 12mm), 故叉顶 = 45 + 12 = 57mm。
+        # (先前取 45+10=55 会让叉顶低于托盘底 2mm, 托盘被台面顶住、
+        #  叉降到 88mm 就卡死 —— 叉顶降不到目标。)
+        place_z = 0.045 + 0.012
+        # 脱叉确认: 再降 0.5mm 使叉与叉孔上壁脱离 (设计 299 行
+        # 「继续降到 h_s+10 mm, 令双叉与叉孔上壁脱离接触」)
+        release_z = place_z - 0.0005
 
         def lift(target_z: float, speed: float = 0.010):
             """叉架 → 绝对叉顶高度 target_z。
@@ -286,13 +336,18 @@ class ForkliftCell:
             return (self.a_x, build)
 
         return [
-            lift(k["insert_z"]),                             # 1 升至插入高度
+            lift(k["insert_z"]),                             # 1 升至插入高度 (支撑面+10)
             move(x_edge),                                    # 2 接近前沿
             move(x_ins),                                     # 3 插叉 65mm
-            lift(k["lift_z"], 0.002),                        # 4 抬离支撑面 5mm
-            move(x_stage),                                   # 5 带载后退至暂存站
-            lift(place_z),                                   # 6 举到放托位
-            lift(place_z - 0.0015, 0.002),                   # 7 微降, 压到台面
-            move(x_stage + k["retreat_loaded"] + 0.060),     # 8 空叉退出并退开
-            lift(k["insert_z"]),                             # 9 举升离开
+            lift(k["lift_z"], 0.002),                        # 4 举升, 托盘离面
+            move(x_clear),                                   # 5 带载直线退出, 脱离货架横梁区
+            lift(k["transport_z"], 0.010),                   # 6 叉顶降至运输高度 65mm
+            move(x_stage),                                   # 7 低位转运至暂存站
+            lift(place_z),                                   # 8 举到放托位
+            lift(release_z, 0.002),                          # 9 微降, 令叉与叉孔上壁脱离
+            # 10 空叉退出: 车须**继续后退**才能抽出叉。叉在托盘通道内时
+            # 前进会重新插进去 —— 实测段10 若 move(+180) 托盘被拖走,
+            # 叉承托回到 0.98。退 120mm(retreat_loaded) 再加 60mm 余量。
+            move(x_stage - k["retreat_loaded"] - 0.060),
+            lift(k["transport_z"]),                          # 11 叉复位
         ]

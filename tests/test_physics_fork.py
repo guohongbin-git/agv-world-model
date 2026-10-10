@@ -9,13 +9,10 @@ from __future__ import annotations
 
 import pytest
 
-from sim.controllers import CellController, Ramp
+from sim.controllers import CellController
 from sim.forklift_cell import ForkliftCell
 
 X_START = -0.560     # 叉尖 -0.44, 完全在支撑板(-0.20)、暂存站(-0.40..-0.28)与其立柱(y=±85)之外
-X_TIP_AT_EDGE = -0.160
-X_INSERTED = -0.095  # 轴心在托盘中心后 95mm
-pal_channel_top_m = 0.012   # 托盘通道顶壁高 (局部 z=12mm), 叉顶压此面承载
 
 
 @pytest.fixture(scope="module")
@@ -28,33 +25,11 @@ def result() -> dict:
     d.ctrl[cell.a_lift] = 0.0
     for _ in range(500):
         mujoco_step(cell)
-    A_X, A_L = cell.a_x, cell.a_lift
-    k = cell.k
-    X_SAFE = X_INSERTED - k["retreat_loaded"]        # 带载退出 120mm 后的轴位
-    X_CLEAR = X_SAFE - 0.100                          # 再退 100mm: 托盘中心 -0.315, 完全离开货架支撑面(±0.20)
-    X_STAGE = -0.340 - k["axle_behind_center"]        # 托盘中心对准暂存站 (-0.340)
-    # 放托高度 = 目标承托面 + 通道顶壁(12mm): 暂存台面 45mm → 叉顶 57mm
-    STAGE_PLACE_Z = 0.045 + pal_channel_top_m
-    ramps = [
-        # --- 从第三层取出 ---
-        (A_L, Ramp(0.0, k["insert_z"] - k["transport_z"], 0.010)),            # 1 远端升到 410
-        (A_X, Ramp(X_START, X_TIP_AT_EDGE, 0.005)),                            # 2 接近前沿
-        (A_X, Ramp(X_TIP_AT_EDGE, X_INSERTED, 0.005)),                         # 3 插叉 65mm
-        (A_L, Ramp(k["insert_z"] - k["transport_z"],
-                   k["lift_z"] - k["transport_z"], 0.002)),                    # 4 抬离→417 (离面5mm)
-        (A_X, Ramp(X_INSERTED, X_SAFE, 0.005)),                                 # 5 带载退出 120mm
-        (A_X, Ramp(X_SAFE, X_CLEAR, 0.005)),                                    # 6 再退出 100mm, 托盘离开货架
-        (A_L, Ramp(k["lift_z"] - k["transport_z"],
-                   k["transport_z"] - k["transport_z"], 0.010)),               # 7 降至运输高度65
-        (A_X, Ramp(X_CLEAR, X_STAGE, 0.005)),                                   # 8 低位转运至暂存站(托盘中心对准台面)
-        (A_L, Ramp(0.0, STAGE_PLACE_Z - k["transport_z"], 0.010)),             # 9 举升到放托位: 叉顶57=台面45+通道12
-        (A_L, Ramp(STAGE_PLACE_Z - k["transport_z"],
-                   STAGE_PLACE_Z - k["transport_z"] - 0.0015, 0.002)),        # 10 微降1.5mm: 叉顶55.5, 托盘被压到台面45
-        (A_X, Ramp(X_STAGE, X_STAGE + k["retreat_loaded"] + 0.060, 0.005)),    # 11 空叉退出并退开
-        (A_L, Ramp(STAGE_PLACE_Z - k["transport_z"] - 0.0015,
-                   k["insert_z"] - k["transport_z"], 0.010)),                 # 12 举升离开台面
-    ]
-    audit = ctrl.run_sequence(ramps, settle_s=0.5)
+    # 执行序列复用 ForkliftCell.roundtrip_plan() —— 本文件原先内嵌一份手写
+    # ramp 副本, 其常数按修复前的阶跃行为调 (Ramp 传绝对时间、插深按叉根、
+    # 背板在叉下方、退叉方向前进), 与真实物理已不同源。
+    # 同一闭环只应有一份序列定义, 否则两份必然漂移。
+    audit = ctrl.run_sequence(cell.roundtrip_plan(), settle_s=0.5)
     audit["final"] = {
         "axle_x": cell.axle_x,
         "fork_top_z": cell.fork_top_z,
@@ -108,11 +83,10 @@ def test_pallet_carried_then_placed(result: dict):
 
 def test_step_budget(result: dict):
     """用时在理论下限 + 每段稳定余量内 (不设绝对时间目标)。"""
-    # 实际段: 6段升降@10mm/s(345+345+352+345=1387mm) + 2段啮合/放托@2mm/s + 平移
-    lift_fast = (0.345 + 0.345 + 0.352 + 0.345) / 0.010
-    lift_slow = (0.007 + 0.007) / 0.002
-    moves = (0.180 + 0.055 + 0.065 + 0.245 + 0.180 + 0.055 + 0.065 + 0.105) / 0.005
-    settle = 13 * 0.5
-    t_theory = lift_fast + lift_slow + moves + settle
+    # 理论下限从执行计划派生, 不硬编码距离: 序列改了预算自动跟随,
+    # 否则手写的 345mm/13 段常量会在序列变更后静默失真。
+    plan = ForkliftCell(timestep_s=0.0005).roundtrip_plan()
+    t_theory = sum((spec() if callable(spec) else spec).done_at
+                   for _, spec in plan) + len(plan) * 0.5
     assert result["segments"][-1]["t_end"] < t_theory * 1.3, \
         f"用时 {result['segments'][-1]['t_end']:.0f}s 远超理论 {t_theory:.0f}s"

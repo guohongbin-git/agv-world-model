@@ -23,28 +23,43 @@ import pytest
 from sim.forklift_cell import ForkliftCell
 from sim.safety import StopMode, VehicleSafety
 
-INSERT_X = -0.0596
-INSERT_Z = 0.410
 LOW_Z = 0.135
 
 
 def build(level: str) -> ForkliftCell:
-    """构造载货车辆: third = 第三层 (叉顶 0.422), low = 低位 (叉顶 0.200)。"""
+    """构造载货车辆: third = 第三层 (叉顶 0.417), low = 低位 (叉顶 0.135)。"""
     c = ForkliftCell(seed=1)
     for _ in range(2000):
         mujoco.mj_step(c.model, c.data)
-    c.data.ctrl[c.a_x] = INSERT_X - c.q0_x
+    # 插叉位取 ForkliftCell.roundtrip_plan 的 x_ins (叉尖越过托盘近边 65mm)。
+    # 此前写死 -0.0596 (叉根进到托盘中心) 使叉顶死顶货架横梁:
+    # ctrl 打满 +5N 而 qpos 锁在 319mm, 叉顶卡 384mm 纹丝不动。
+    c.data.ctrl[c.a_x] = c.roundtrip_plan()[2][1]().target - c.q0_x
     for _ in range(40000):
         mujoco.mj_step(c.model, c.data)
-    c.data.ctrl[c.a_lift] = INSERT_Z
+    # a_lift 的 ctrl 是**关节坐标 qpos**, 不是叉顶世界高度:
+    #   fork_top_z = qpos + transport_z (实测稳态 sag 0.28mm)
+    # 载货必须升到 lift_z (叉顶 417): 叉顶要到通道顶 412 才抬得动托盘。
+    # 插叉高度 410 只把叉送进叉孔, 托盘仍坐在横梁上 —— 承托判据恒 0,
+    # 失电也无载荷可沉 (T06/T10 同根因)。
+    c.data.ctrl[c.a_lift] = c.k["lift_z"] - c.k["transport_z"]
     for _ in range(60000):
         mujoco.mj_step(c.model, c.data)
     if level == "low":
-        c.data.ctrl[c.a_lift] = LOW_Z
+        # 载货不能在货架投影内下降: 横梁 (x±200, z395..400) 会接住托盘
+        # (实测低位托盘坐梁、叉空滑脱, "载货"名存实亡)。先退到横梁外
+        # (托盘 x∈[-380,-300] 全在梁外), 再降叉才是真·低位载货。
+        c.data.ctrl[c.a_x] = -0.340 - c.q0_x
+        for _ in range(40000):
+            mujoco.mj_step(c.model, c.data)
+        c.data.ctrl[c.a_lift] = LOW_Z - c.k["transport_z"]
         for _ in range(40000):
             mujoco.mj_step(c.model, c.data)
         # 载货在低位: 托盘随叉下降, 叉顶应低于第三层
         assert c.fork_top_z < 0.30, f"低位叉顶应 <0.30, 实测 {c.fork_top_z:.3f}"
+        # 托盘必须真在叉上, 不许悄悄坐回横梁
+        assert c.support_load_ratio("fork") > 0.90, \
+            f"低位托盘未载于叉: 叉承托 {c.support_load_ratio('fork'):.2f}"
     else:
         assert c.fork_top_z > 0.40, f"第三层叉顶应 >0.40, 实测 {c.fork_top_z:.3f}"
     return c

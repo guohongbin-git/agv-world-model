@@ -85,8 +85,13 @@ class CellController:
             ramp = ramp_spec() if callable(ramp_spec) else ramp_spec
             n_ctrl = int(ramp.duration * self.CTRL_HZ) + 1
             q0 = self.cell.q0_x if act_idx == self.cell.a_x else 0.0
+            # Ramp.at() 的 t 是**本段内的相对时间**。此前误传 d.time(绝对仿真
+            # 时间), 仿真跑到 100s 后 t_s 远超 duration, at() 立即饱和到
+            # target —— 每段第一控制周期就是阶跃, 全程无轨迹跟踪, 也不受
+            # 速度/加速度限制。
+            t_seg0 = d.time
             for _ in range(n_ctrl):
-                target = ramp.at(d.time) - q0   # 世界坐标 → 关节q
+                target = ramp.at(d.time - t_seg0) - q0   # 世界坐标 → 关节q
                 d.ctrl[act_idx] = target
                 for _ in range(self.substeps):
                     mujoco.mj_step(m, d)

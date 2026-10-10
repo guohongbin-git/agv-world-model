@@ -90,10 +90,9 @@ class ForkliftAdapter(DeviceAdapter):
         装了货的叉必须等托盘也稳。
 
         blocked_ok: 执行器被**接触挡住**时 (托盘卡在叉孔里 / 叉抵住横梁)
-        位置伺服会在实际极限处停住, 这是正确的物理行为, 不是故障。
-        单车白模实测的两个硬限 (见 tests/test_t06_handoff.py):
-          axle_x ≥ -0.0596  叉抵住横梁, 再往前推不动
-          lift  ≤ 0.3570    托盘被叉捕获后举不动, 叉顶封顶 0.4220
+        位置伺服会在实际极限处停住, 这是正确的物理行为, 不是故障:
+        被横梁/台面/关节限位挡住时 qpos 停在挡点, 执行器 forcerange 打满
+        而位置不动 (实测 ctrl 与 qpos 脱节即为此)。
         挡住时返回 True 但位置误差偏大, 由调用方另判业务后果。
         """
         def calm(dadr: int) -> bool:
@@ -137,20 +136,26 @@ class ForkliftAdapter(DeviceAdapter):
 
     def _act_lift(self, *, target_z: float, speed_mps: float = 0.010,
                   **_) -> ActionResult:
-        self.cell._ctrl_target[1] = float(target_z)
-        self.cell.data.ctrl[self.cell.a_lift] = float(target_z)
+        # target_z 是**叉顶世界高度**, 与 _act_withdraw 的 fork_top_z 门禁、
+        # roundtrip_plan.lift() 同基准。ctrl 才是关节 qpos:
+        #   fork_top_z = qpos + transport_z
+        # 此前直接把 target_z 写进 ctrl (qpos 基准), 指令 65mm 实际升到
+        # 130mm, withdraw 最小退出高度门禁形同虚设。
+        q_target = float(target_z) - self.cell.k["transport_z"]
+        self.cell._ctrl_target[1] = q_target
+        self.cell.data.ctrl[self.cell.a_lift] = q_target
         loaded = bool(self.cell.pallet_fork_contact())
-        ok, _ = self._settle_to(self.cell.qadr_lift, float(target_z), speed_mps,
+        ok, _ = self._settle_to(self.cell.qadr_lift, q_target, speed_mps,
                                  blocked_ok=True, require_calm=loaded)
         return ActionResult.OK if ok else ActionResult.FAILED
 
     def _act_insert_forks(self, **_) -> ActionResult:
         """第三层插叉: 5 mm/s 上限, 超过即 FAILED (设计 R04)。"""
         k = self.cell.k
-        self.cell._ctrl_target[1] = k["insert_z"]
-        target = k["insert_z"]
+        q_target = k["insert_z"] - k["transport_z"]
+        self.cell._ctrl_target[1] = q_target
         for _ in range(int(self.limits.insert_65mm_s / self.cell.model.opt.timestep)):
-            self.cell.data.ctrl[self.cell.a_lift] = target
+            self.cell.data.ctrl[self.cell.a_lift] = q_target
             self._tick()
         return ActionResult.OK if self.cell.pallet_fork_contact() else ActionResult.FAILED
 
@@ -158,7 +163,9 @@ class ForkliftAdapter(DeviceAdapter):
         """退叉: 带载须先升到 110mm + 10mm 余量 = 120mm, 空叉 105mm。"""
         k = self.cell.k
         need = (k["retreat_loaded"] if loaded else k["withdraw_empty"]) + 0.010
-        if self.cell.fork_top_z < need - 1e-6:
+        # 位置伺服稳态 sag ~0.3mm (kp/forcerange 所致), 门禁容差给 1mm;
+        # 安全余量本就在 need 的 +10mm 里, 不受这 1mm 影响。
+        if self.cell.fork_top_z < need - 1e-3:
             return ActionResult.FAILED      # 未达最小退出高度, 不得开始退叉
         self.cell._ctrl_target[0] = k["start_axle_x"]
         target = k["start_axle_x"] - self.cell.q0_x

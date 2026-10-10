@@ -12,7 +12,7 @@
 **已知物理限制 (不是调度缺陷)**
 sim/forklift_cell.py 是单车白模: 一个托盘 (freejoint 自由体, 10 个小
 接触面, 自重 45g)、一根横梁、一对叉。它能稳定复现**若干轮**接力
-(实测 0–3 轮完全一致: 托盘 0.4100、叉承托 1.000、梁 0.000), 但托盘
+(实测 0–3 轮完全一致: 托盘 0.4050、叉承托 1.000、梁 0.000), 但托盘
 在叉孔里是纯摩擦约束, 每轮都有亚毫米级数值漂移, 逐轮累积到第 4–5 轮
 托盘掉 1.5mm 并压上横梁 (接触穿透仅 1.2µm), 之后不可逆地留在梁上。
 
@@ -39,14 +39,13 @@ FORK_CAPS = frozenset(["drive", "fork_lift", "fork_insert", "fork_withdraw", "st
 RELAYS = 50
 #: 单个物理单元可连续保持明确支撑的轮数 (实测 r0–r3 完全一致, r4 起漂移)
 SUSTAINABLE_RELAYS = 4
-INSERT_Z = 0.410          # 插叉高度 (设计 rack_fork_top_insert_z 第三层 0.410)
-# 单车白模实测硬限 (物理, 非调度):
-#   axle_x ≥ -0.0596  叉抵住横梁推不动;  -0.0596 即完全插入位
-#   lift  ≤ 0.3570    托盘被叉捕获后举不动, 叉顶封顶 0.4220
-# 故指令 0.410 会被托盘挡在 0.3570, 属正确物理, 不算失败。
-INSERT_X = -0.0596
+# 插叉位 = 叉尖越过托盘近边 65mm (与 roundtrip_plan 的 x_ins 同源)。
+# 此前 -0.0596 是旧几何下"叉抵横梁推不动"的实测值: 该位背板 x 与托盘
+# 通道顶壁重叠, 升叉时背板顶住顶壁, 承托恒 0。
+INSERT_X = -0.095
+CARRY_Z = 0.417           # 载货高度: 叉顶须过通道顶 412 才抬得动托盘
 RETREAT_X = -0.200
-DROP_Z = 0.135           # 降叉放回横梁
+DROP_Z = 0.135            # 降叉放回横梁 (叉顶低于梁面, 叉从叉孔滑脱)
 
 
 def _insert(a: ForkliftAdapter, tag: str) -> None:
@@ -56,7 +55,7 @@ def _insert(a: ForkliftAdapter, tag: str) -> None:
     前进动作 —— 直接升叉即可再取 (见 _return_to_station)。
     """
     a.execute("move", f"{tag}-fwd", target_axle_x=INSERT_X)
-    a.execute("lift", f"{tag}-ins", target_z=INSERT_Z)
+    a.execute("lift", f"{tag}-ins", target_z=CARRY_Z)
     a.execute("move", f"{tag}-back", target_axle_x=RETREAT_X)
 
 
@@ -136,7 +135,7 @@ def test_t06_physical_relay_sustain_limit():
     """同一物理单元连续接力的实测上限 —— 显式记录, 不让它悄悄失败。
 
     托盘在叉孔里是纯摩擦约束, 单个白模单元连续复用会逐轮漂移。实测
-    前 SUSTAINABLE_RELAYS 轮完全一致 (托盘 0.4100 / 叉承托 1.000 /
+    前 SUSTAINABLE_RELAYS 轮完全一致 (托盘 0.4050 / 叉承托 1.000 /
     梁 0.000), 之后托盘下沉压梁。此测试固定该上限, 超出即失败 —— 若
     将来 W04 完整场景让连续 50 轮成立, 应调高 SUSTAINABLE_RELAYS 并
     改回复用同一个单元跑满 50 轮。
@@ -152,7 +151,8 @@ def test_t06_physical_relay_sustain_limit():
             f"第{i}轮 叉上承托 {float(cell.support_load_ratio('fork')):.3f} < 0.90")
         assert float(cell.support_load_ratio("beam")) < 0.10, (
             f"第{i}轮 托盘压梁 {float(cell.support_load_ratio('beam')):.3f}")
-        assert abs(cell.pallet_bottom_z - 0.4100) < 1e-3, (
+        # 载货托盘底 = 载货叉顶 − 通道顶壁 12mm; 由 CARRY_Z 派生, 不写死
+        assert abs(cell.pallet_bottom_z - (CARRY_Z - 0.012)) < 1e-3, (
             f"第{i}轮 托盘高度漂移到 {cell.pallet_bottom_z:.4f}")
         _return_to_station(a, f"r{i}")
         assert float(cell.support_load_ratio("beam")) > 0.90, (

@@ -76,6 +76,11 @@ RESIDUAL_SPEED_TOL = 5e-3          # m/s
 LOAD_DROP_TOL_M = 2e-3
 #: 载荷相对叉的允许滑移
 LOAD_SLIP_TOL_M = 2e-3
+#: ESTOP 减速度。契约 (T10) 要求 0.2m/s 急停 <2mm → 减速度 ≥10 m/s²;
+#: 载荷不滑移要求减速度 < μg。叉孔摩擦 1.4 (μg=13.7), 取 12 留 14% 余量,
+#: 停止距离 v²/2a = 1.67mm。位置环锁存的瞬时停 (≈500 m/s²) 任何未捆绑
+#: 载荷都跟不住, 真实控制器急停按载荷保护斜坡减速。
+ESTOP_DECEL_MPS2 = 12.0
 
 
 class VehicleSafety:
@@ -162,6 +167,11 @@ class VehicleSafety:
         if initial_v_mps:
             dadr = int(c.model.jnt_dofadr[c.j_x])
             c.data.qvel[dadr] = float(initial_v_mps)
+            # 托盘同速注入: 只给车体初速会让托盘以 0.2m/s 的相对速度
+            # 在叉上摩擦滑行 (v²/2μg ≈ 2.6mm), 把注入伪影记成载荷滑移。
+            pj = int(np.argmax(c.model.jnt_bodyid == c.pallet_bid))
+            pdadr = int(c.model.jnt_dofadr[pj])
+            c.data.qvel[pdadr] = float(initial_v_mps)   # freejoint 首 dof = 平移 x
 
         # 保持目标在**注入时刻固定一次**, 之后不再更新。
         # 若每步都把 ctrl 重设成当前 qpos, 位置环退化成"跟随当前位置":
@@ -175,7 +185,15 @@ class VehicleSafety:
                          x_inject_m=self._x(), z_inject_m=self._z(),
                          loaded=self._loaded())
         z0 = self._pallet_z()
-        px0 = self._pallet_x()
+        # 滑移 = 托盘**相对叉**的位移。此前用世界坐标位移, 把车体制动
+        # 距离 (0.2m/s 急停约 2mm) 也算成"载荷滑移", 载货急停必然超
+        # 2mm 容差而误判不安全。
+        rel0 = self._pallet_x() - self.cell.axle_x
+        t0 = float(c.data.time)
+        s = 1.0 if initial_v_mps >= 0 else -1.0
+        v0 = abs(float(initial_v_mps))
+        t_stop = v0 / ESTOP_DECEL_MPS2
+        x_stop = rec.x_inject_m + s * v0 * v0 / (2 * ESTOP_DECEL_MPS2)
         steps = max(1, int(duration_s / c.model.opt.timestep))
         sample_every = max(1, steps // 120)
 
@@ -183,6 +201,12 @@ class VehicleSafety:
             if mode is StopMode.BRAKE_FAIL:
                 self._actuators_off()
                 self._brakes_off()               # 制动也失效
+            elif mode is StopMode.ESTOP and initial_v_mps:
+                # 减速度受限的急停斜坡: 载荷摩擦跟得住, 不滑移
+                t = c.data.time - t0
+                xt = (rec.x_inject_m + s * (v0 * t - 0.5 * ESTOP_DECEL_MPS2 * t * t)
+                      if t < t_stop else x_stop)
+                c.data.ctrl[c.a_x] = xt - c.q0_x
             # ESTOP / POWER_LOSS: 保持目标保持不变, 只继续步进
             mujoco.mj_step(c.model, c.data)
             if i % sample_every == 0:
@@ -193,7 +217,7 @@ class VehicleSafety:
         rec.z_final_m = self._z()
         rec.stop_distance_m = abs(rec.x_final_m - rec.x_inject_m)
         rec.drop_m = abs(self._pallet_z() - z0)
-        rec.slip_m = abs(self._pallet_x() - px0)
+        rec.slip_m = abs((self._pallet_x() - self.cell.axle_x) - rel0)
         rec.held = self._speed() <= RESIDUAL_SPEED_TOL
 
         if mode is StopMode.BRAKE_FAIL:
