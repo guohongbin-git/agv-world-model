@@ -99,29 +99,57 @@ class ForkliftCell:
   <option timestep="{dt}" gravity="0 0 -9.81" iterations="200"
           tolerance="1e-10" noslip_iterations="30" noslip_tolerance="1e-8"/>
   <size nconmax="200" njmax="300"/>
+  <visual>
+    <global offwidth="1920" offheight="1080"/>   <!-- 离屏帧缓冲 (纯视觉) -->
+    <headlight diffuse="0.45 0.45 0.48" specular="0.1 0.1 0.1"/>
+    <map fogstart="1.2" fogend="3.5"/>
+    <rgba fog="0.06 0.07 0.09 1"/>
+  </visual>
+  <asset>
+    <!-- 纯视觉: 地面网格纹理 (物理不变) -->
+    <texture type="2d" name="floorgrid" builtin="checker"
+             rgb1="0.30 0.32 0.36" rgb2="0.20 0.22 0.26" width="64" height="64"/>
+    <material name="floormat" texture="floorgrid" texrepeat="40 40" reflectance="0.12"/>
+  </asset>
   <default>
     <geom rgba="0.7 0.7 0.75 1" condim="3" friction="0.5 0.005 0.0001"
           solref="0.0002 1" solimp="0.999 0.9999 0.00001"/>
     <joint damping="0.1" armature="0.001"/>
   </default>
   <worldbody>
-    <light pos="0.5 -0.5 1.0" dir="0 0 -1"/>
-    <geom name="floor" type="plane" size="2 2 0.05" friction="0.5"/>
+    <!-- 三灯布光: 主光投影 + 冷色补光 + 顶部环境光 -->
+    <light pos="0.6 -0.7 1.2" dir="-0.3 0.3 -1" diffuse="0.8 0.78 0.74" castshadow="true"/>
+    <light pos="-0.9 0.7 1.0" dir="0.3 -0.2 -1" diffuse="0.35 0.37 0.42" castshadow="true"/>
+    <light pos="0 0 1.6" dir="0 0 -1" diffuse="0.28 0.28 0.30" castshadow="false"/>
+    <geom name="floor" type="plane" size="2 2 0.05" friction="0.5" material="floormat"/>
+    <!-- 装饰立柱: contype/conaffinity=0, 不参与接触求解 (规则 1: 纯视觉) -->
+    <geom name="upright_fl" type="box" pos="0.20 -0.033 {(k['support_z'] + 0.10)/2}"
+          size="0.004 0.004 {(k['support_z'] + 0.10)/2}" rgba="0.25 0.30 0.45 1"
+          contype="0" conaffinity="0"/>
+    <geom name="upright_fr" type="box" pos="0.20 0.033 {(k['support_z'] + 0.10)/2}"
+          size="0.004 0.004 {(k['support_z'] + 0.10)/2}" rgba="0.25 0.30 0.45 1"
+          contype="0" conaffinity="0"/>
+    <geom name="upright_bl" type="box" pos="-0.20 -0.033 {(k['support_z'] + 0.10)/2}"
+          size="0.004 0.004 {(k['support_z'] + 0.10)/2}" rgba="0.25 0.30 0.45 1"
+          contype="0" conaffinity="0"/>
+    <geom name="upright_br" type="box" pos="-0.20 0.033 {(k['support_z'] + 0.10)/2}"
+          size="0.004 0.004 {(k['support_z'] + 0.10)/2}" rgba="0.25 0.30 0.45 1"
+          contype="0" conaffinity="0"/>
     <!-- 支撑面: 三条横梁 (y=±27,0), 与托盘底条同位; 高度随 support_z 参数化 -->
-    <geom name="support_l" type="box" pos="0 -0.027 {k['support_z'] - 0.0025}" size="0.20 0.003 0.0025" rgba="0.5 0.6 0.7 1"/>
-    <geom name="support_c" type="box" pos="0 0 {k['support_z'] - 0.0025}" size="0.20 0.006 0.0025" rgba="0.5 0.6 0.7 1"/>
-    <geom name="support_r" type="box" pos="0 0.027 {k['support_z'] - 0.0025}" size="0.20 0.003 0.0025" rgba="0.5 0.6 0.7 1"/>
+    <geom name="support_l" type="box" pos="0 -0.027 {k['support_z'] - 0.0025}" size="0.20 0.003 0.0025" rgba="0.80 0.42 0.10 1"/>
+    <geom name="support_c" type="box" pos="0 0 {k['support_z'] - 0.0025}" size="0.20 0.006 0.0025" rgba="0.80 0.42 0.10 1"/>
+    <geom name="support_r" type="box" pos="0 0.027 {k['support_z'] - 0.0025}" size="0.20 0.003 0.0025" rgba="0.80 0.42 0.10 1"/>
     <!-- 暂存站 (T03 第二货位): 台面顶 z=45mm; 台下净空 z=0..44mm 供底盘(宽±75mm)通过,
          立柱 y=±85mm 在底盘宽度之外; 叉(±20mm)从台下中心贯通 -->
-    <geom name="stage_top" type="box" pos="-0.340 0 0.0445" size="0.060 0.050 0.0005" rgba="0.4 0.5 0.4 1"/>
-    <geom name="stage_leg_l" type="box" pos="-0.395 -0.085 0.022" size="0.003 0.003 0.022" rgba="0.3 0.4 0.3 1"/>
-    <geom name="stage_leg_r" type="box" pos="-0.395 0.085 0.022" size="0.003 0.003 0.022" rgba="0.3 0.4 0.3 1"/>
+    <geom name="stage_top" type="box" pos="-0.340 0 0.0445" size="0.060 0.050 0.0005" rgba="0.32 0.46 0.52 1"/>
+    <geom name="stage_leg_l" type="box" pos="-0.395 -0.085 0.022" size="0.003 0.003 0.022" rgba="0.22 0.32 0.38 1"/>
+    <geom name="stage_leg_r" type="box" pos="-0.395 0.085 0.022" size="0.003 0.003 0.022" rgba="0.22 0.32 0.38 1"/>
     <!-- 托盘 自由体, 原点=底面(底条局部z 0..4) -->
     <body name="pallet" pos="0 0 {k['support_z'] + 0.001}">
       <freejoint name="pal"/>
-      <geom name="pal_bottom_l" type="box" pos="0 -0.027 0.002" size="0.040 0.003 0.002" mass="0.006"/>
-      <geom name="pal_bottom_r" type="box" pos="0 0.027 0.002" size="0.040 0.003 0.002" mass="0.006"/>
-      <geom name="pal_bottom_c" type="box" pos="0 0 0.002" size="0.040 0.006 0.002" mass="0.010"/>
+      <geom name="pal_bottom_l" type="box" pos="0 -0.027 0.002" size="0.040 0.003 0.002" mass="0.006" rgba="0.55 0.40 0.22 1"/>
+      <geom name="pal_bottom_r" type="box" pos="0 0.027 0.002" size="0.040 0.003 0.002" mass="0.006" rgba="0.55 0.40 0.22 1"/>
+      <geom name="pal_bottom_c" type="box" pos="0 0 0.002" size="0.040 0.006 0.002" mass="0.010" rgba="0.55 0.40 0.22 1"/>
       <!-- 通道顶壁: 独立条带 (y=±15±7, z 12..15mm)。叉顶面推的是通道顶壁而非整块顶板,
            独立几何才能让接触求解生成多点分布接触 (整块顶板底面只会在叉尖成线)。
            y 半宽 7mm (原 5mm) 是为了与叉 (y 半宽 5mm) 有 4mm 横向重叠余量:
@@ -132,13 +160,13 @@ class ForkliftCell:
            载荷不滑移须 μg > 减速度, 即 μ ≥ 1.02。原 0.5/0.8 下 μg=7.8,
            两条款数学上不可同时满足。 -->
       <geom name="ceil_l" type="box" pos="0 -0.015 0.0135" size="0.040 0.007 0.0015"
-            mass="0.008" friction="1.4 0.005 0.0001"/>
+            mass="0.008" friction="1.4 0.005 0.0001" rgba="0.72 0.55 0.32 1"/>
       <geom name="ceil_r" type="box" pos="0 0.015 0.0135" size="0.040 0.007 0.0015"
-            mass="0.008" friction="1.4 0.005 0.0001"/>
+            mass="0.008" friction="1.4 0.005 0.0001" rgba="0.72 0.55 0.32 1"/>
       <!-- 顶板其余部分: 通道两侧边带 + 中桥, 避开叉的插入面 -->
-      <geom name="top_side_l" type="box" pos="0 -0.027 0.0175" size="0.040 0.003 0.0025" mass="0.002"/>
-      <geom name="top_side_r" type="box" pos="0 0.027 0.0175" size="0.040 0.003 0.0025" mass="0.002"/>
-      <geom name="top_mid" type="box" pos="0 0 0.017" size="0.040 0.008 0.001" mass="0.002"/>
+      <geom name="top_side_l" type="box" pos="0 -0.027 0.0175" size="0.040 0.003 0.0025" mass="0.002" rgba="0.78 0.62 0.38 1"/>
+      <geom name="top_side_r" type="box" pos="0 0.027 0.0175" size="0.040 0.003 0.0025" mass="0.002" rgba="0.78 0.62 0.38 1"/>
+      <geom name="top_mid" type="box" pos="0 0 0.017" size="0.040 0.008 0.001" mass="0.002" rgba="0.78 0.62 0.38 1"/>
       <!-- 叉从 -X 侧贯通进入; 设计 180 行「真实叉孔贯通结构无背面挡块」。
            原先有 pal_back_l/r 两块 condim=1 挡块, 压在货架横梁上,
            使 support_load_ratio('beam') 长期读到非零值而误判托盘仍压梁。 -->
@@ -151,9 +179,16 @@ class ForkliftCell:
       <joint name="chassis_x" type="slide" axis="1 0 0" range="-0.8 0.65" damping="20"/>
       <joint name="chassis_yaw" type="hinge" axis="0 0 1" range="-0.2 0.2" damping="5"/>
       <geom name="chassis_body" type="box" pos="-0.085 0 0.0175"
-            size="0.110 0.075 0.0175" mass="1.50"/>
+            size="0.110 0.075 0.0175" mass="1.50" rgba="0.90 0.66 0.05 1"/>
       <geom name="counterweight" type="box" pos="-0.20 0 0.0175"
-            size="0.010 0.060 0.0175" mass="0.0"/>
+            size="0.010 0.060 0.0175" mass="0.0" rgba="0.18 0.18 0.20 1"/>
+      <!-- 装饰门架 (contype=0 纯视觉): 双导轨 + 顶横梁, 叉车轮廓 -->
+      <geom name="mast_l" type="box" pos="0.005 -0.045 0.25" size="0.006 0.006 0.25"
+            mass="0" rgba="0.30 0.32 0.36 1" contype="0" conaffinity="0"/>
+      <geom name="mast_r" type="box" pos="0.005 0.045 0.25" size="0.006 0.006 0.25"
+            mass="0" rgba="0.30 0.32 0.36 1" contype="0" conaffinity="0"/>
+      <geom name="mast_top" type="box" pos="0.005 0 0.497" size="0.008 0.051 0.006"
+            mass="0" rgba="0.30 0.32 0.36 1" contype="0" conaffinity="0"/>
       <body name="carriage" pos="0 0 0">
         <joint name="lift" type="slide" axis="0 0 1" range="-0.050 {k['lift_travel']}" damping="60"/>
         <!-- 背板 (托盘后立面挡板), 分两片置于 y∈[8,22]/[-22,-8] —— 与叉孔
@@ -164,13 +199,13 @@ class ForkliftCell:
              在叉下方会先压上暂存台面 (实测承 2.07N 整叉架重量, 叉顶死锁)。
            两片与 ceil_l/r 接触即可阻止托盘滑向车 (刚性连接)。 -->
         <geom name="carriage_plate_l" type="box" pos="0.020 -0.015 0.068"
-              size="0.010 0.007 0.008" mass="0.125"/>
+              size="0.010 0.007 0.008" mass="0.125" rgba="0.35 0.36 0.40 1"/>
         <geom name="carriage_plate_r" type="box" pos="0.020 0.015 0.068"
-              size="0.010 0.007 0.008" mass="0.125"/>
+              size="0.010 0.007 0.008" mass="0.125" rgba="0.35 0.36 0.40 1"/>
         <geom name="fork_l" type="box" pos="{k['fork_root_x'] + k['fork_len']/2} -0.015 {k['transport_z'] - 0.00125}"
-              size="{k['fork_len']/2} 0.005 0.00125" mass="0.02" friction="1.4 0.02 0.0002"/>
+              size="{k['fork_len']/2} 0.005 0.00125" mass="0.02" friction="1.4 0.02 0.0002" rgba="0.15 0.15 0.17 1"/>
         <geom name="fork_r" type="box" pos="{k['fork_root_x'] + k['fork_len']/2} 0.015 {k['transport_z'] - 0.00125}"
-              size="{k['fork_len']/2} 0.005 0.00125" mass="0.02" friction="1.4 0.02 0.0002"/>
+              size="{k['fork_len']/2} 0.005 0.00125" mass="0.02" friction="1.4 0.02 0.0002" rgba="0.15 0.15 0.17 1"/>
       </body>
     </body>
   </worldbody>

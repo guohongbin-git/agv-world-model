@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T04 三层取放闭环 · 物理回放</title>
+<style>
+  :root { --bg:#0d1117; --panel:#161b22; --line:#21262d; --txt:#e6edf3; --dim:#8b949e; --amber:#e3b341; --blue:#58a6ff; }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--txt); font:15px/1.7 "PingFang SC",-apple-system,sans-serif; }
+  .wrap { max-width:1080px; margin:0 auto; padding:40px 24px 80px; }
+  h1 { font-size:26px; margin-bottom:6px; }
+  h1 .tag { color:var(--amber); }
+  .sub { color:var(--dim); margin-bottom:28px; }
+  video { width:100%; border-radius:12px; border:1px solid var(--line); background:#000; }
+  h2 { font-size:17px; margin:34px 0 12px; color:var(--blue); }
+  table { width:100%; border-collapse:collapse; font-size:13.5px; }
+  th,td { border:1px solid var(--line); padding:7px 10px; text-align:left; }
+  th { background:var(--panel); color:var(--dim); font-weight:600; }
+  td.n { font-variant-numeric:tabular-nums; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; margin-top:14px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 16px; }
+  .card b { display:block; font-size:22px; color:var(--amber); font-variant-numeric:tabular-nums; }
+  .card span { color:var(--dim); font-size:13px; }
+  .note { color:var(--dim); font-size:13px; margin-top:22px; border-left:3px solid var(--line); padding-left:12px; }
+  code { background:var(--panel); border:1px solid var(--line); border-radius:5px; padding:1px 6px; font-size:12.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1><span class="tag">T04</span> 三层取放闭环 · MuJoCo 物理回放</h1>
+  <div class="sub">单叉车白模：第三层取托 → 暂存站放托，11 段梯形速度剖面轨迹，30 fps 逐帧渲染。画面里的每个位姿都是 <code>mj_step</code> 积分出来的，不是动画。</div>
+
+  <video src="roundtrip.mp4" controls preload="metadata" poster=""></video>
+
+  <h2>闭环结果（design_version 2.1.0 实测）</h2>
+  <div class="cards">
+    <div class="card"><b>45.00 mm</b><span>托盘落台面误差 0.00（判据 ±1mm）</span></div>
+    <div class="card"><b>−340.4 mm</b><span>对位偏差 0.4mm（目标 −340）</span></div>
+    <div class="card"><b>0.978</b><span>放托后台面承托比（判据 ≥0.90）</span></div>
+    <div class="card"><b>0 / 0.41 mm</b><span>穿透违规 / 最大穿透（判据 &lt;0.5mm）</span></div>
+  </div>
+
+  <h2>11 段执行计划</h2>
+  <table>
+    <tr><th>#</th><th>动作</th><th>目标</th><th>速度</th></tr>
+    <tr><td class="n">1</td><td>升至插叉高度</td><td class="n">叉顶 410mm（支撑面+10）</td><td class="n">10 mm/s</td></tr>
+    <tr><td class="n">2</td><td>接近货架前沿</td><td class="n">叉尖抵托盘近边</td><td class="n">5 mm/s</td></tr>
+    <tr><td class="n">3</td><td>插叉 65mm（叉尖越过近边）</td><td class="n">axle −95mm</td><td class="n">5 mm/s</td></tr>
+    <tr><td class="n">4</td><td>举升离架</td><td class="n">叉顶 417mm（离面 5mm）</td><td class="n">2 mm/s</td></tr>
+    <tr><td class="n">5</td><td>带载直线退出站体</td><td class="n">脱离货架横梁区</td><td class="n">5 mm/s</td></tr>
+    <tr><td class="n">6</td><td>降至运输高度</td><td class="n">叉顶 65mm</td><td class="n">10 mm/s</td></tr>
+    <tr><td class="n">7</td><td>低位转运至暂存站</td><td class="n">托盘中心对准 −340mm</td><td class="n">5 mm/s</td></tr>
+    <tr><td class="n">8</td><td>放托</td><td class="n">叉顶 57mm = 台面45 + 通道顶壁12</td><td class="n">10 mm/s</td></tr>
+    <tr><td class="n">9</td><td>微降脱叉</td><td class="n">−0.5mm，令叉与叉孔上壁脱离</td><td class="n">2 mm/s</td></tr>
+    <tr><td class="n">10</td><td>退叉撤离（后退抽叉）</td><td class="n">−180mm</td><td class="n">5 mm/s</td></tr>
+    <tr><td class="n">11</td><td>叉架复位</td><td class="n">叉顶 65mm</td><td class="n">10 mm/s</td></tr>
+  </table>
+
+  <div class="note">
+    复现：<code>PYTHONPATH=. ./.venv/bin/python scripts/render_roundtrip_mp4.py</code>（渲染本视频）；
+    交互窗口：<code>.venv/bin/mjpython scripts/watch_roundtrip.py</code>。<br>
+    判据验证：<code>pytest tests/test_physics_fork.py tests/test_t04_reachability.py</code>（12 项）。
+    场景为示意白模：橙色横梁货架（第三层 400mm）、蓝色立柱、木托盘、黄色叉车（门架与立柱为纯视觉件，不参与接触与质量）。
+  </div>
+</div>
+</body>
+</html>
