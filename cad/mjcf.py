@@ -40,6 +40,19 @@ _SLIDE_DAMPING = {"finger_l": 40.0, "finger_r": 40.0,
 _SLIDE_ARMATURE = {"finger_l": 0.004, "finger_r": 0.004,
                    "forklift_lift": 0.020}
 
+# 行走轮与顶升轮的关节阻尼 —— 必须**单独**给, 不能落到机械臂的默认值。
+#
+# 车轮稳态时 电机转矩 = 关节阻尼力矩, 故终端车速 = T/(damping·r):
+#     damping=1.0 (原默认值) → 0.5/(1.0·0.025) = 12.5 mm/s
+# 实测 10.6 mm/s 正是这个终端速度, 而设计要求 speed_max_mps=0.10
+# (100 mm/s) —— 差 10 倍。1.0 这个值是为机械臂关节定的, 套到轮子上
+# 相当于给车轮加了极大粘性阻力。
+#
+# 真实轮轴承阻尼很小(电机内部损耗已由转矩上限体现), 这里取 0.002,
+# 使阻尼力矩在满速 4.0 rad/s 下仅 0.008 N·m (占 0.5 N·m 的 1.6%)。
+_SPIN_DAMPING = 0.002
+_SPIN_ARMATURE = 0.00002
+
 
 def _fmt(values: Sequence[float]) -> str:
     return " ".join(f"{v:.9g}" for v in values)
@@ -166,8 +179,12 @@ def _add_body(parent: ET.Element, node: BodyNode, name: str, pos: Sequence[float
             # 真实驱动带阻尼。缺失时 (实测 damping=0) 机械臂在重力补偿后仍会
             # 持续振荡 (J4 稳态 0.97 rad/s), 无法收敛到保持位。
             if mjcf_type == "hinge":
-                jattrs["damping"] = f"{_JOINT_DAMPING.get(joint.name, 1.0):.4g}"
-                jattrs["armature"] = f"{_JOINT_ARMATURE.get(joint.name, 0.01):.4g}"
+                # 车轮 (*_spin) 用独立的低阻尼值, 其余走机械臂表/默认值
+                spin = joint.name.endswith("_spin")
+                damping = _SPIN_DAMPING if spin else _JOINT_DAMPING.get(joint.name, 1.0)
+                armature = _SPIN_ARMATURE if spin else _JOINT_ARMATURE.get(joint.name, 0.01)
+                jattrs["damping"] = f"{damping:.4g}"
+                jattrs["armature"] = f"{armature:.4g}"
             else:
                 jattrs["damping"] = f"{_SLIDE_DAMPING.get(joint.name, 1.0):.4g}"
                 jattrs["armature"] = f"{_SLIDE_ARMATURE.get(joint.name, 0.002):.4g}"

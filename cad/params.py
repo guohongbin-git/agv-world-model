@@ -78,9 +78,14 @@ def derive_parameters(p: SimpleNamespace) -> Derived:
         "mast_rail_x_range_m": [fr.body_bounds_x_m[1], fr.body_bounds_x_m[1] + 0.8 * r],
         "mast_rail_y_m": 0.3 * fr.body_width_m,
         "mast_rail_z_range_m": [3 * r, fr.mast_height_m],
-        # 移动叉架挡板: 包住导轨的竖板, z 初值 10→90 mm。
+        # 移动叉架挡板: 包住导轨的竖板。
+        #
+        # 下沿必须**高于驱动轮顶 (2r)**, 否则挡板会压在驱动轮上——实测这会让
+        # 车轮与挡板产生 ~143 N 的自碰撞水平力, 车辆被自己的叉架锁住, 车速
+        # 从应有的 ~100 mm/s 掉到 7 mm/s。原初值 z 下沿 10 mm 低于轮顶 50 mm,
+        # 重叠 40 mm。取 2r + 5 mm 间隙。
         "carriage_plate_x_range_m": list(fr.body_bounds_x_m[1:2]) + [fr.body_bounds_x_m[1] + 0.8 * r],
-        "carriage_plate_z_range_m": [0.010, 0.090],
+        "carriage_plate_z_range_m": [2 * r + 0.005, 2 * r + 0.085],
         # 货叉: 从挡板前缘前伸 1 根叉长, 叉顶面 = transport_fork_top_z_m（举升零位）。
         "fork_x_range_m": [fr.body_bounds_x_m[1] + 0.8 * r,
                            fr.body_bounds_x_m[1] + 0.8 * r + ft.size_m[0]],

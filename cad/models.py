@@ -113,21 +113,17 @@ def _cyl_prim(name: str, radius: float, height: float, center: Sequence[float],
 
 def _wheel_prim(name: str, radius: float, width: float,
                 center: Sequence[float]) -> Prim:
-    """车轮碰撞体 —— 用 **ellipsoid** 而非 cylinder。
+    """车轮碰撞体 —— 真实圆柱。
 
-    圆柱轮缘与地面相切时, 接触点正好落在铰接轴上; MuJoCo 的接触约束
-    把该点判为穿透点, 于是任何微小旋转都被约束力抵消 —— 车轮被**运动学
-    锁死**。最小复现 (孤立自由轮, 0.5 N·m 驱动 2 秒):
+    曾短暂换成 ellipsoid, 依据是「圆柱轮缘与地面相切时接触点落在铰轴上,
+    会被运动学锁死」。该结论**错误**, 源于一个有缺陷的最小复现(电机漏设
+    forcerange, ctrl 被钳到 0, 于是任何 geom 都报 0.0000 rad/s)。
+    修正 harness 后实测: 真实圆柱轮在场景中能正常滚动。
 
-        cylinder  r=25mm 同轴  →  0.0000 rad/s  (锁死)
-        ellipsoid 25×7.5×25mm →  351.65 rad/s  (正常滚动)
-
-    两者外形完全等价 (宽 7.5mm 的扁圆柱), 碰撞包络一致, 但椭球没有
-    圆柱那种退化接触点。不改的话车辆只有 ~10 mm/s, 达不到设计
-    speed_max_mps=0.10, T04 的 180 次物理往返无从进行。
+    真实车轮本就是圆柱, 保持 cylinder。
     """
-    return Prim(name=name, type="ellipsoid", center_m=tuple(center),
-                size_m=(radius, width / 2.0, radius))
+    return Prim(name=name, type="cylinder", center_m=tuple(center),
+                radius_m=radius, height_m=width, axis="y")
 
 
 def _shape_from_prims(prims: Sequence[Prim], label: str) -> Compound:
