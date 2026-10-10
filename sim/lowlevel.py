@@ -34,7 +34,18 @@ class WheelCtrl:
     speed_max_mps: float = 0.10   # 设计 robots.*.speed_max_mps
     wheel_radius_m: float = 0.025
     i_limit: float = 2.0
-    i_deadband_radps: float = 0.05   # 误差进入此范围时冻结积分(防低速死区极限环)
+    # 积分死区 (rad/s)。**按指令轮速的相对比例**取, 使低速时死区自动收紧:
+    #   死区 = max(i_deadband_abs, i_deadband_rel × |指令轮速|)
+    #
+    # 为什么必须相对化: 绝对死区在高速时合适(抑制噪声), 但低速时指令轮速
+    # 只有 0.2 rad/s, 静态摩擦造成的稳态误差就超过绝对死区, 积分器会持续
+    # 累积直到打满限幅 (±2.0), 然后反向全力制动, 形成周期约 6 秒的大幅
+    # 极限环 (实测 5 mm/s 指令: 速度 5→18.7→3.1→13.6→−0.1 mm/s 往复)。
+    #
+    # 后果不是稳态速度误差, 而是**位移超程**: 30 秒行进 185.9mm 而非 150mm
+    # (超 36mm)。插叉有效行程仅 65mm(设计 155 行), 超程会撞穿托盘。
+    i_deadband_abs: float = 0.05
+    i_deadband_rel: float = 0.30
 
 
 class DiffDriveController:
@@ -127,7 +138,12 @@ class DiffDriveController:
         wl, wr = self.wheel_targets(v_cmd, yaw_rate)
         vl, vr = self.wheel_speeds()
         tm = self.ctrl.torque_max_nm
-        db = self.ctrl.i_deadband_radps
+        # 死区随指令轮速缩放: 低速指令时死区自动收紧, 防止积分器对
+        # 「静摩擦造成的、无法消除的稳态误差」持续累积到限幅。
+        db_l = max(self.ctrl.i_deadband_abs,
+                   self.ctrl.i_deadband_rel * abs(wl))
+        db_r = max(self.ctrl.i_deadband_abs,
+                   self.ctrl.i_deadband_rel * abs(wr))
 
         # 抗积分饱和 (back-calculation) + 死区冻结。
         #
@@ -138,7 +154,7 @@ class DiffDriveController:
         # 极限环 (车速 50→90→35 mm/s 往复, 积分 0.19→−1.38)。
         # 冻结只阻止进一步累积, 不改已有值。
         err_l = wl - vl
-        if abs(err_l) >= db:
+        if abs(err_l) >= db_l:
             self._integ_l += err_l * dt
             ul_test = self.ctrl.kp * err_l + self.ctrl.ki * self._integ_l
             if ul_test > tm:
@@ -149,7 +165,7 @@ class DiffDriveController:
                                           -self.ctrl.i_limit, self.ctrl.i_limit))
 
         err_r = wr - vr
-        if abs(err_r) >= db:
+        if abs(err_r) >= db_r:
             self._integ_r += err_r * dt
             ur_test = self.ctrl.kp * err_r + self.ctrl.ki * self._integ_r
             if ur_test > tm:
