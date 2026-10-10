@@ -314,13 +314,30 @@ class ManipulatorCell:
         # 箱件挡住手指时实测 gap 偏大 → 指令偏大 → 指垫逐帧退回并脱手
         # (实测 60mm → 66.6mm, 夹持丢失)。
         self._grip_hold = q_cmd
-        if self._pad_contacted():
+        # 开爪过程中手指仍在掠过箱件, 接触判据会把 gripping 重新点亮,
+        # 于是"已松爪"被误判成"仍夹持" (实测开爪后 gripping 回到 True)。
+        #
+        # 判据用**指令方向**而非实测净间距: 开爪指令的 target_gap 明显
+        # 大于当前 gap。用实测 gap 判断不行 —— 开爪完成后 gap 稳定在
+        # 69mm, 与闭爪前完全相同, 分不出"在张开"与"已张开"。
+        opening_cmd = target_gap > float(self.gap) + 0.002
+        if opening_cmd:
+            self.gripping = False           # 正在张开 → 不算夹持
+        elif self._pad_contacted():
             self.gripping = True
+        elif self.gap > float(self.cfg["manipulators"]["gripper"]["gap_range_m"][1]
+                               ) - self.finger_thickness + 0.002:
+            # 指垫已完全张开且不接触任何东西 → 明确未夹持。
+            # gripping 只会被置 True 而不会因失联自动清零, 于是松爪后
+            # 即使 contacts=False 仍停留在 True (实测开爪后 gap=69mm、
+            # contacts=False, gripping 却还是 True)。
+            self.gripping = False
 
     def open_gripper(self) -> None:
         """开爪到设计上限净间距 (设计 25.3 的 75mm, 用于释放/撤离)。"""
         self.gripping = False
         self._grip_hold = None
+
 
     def close_gripper(self, target_gap: float = 0.0) -> None:
         """闭爪到指定净间距 (低于物体宽度时由限力伺服维持预紧)。"""
@@ -359,6 +376,14 @@ class ManipulatorCell:
     def step(self, n: int = 1) -> None:
         for _ in range(n):
             mujoco.mj_step(self.model, self.data)
+            # 夹持是**接触派生量**, 不是粘滞标志: 一旦指垫与箱件失去接触
+            # (开爪后箱件落到下方/滑脱), gripping 必须立刻归零。
+            # 只在 _command_gap 里判断是不够的 —— 那里每条指令只跑一次,
+            # 而开爪过程中手指真正张开是在其后的若干物理步里发生的,
+            # 于是指令跑完了 gripping 还停在 True (实测 gap=69mm、
+            # contacts=False、gripping=True)。
+            if self.gripping and not self._pad_contacted():
+                self.gripping = False
 
     def move_joints(self, q_target: np.ndarray, max_vel: float = 0.5,
                     max_acc: float = 1.0, settle_s: float = 0.5) -> dict:

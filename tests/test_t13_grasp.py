@@ -216,7 +216,9 @@ def test_t13_lift_reaches_current_capability(cell: ManipulatorCell):
     """
     _settle(cell)
     q_hold = _approach_and_close(cell)
-    z0 = cell.tray_top_z
+    z0 = cell.box_bottom_z        # 抬离基准=闭爪时箱底, 非托台面
+    # (箱件起始坐在托盘承货面 pallet_support_z, 不是托台面;
+    #  用托台面做基准会把 18mm 的托盘高度算成抬离)
     mat = cell.grasp_target_pose(np.array([cell.box_pos[0], cell.box_pos[1]]),
                                  cell.box_bottom_z)[1]
     best = 0.0
@@ -235,7 +237,9 @@ def test_t13_lift_reaches_design_target(cell: ManipulatorCell):
     """抬升须达到设计 grasp_lift_m = 50mm (原 canary 已触发, 转为正向判据)。"""
     _settle(cell)
     _approach_and_close(cell)
-    z0 = cell.tray_top_z
+    z0 = cell.box_bottom_z        # 抬离基准=闭爪时箱底, 非托台面
+    # (箱件起始坐在托盘承货面 pallet_support_z, 不是托台面;
+    #  用托台面做基准会把 18mm 的托盘高度算成抬离)
     mat = cell.grasp_target_pose(np.array([cell.box_pos[0], cell.box_pos[1]]),
                                  cell.box_bottom_z)[1]
     best = 0.0
@@ -259,7 +263,7 @@ def test_t14_low_friction_must_fail_cleanly():
     for g in c.pad_gids:
         c.model.geom_friction[g][0] = 0.2
     _approach_and_close(c, close_gap=0.030)
-    z0 = c.tray_top_z
+    z0 = c.box_bottom_z            # 同上: 基准是闭爪时箱底
     mat = c.grasp_target_pose(np.array([c.box_pos[0], c.box_pos[1]]),
                               c.box_bottom_z)[1]
     best = 0.0
@@ -301,7 +305,9 @@ def test_t13_grasp_confirmed_all_design_criteria(cell: ManipulatorCell):
     assert max(fl, fr) <= f_max + 1e-6, \
         f"每指法向力 {fl:.1f}/{fr:.1f}N 超出上限 {f_max}N"
 
-    z0 = cell.tray_top_z
+    z0 = cell.box_bottom_z        # 抬离基准=闭爪时箱底, 非托台面
+    # (箱件起始坐在托盘承货面 pallet_support_z, 不是托台面;
+    #  用托台面做基准会把 18mm 的托盘高度算成抬离)
     mat = cell.grasp_target_pose(np.array([cell.box_pos[0], cell.box_pos[1]]),
                                  cell.box_bottom_z)[1]
     p = cell.tcp_pos.copy()
