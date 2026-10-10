@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<mujoco model="desktop_agv_demo_w02_d2.0.0">
+<mujoco model="desktop_agv_demo_w02_d2.1.0">
   <compiler angle="radian" autolimits="true" />
   <option timestep="0.001" />
   <default>
@@ -7,59 +7,59 @@
   </default>
   <worldbody>
     <body name="table" pos="0 0 0">
-      <geom name="table_table_top" type="box" size="0.9 0.6 0.009" friction="0.5 0.005 0.0001" pos="0 0 -0.009" />
+      <geom name="table_table_top" type="box" size="0.9 0.6 0.009" friction="0.5 0.005 0.0001" pos="0.9 0.6 -0.009" contype="2" conaffinity="6" />
     </body>
     <body name="station_i01" pos="0.25 0.25 0">
-      <geom name="station_i01_station_rail_l" type="box" size="0.06 0.003 0.005" friction="0.5 0.005 0.0001" pos="0 -0.027 0.05" />
-      <geom name="station_i01_station_rail_r" type="box" size="0.06 0.003 0.005" friction="0.5 0.005 0.0001" pos="0 0.027 0.05" />
-      <geom name="station_i01_station_leg_ws" type="box" size="0.005 0.005 0.0225" friction="0.5 0.005 0.0001" pos="-0.055 -0.075 0.0225" />
-      <geom name="station_i01_station_leg_wn" type="box" size="0.005 0.005 0.0225" friction="0.5 0.005 0.0001" pos="-0.055 0.075 0.0225" />
-      <geom name="station_i01_station_leg_es" type="box" size="0.005 0.005 0.0225" friction="0.5 0.005 0.0001" pos="0.055 -0.075 0.0225" />
-      <geom name="station_i01_station_leg_en" type="box" size="0.005 0.005 0.0225" friction="0.5 0.005 0.0001" pos="0.055 0.075 0.0225" />
+      <geom name="station_i01_station_rail_l" type="box" size="0.06 0.003 0.005" friction="0.5 0.005 0.0001" pos="0 -0.027 0.05" contype="2" conaffinity="6" />
+      <geom name="station_i01_station_rail_r" type="box" size="0.06 0.003 0.005" friction="0.5 0.005 0.0001" pos="0 0.027 0.05" contype="2" conaffinity="6" />
+      <geom name="station_i01_station_leg_ws" type="box" size="0.005 0.005 0.0225" friction="0.5 0.005 0.0001" pos="-0.055 -0.075 0.0225" contype="2" conaffinity="6" />
+      <geom name="station_i01_station_leg_wn" type="box" size="0.005 0.005 0.0225" friction="0.5 0.005 0.0001" pos="-0.055 0.075 0.0225" contype="2" conaffinity="6" />
+      <geom name="station_i01_station_leg_es" type="box" size="0.005 0.005 0.0225" friction="0.5 0.005 0.0001" pos="0.055 -0.075 0.0225" contype="2" conaffinity="6" />
+      <geom name="station_i01_station_leg_en" type="box" size="0.005 0.005 0.0225" friction="0.5 0.005 0.0001" pos="0.055 0.075 0.0225" contype="2" conaffinity="6" />
       <site name="station_i01_pallet_center" pos="0 0 0.055" size="0.004" rgba="1 0 0 0.4" />
     </body>
     <body name="station_h01" pos="0.85 0.35 0">
-      <geom name="station_h01_station_rail_l" type="box" size="0.06 0.003 0.005" friction="0.5 0.005 0.0001" pos="0 -0.027 0.05" />
-      <geom name="station_h01_station_rail_r" type="box" size="0.06 0.003 0.005" friction="0.5 0.005 0.0001" pos="0 0.027 0.05" />
-      <geom name="station_h01_station_leg_ws" type="box" size="0.005 0.005 0.0225" friction="0.5 0.005 0.0001" pos="-0.055 -0.075 0.0225" />
-      <geom name="station_h01_station_leg_wn" type="box" size="0.005 0.005 0.0225" friction="0.5 0.005 0.0001" pos="-0.055 0.075 0.0225" />
-      <geom name="station_h01_station_leg_es" type="box" size="0.005 0.005 0.0225" friction="0.5 0.005 0.0001" pos="0.055 -0.075 0.0225" />
-      <geom name="station_h01_station_leg_en" type="box" size="0.005 0.005 0.0225" friction="0.5 0.005 0.0001" pos="0.055 0.075 0.0225" />
+      <geom name="station_h01_station_rail_l" type="box" size="0.06 0.003 0.005" friction="0.5 0.005 0.0001" pos="0 -0.027 0.05" contype="2" conaffinity="6" />
+      <geom name="station_h01_station_rail_r" type="box" size="0.06 0.003 0.005" friction="0.5 0.005 0.0001" pos="0 0.027 0.05" contype="2" conaffinity="6" />
+      <geom name="station_h01_station_leg_ws" type="box" size="0.005 0.005 0.0225" friction="0.5 0.005 0.0001" pos="-0.055 -0.075 0.0225" contype="2" conaffinity="6" />
+      <geom name="station_h01_station_leg_wn" type="box" size="0.005 0.005 0.0225" friction="0.5 0.005 0.0001" pos="-0.055 0.075 0.0225" contype="2" conaffinity="6" />
+      <geom name="station_h01_station_leg_es" type="box" size="0.005 0.005 0.0225" friction="0.5 0.005 0.0001" pos="0.055 -0.075 0.0225" contype="2" conaffinity="6" />
+      <geom name="station_h01_station_leg_en" type="box" size="0.005 0.005 0.0225" friction="0.5 0.005 0.0001" pos="0.055 0.075 0.0225" contype="2" conaffinity="6" />
       <site name="station_h01_pallet_center" pos="0 0 0.055" size="0.004" rgba="1 0 0 0.4" />
     </body>
     <body name="station_o01" pos="1.4 0.25 0">
-      <geom name="station_o01_station_rail_l" type="box" size="0.06 0.003 0.005" friction="0.5 0.005 0.0001" pos="0 -0.027 0.05" />
-      <geom name="station_o01_station_rail_r" type="box" size="0.06 0.003 0.005" friction="0.5 0.005 0.0001" pos="0 0.027 0.05" />
-      <geom name="station_o01_station_leg_ws" type="box" size="0.005 0.005 0.0225" friction="0.5 0.005 0.0001" pos="-0.055 -0.075 0.0225" />
-      <geom name="station_o01_station_leg_wn" type="box" size="0.005 0.005 0.0225" friction="0.5 0.005 0.0001" pos="-0.055 0.075 0.0225" />
-      <geom name="station_o01_station_leg_es" type="box" size="0.005 0.005 0.0225" friction="0.5 0.005 0.0001" pos="0.055 -0.075 0.0225" />
-      <geom name="station_o01_station_leg_en" type="box" size="0.005 0.005 0.0225" friction="0.5 0.005 0.0001" pos="0.055 0.075 0.0225" />
+      <geom name="station_o01_station_rail_l" type="box" size="0.06 0.003 0.005" friction="0.5 0.005 0.0001" pos="0 -0.027 0.05" contype="2" conaffinity="6" />
+      <geom name="station_o01_station_rail_r" type="box" size="0.06 0.003 0.005" friction="0.5 0.005 0.0001" pos="0 0.027 0.05" contype="2" conaffinity="6" />
+      <geom name="station_o01_station_leg_ws" type="box" size="0.005 0.005 0.0225" friction="0.5 0.005 0.0001" pos="-0.055 -0.075 0.0225" contype="2" conaffinity="6" />
+      <geom name="station_o01_station_leg_wn" type="box" size="0.005 0.005 0.0225" friction="0.5 0.005 0.0001" pos="-0.055 0.075 0.0225" contype="2" conaffinity="6" />
+      <geom name="station_o01_station_leg_es" type="box" size="0.005 0.005 0.0225" friction="0.5 0.005 0.0001" pos="0.055 -0.075 0.0225" contype="2" conaffinity="6" />
+      <geom name="station_o01_station_leg_en" type="box" size="0.005 0.005 0.0225" friction="0.5 0.005 0.0001" pos="0.055 0.075 0.0225" contype="2" conaffinity="6" />
       <site name="station_o01_pallet_center" pos="0 0 0.055" size="0.004" rgba="1 0 0 0.4" />
     </body>
     <body name="feed_i_tray" pos="0.15 0.15 0">
-      <geom name="feed_i_tray_feed_tray_plate" type="box" size="0.04 0.03 0.004" friction="0.5 0.005 0.0001" pos="0 0 0.051" />
-      <geom name="feed_i_tray_feed_tray_leg_ws" type="box" size="0.005 0.005 0.0235" friction="0.5 0.005 0.0001" pos="-0.035 -0.025 0.0235" />
-      <geom name="feed_i_tray_feed_tray_leg_wn" type="box" size="0.005 0.005 0.0235" friction="0.5 0.005 0.0001" pos="-0.035 0.025 0.0235" />
-      <geom name="feed_i_tray_feed_tray_leg_es" type="box" size="0.005 0.005 0.0235" friction="0.5 0.005 0.0001" pos="0.035 -0.025 0.0235" />
-      <geom name="feed_i_tray_feed_tray_leg_en" type="box" size="0.005 0.005 0.0235" friction="0.5 0.005 0.0001" pos="0.035 0.025 0.0235" />
+      <geom name="feed_i_tray_feed_tray_plate" type="box" size="0.04 0.03 0.004" friction="0.5 0.005 0.0001" pos="0 0 0.051" contype="2" conaffinity="6" />
+      <geom name="feed_i_tray_feed_tray_leg_ws" type="box" size="0.005 0.005 0.0235" friction="0.5 0.005 0.0001" pos="-0.035 -0.025 0.0235" contype="2" conaffinity="6" />
+      <geom name="feed_i_tray_feed_tray_leg_wn" type="box" size="0.005 0.005 0.0235" friction="0.5 0.005 0.0001" pos="-0.035 0.025 0.0235" contype="2" conaffinity="6" />
+      <geom name="feed_i_tray_feed_tray_leg_es" type="box" size="0.005 0.005 0.0235" friction="0.5 0.005 0.0001" pos="0.035 -0.025 0.0235" contype="2" conaffinity="6" />
+      <geom name="feed_i_tray_feed_tray_leg_en" type="box" size="0.005 0.005 0.0235" friction="0.5 0.005 0.0001" pos="0.035 0.025 0.0235" contype="2" conaffinity="6" />
       <site name="feed_i_tray_tray_center" pos="0 0 0.055" size="0.004" rgba="1 0 0 0.4" />
     </body>
     <body name="feed_o_tray" pos="1.65 0.15 0">
-      <geom name="feed_o_tray_feed_tray_plate" type="box" size="0.04 0.03 0.004" friction="0.5 0.005 0.0001" pos="0 0 0.051" />
-      <geom name="feed_o_tray_feed_tray_leg_ws" type="box" size="0.005 0.005 0.0235" friction="0.5 0.005 0.0001" pos="-0.035 -0.025 0.0235" />
-      <geom name="feed_o_tray_feed_tray_leg_wn" type="box" size="0.005 0.005 0.0235" friction="0.5 0.005 0.0001" pos="-0.035 0.025 0.0235" />
-      <geom name="feed_o_tray_feed_tray_leg_es" type="box" size="0.005 0.005 0.0235" friction="0.5 0.005 0.0001" pos="0.035 -0.025 0.0235" />
-      <geom name="feed_o_tray_feed_tray_leg_en" type="box" size="0.005 0.005 0.0235" friction="0.5 0.005 0.0001" pos="0.035 0.025 0.0235" />
+      <geom name="feed_o_tray_feed_tray_plate" type="box" size="0.04 0.03 0.004" friction="0.5 0.005 0.0001" pos="0 0 0.051" contype="2" conaffinity="6" />
+      <geom name="feed_o_tray_feed_tray_leg_ws" type="box" size="0.005 0.005 0.0235" friction="0.5 0.005 0.0001" pos="-0.035 -0.025 0.0235" contype="2" conaffinity="6" />
+      <geom name="feed_o_tray_feed_tray_leg_wn" type="box" size="0.005 0.005 0.0235" friction="0.5 0.005 0.0001" pos="-0.035 0.025 0.0235" contype="2" conaffinity="6" />
+      <geom name="feed_o_tray_feed_tray_leg_es" type="box" size="0.005 0.005 0.0235" friction="0.5 0.005 0.0001" pos="0.035 -0.025 0.0235" contype="2" conaffinity="6" />
+      <geom name="feed_o_tray_feed_tray_leg_en" type="box" size="0.005 0.005 0.0235" friction="0.5 0.005 0.0001" pos="0.035 0.025 0.0235" contype="2" conaffinity="6" />
       <site name="feed_o_tray_tray_center" pos="0 0 0.055" size="0.004" rgba="1 0 0 0.4" />
     </body>
     <body name="rack_a" pos="0.545 1 0">
-      <geom name="rack_a_rack_post_ws" type="box" size="0.01 0.01 0.27" friction="0.5 0.005 0.0001" pos="-0.185 -0.07 0.27" />
-      <geom name="rack_a_rack_post_wn" type="box" size="0.01 0.01 0.27" friction="0.5 0.005 0.0001" pos="-0.185 0.07 0.27" />
-      <geom name="rack_a_rack_post_es" type="box" size="0.01 0.01 0.27" friction="0.5 0.005 0.0001" pos="0.185 -0.07 0.27" />
-      <geom name="rack_a_rack_post_en" type="box" size="0.01 0.01 0.27" friction="0.5 0.005 0.0001" pos="0.185 0.07 0.27" />
-      <geom name="rack_a_rack_shelf_l0" type="box" size="0.195 0.08 0.004" friction="0.5 0.005 0.0001" pos="0 0 0.096" />
-      <geom name="rack_a_rack_shelf_l1" type="box" size="0.195 0.08 0.004" friction="0.5 0.005 0.0001" pos="0 0 0.246" />
-      <geom name="rack_a_rack_shelf_l2" type="box" size="0.195 0.08 0.004" friction="0.5 0.005 0.0001" pos="0 0 0.396" />
+      <geom name="rack_a_rack_post_ws" type="box" size="0.01 0.01 0.27" friction="0.5 0.005 0.0001" pos="-0.185 -0.07 0.27" contype="2" conaffinity="6" />
+      <geom name="rack_a_rack_post_wn" type="box" size="0.01 0.01 0.27" friction="0.5 0.005 0.0001" pos="-0.185 0.07 0.27" contype="2" conaffinity="6" />
+      <geom name="rack_a_rack_post_es" type="box" size="0.01 0.01 0.27" friction="0.5 0.005 0.0001" pos="0.185 -0.07 0.27" contype="2" conaffinity="6" />
+      <geom name="rack_a_rack_post_en" type="box" size="0.01 0.01 0.27" friction="0.5 0.005 0.0001" pos="0.185 0.07 0.27" contype="2" conaffinity="6" />
+      <geom name="rack_a_rack_shelf_l0" type="box" size="0.195 0.08 0.004" friction="0.5 0.005 0.0001" pos="0 0 0.096" contype="2" conaffinity="6" />
+      <geom name="rack_a_rack_shelf_l1" type="box" size="0.195 0.08 0.004" friction="0.5 0.005 0.0001" pos="0 0 0.246" contype="2" conaffinity="6" />
+      <geom name="rack_a_rack_shelf_l2" type="box" size="0.195 0.08 0.004" friction="0.5 0.005 0.0001" pos="0 0 0.396" contype="2" conaffinity="6" />
       <site name="rack_a_slot_c0_l0" pos="-0.13 0 0.1" size="0.004" rgba="1 0 0 0.4" />
       <site name="rack_a_slot_c0_l1" pos="-0.13 0 0.25" size="0.004" rgba="1 0 0 0.4" />
       <site name="rack_a_slot_c0_l2" pos="-0.13 0 0.4" size="0.004" rgba="1 0 0 0.4" />
@@ -71,13 +71,13 @@
       <site name="rack_a_slot_c2_l2" pos="0.13 0 0.4" size="0.004" rgba="1 0 0 0.4" />
     </body>
     <body name="rack_b" pos="1.155 1 0">
-      <geom name="rack_b_rack_post_ws" type="box" size="0.01 0.01 0.27" friction="0.5 0.005 0.0001" pos="-0.185 -0.07 0.27" />
-      <geom name="rack_b_rack_post_wn" type="box" size="0.01 0.01 0.27" friction="0.5 0.005 0.0001" pos="-0.185 0.07 0.27" />
-      <geom name="rack_b_rack_post_es" type="box" size="0.01 0.01 0.27" friction="0.5 0.005 0.0001" pos="0.185 -0.07 0.27" />
-      <geom name="rack_b_rack_post_en" type="box" size="0.01 0.01 0.27" friction="0.5 0.005 0.0001" pos="0.185 0.07 0.27" />
-      <geom name="rack_b_rack_shelf_l0" type="box" size="0.195 0.08 0.004" friction="0.5 0.005 0.0001" pos="0 0 0.096" />
-      <geom name="rack_b_rack_shelf_l1" type="box" size="0.195 0.08 0.004" friction="0.5 0.005 0.0001" pos="0 0 0.246" />
-      <geom name="rack_b_rack_shelf_l2" type="box" size="0.195 0.08 0.004" friction="0.5 0.005 0.0001" pos="0 0 0.396" />
+      <geom name="rack_b_rack_post_ws" type="box" size="0.01 0.01 0.27" friction="0.5 0.005 0.0001" pos="-0.185 -0.07 0.27" contype="2" conaffinity="6" />
+      <geom name="rack_b_rack_post_wn" type="box" size="0.01 0.01 0.27" friction="0.5 0.005 0.0001" pos="-0.185 0.07 0.27" contype="2" conaffinity="6" />
+      <geom name="rack_b_rack_post_es" type="box" size="0.01 0.01 0.27" friction="0.5 0.005 0.0001" pos="0.185 -0.07 0.27" contype="2" conaffinity="6" />
+      <geom name="rack_b_rack_post_en" type="box" size="0.01 0.01 0.27" friction="0.5 0.005 0.0001" pos="0.185 0.07 0.27" contype="2" conaffinity="6" />
+      <geom name="rack_b_rack_shelf_l0" type="box" size="0.195 0.08 0.004" friction="0.5 0.005 0.0001" pos="0 0 0.096" contype="2" conaffinity="6" />
+      <geom name="rack_b_rack_shelf_l1" type="box" size="0.195 0.08 0.004" friction="0.5 0.005 0.0001" pos="0 0 0.246" contype="2" conaffinity="6" />
+      <geom name="rack_b_rack_shelf_l2" type="box" size="0.195 0.08 0.004" friction="0.5 0.005 0.0001" pos="0 0 0.396" contype="2" conaffinity="6" />
       <site name="rack_b_slot_c0_l0" pos="-0.13 0 0.1" size="0.004" rgba="1 0 0 0.4" />
       <site name="rack_b_slot_c0_l1" pos="-0.13 0 0.25" size="0.004" rgba="1 0 0 0.4" />
       <site name="rack_b_slot_c0_l2" pos="-0.13 0 0.4" size="0.004" rgba="1 0 0 0.4" />
@@ -89,46 +89,46 @@
       <site name="rack_b_slot_c2_l2" pos="0.13 0 0.4" size="0.004" rgba="1 0 0 0.4" />
     </body>
     <body name="M01" pos="0.15 0.47 0">
-      <geom name="M01_manipulator_base" type="cylinder" size="0.04 0.035" friction="0.5 0.005 0.0001" pos="0 0 0.035" />
+      <geom name="M01_manipulator_base" type="cylinder" size="0.04 0.035" friction="0.5 0.005 0.0001" pos="0 0 0.035" contype="0" conaffinity="0" />
       <body name="M01_J1" pos="0 0 0.07">
-        <joint name="M01_J1_J1" type="hinge" pos="0 0 0" axis="0 0 1" range="-3.14159265 3.14159265" />
+        <joint name="M01_J1_J1" type="hinge" pos="0 0 0" axis="0 0 1" range="-3.14159265 3.14159265" damping="8" armature="0.05" />
         <inertial pos="0 0 0.03" mass="0.1" diaginertia="0.000105 0.000105 9e-05" />
-        <geom name="M01_J1_manipulator_j1_column" type="cylinder" size="0.03 0.03" friction="0.5 0.005 0.0001" pos="0 0 0.03" />
+        <geom name="M01_J1_manipulator_j1_column" type="cylinder" size="0.03 0.03" friction="0.5 0.005 0.0001" pos="0 0 0.03" contype="0" conaffinity="0" />
         <body name="M01_J1_J2" pos="0 0 0">
-          <joint name="M01_J1_J2_J2" type="hinge" pos="0 0 0" axis="0 1 0" range="-2.4 2.4" />
+          <joint name="M01_J1_J2_J2" type="hinge" pos="0 0 0" axis="0 1 0" range="-2.4 2.4" damping="12" armature="0.06" />
           <inertial pos="0 0 0" mass="0.1" diaginertia="0.000137916667 6.25e-05 0.000137916667" />
-          <geom name="M01_J1_J2_manipulator_shoulder" type="cylinder" size="0.025 0.04" euler="90 0 0" friction="0.5 0.005 0.0001" pos="0 0 0" />
+          <geom name="M01_J1_J2_manipulator_shoulder" type="cylinder" size="0.025 0.04" euler="90 0 0" friction="0.5 0.005 0.0001" pos="0 0 0" contype="0" conaffinity="0" />
           <body name="M01_J1_J2_J3" pos="0.2 0 0">
-            <joint name="M01_J1_J2_J3_J3" type="hinge" pos="0 0 0" axis="0 1 0" range="-2.6 2.6" />
+            <joint name="M01_J1_J2_J3_J3" type="hinge" pos="0 0 0" axis="0 1 0" range="-2.6 2.6" damping="10" armature="0.04" />
             <inertial pos="-0.1 0 0" mass="0.3" diaginertia="0.00016 0.00208 0.00208" />
-            <geom name="M01_J1_J2_J3_manipulator_upper_arm" type="box" size="0.1 0.02 0.02" friction="0.5 0.005 0.0001" pos="-0.1 0 0" />
+            <geom name="M01_J1_J2_J3_manipulator_upper_arm" type="box" size="0.1 0.02 0.02" friction="0.5 0.005 0.0001" pos="-0.1 0 0" contype="0" conaffinity="0" />
             <body name="M01_J1_J2_J3_J4" pos="0.18 0 0">
-              <joint name="M01_J1_J2_J3_J4_J4" type="hinge" pos="0 0 0" axis="1 0 0" range="-3.14159265 3.14159265" />
+              <joint name="M01_J1_J2_J3_J4_J4" type="hinge" pos="0 0 0" axis="1 0 0" range="-3.14159265 3.14159265" damping="4" armature="0.01" />
               <inertial pos="-0.09 0 0" mass="0.25" diaginertia="7.5e-05 0.0013875 0.0013875" />
-              <geom name="M01_J1_J2_J3_J4_manipulator_forearm" type="box" size="0.09 0.015 0.015" friction="0.5 0.005 0.0001" pos="-0.09 0 0" />
+              <geom name="M01_J1_J2_J3_J4_manipulator_forearm" type="box" size="0.09 0.015 0.015" friction="0.5 0.005 0.0001" pos="-0.09 0 0" contype="0" conaffinity="0" />
               <body name="M01_J1_J2_J3_J4_J5" pos="0.035 0 0">
-                <joint name="M01_J1_J2_J3_J4_J5_J5" type="hinge" pos="0 0 0" axis="0 1 0" range="-2.4 2.4" />
+                <joint name="M01_J1_J2_J3_J4_J5_J5" type="hinge" pos="0 0 0" axis="0 1 0" range="-2.4 2.4" damping="3" armature="0.008" />
                 <inertial pos="-0.0175 0 0" mass="0.05" diaginertia="3.08333333e-05 2e-05 3.08333333e-05" />
-                <geom name="M01_J1_J2_J3_J4_J5_manipulator_wrist1" type="cylinder" size="0.02 0.025" euler="90 0 0" friction="0.5 0.005 0.0001" pos="-0.0175 0 0" />
+                <geom name="M01_J1_J2_J3_J4_J5_manipulator_wrist1" type="cylinder" size="0.02 0.025" euler="90 0 0" friction="0.5 0.005 0.0001" pos="-0.0175 0 0" contype="0" conaffinity="0" />
                 <body name="M01_J1_J2_J3_J4_J5_J6" pos="0.025 0 0">
-                  <joint name="M01_J1_J2_J3_J4_J5_J6_J6" type="hinge" pos="0 0 0" axis="1 0 0" range="-3.14159265 3.14159265" />
+                  <joint name="M01_J1_J2_J3_J4_J5_J6_J6" type="hinge" pos="0 0 0" axis="1 0 0" range="-3.14159265 3.14159265" damping="2" armature="0.005" />
                   <inertial pos="-0.0125 0 0" mass="0.05" diaginertia="1.3125e-05 1.125e-05 1.3125e-05" />
-                  <geom name="M01_J1_J2_J3_J4_J5_J6_manipulator_wrist2" type="cylinder" size="0.015 0.015" euler="90 0 0" friction="0.5 0.005 0.0001" pos="-0.0125 0 0" />
+                  <geom name="M01_J1_J2_J3_J4_J5_J6_manipulator_wrist2" type="cylinder" size="0.015 0.015" euler="90 0 0" friction="0.5 0.005 0.0001" pos="-0.0125 0 0" contype="0" conaffinity="0" />
                   <body name="M01_J1_J2_J3_J4_J5_J6_tool" pos="0.04 0 0">
                     <inertial pos="-0.045 0 0" mass="0.08" diaginertia="7.06666667e-05 6.83333333e-05 8.33333333e-06" />
-                    <geom name="M01_J1_J2_J3_J4_J5_J6_tool_manipulator_palm" type="box" size="0.0075 0.01 0.035" friction="0.5 0.005 0.0001" pos="-0.045 0 0" />
+                    <geom name="M01_J1_J2_J3_J4_J5_J6_tool_manipulator_palm" type="box" size="0.0075 0.01 0.035" friction="0.5 0.005 0.0001" pos="-0.045 0 0" contype="0" conaffinity="0" />
                     <site name="M01_J1_J2_J3_J4_J5_J6_tool_tcp" pos="0 0 0" size="0.004" rgba="1 0 0 0.4" />
                     <body name="M01_J1_J2_J3_J4_J5_J6_tool_finger_l" pos="-0.015 0.003 0">
-                      <joint name="M01_J1_J2_J3_J4_J5_J6_tool_finger_l_gripper_finger_l" type="slide" pos="0 0 0" axis="0 1 0" range="0 0.075" />
+                      <joint name="M01_J1_J2_J3_J4_J5_J6_tool_finger_l_gripper_finger_l" type="slide" pos="0 0 0" axis="0 1 0" range="0 0.075" damping="1" armature="0.002" />
                       <inertial pos="0 0.0025 0" mass="0.01" diaginertia="2.43833333e-07 3.24166667e-06 3.15216667e-06" />
-                      <geom name="M01_J1_J2_J3_J4_J5_J6_tool_finger_l_manipulator_finger_l" type="box" size="0.0225 0.003 0.005" friction="0.5 0.005 0.0001" pos="0 0.003 0" />
-                      <geom name="M01_J1_J2_J3_J4_J5_J6_tool_finger_l_manipulator_pad_l" type="box" size="0.0075 0.001 0.005" friction="0.6 0.005 0.0001" pos="0 -0.002 0" />
+                      <geom name="M01_J1_J2_J3_J4_J5_J6_tool_finger_l_manipulator_finger_l" type="box" size="0.0225 0.003 0.005" friction="0.5 0.005 0.0001" pos="0 0.003 0" contype="0" conaffinity="0" />
+                      <geom name="M01_J1_J2_J3_J4_J5_J6_tool_finger_l_manipulator_pad_l" type="box" size="0.0075 0.001 0.005" friction="0.6 0.005 0.0001" pos="0 -0.002 0" contype="0" conaffinity="0" />
                     </body>
                     <body name="M01_J1_J2_J3_J4_J5_J6_tool_finger_r" pos="-0.015 -0.003 0">
-                      <joint name="M01_J1_J2_J3_J4_J5_J6_tool_finger_r_gripper_finger_r" type="slide" pos="0 0 0" axis="0 -1 0" range="0 0.075" />
+                      <joint name="M01_J1_J2_J3_J4_J5_J6_tool_finger_r_gripper_finger_r" type="slide" pos="0 0 0" axis="0 -1 0" range="0 0.075" damping="1" armature="0.002" />
                       <inertial pos="0 -0.0025 0" mass="0.01" diaginertia="2.43833333e-07 3.24166667e-06 3.15216667e-06" />
-                      <geom name="M01_J1_J2_J3_J4_J5_J6_tool_finger_r_manipulator_finger_r" type="box" size="0.0225 0.003 0.005" friction="0.5 0.005 0.0001" pos="0 -0.003 0" />
-                      <geom name="M01_J1_J2_J3_J4_J5_J6_tool_finger_r_manipulator_pad_r" type="box" size="0.0075 0.001 0.005" friction="0.6 0.005 0.0001" pos="0 0.002 0" />
+                      <geom name="M01_J1_J2_J3_J4_J5_J6_tool_finger_r_manipulator_finger_r" type="box" size="0.0225 0.003 0.005" friction="0.5 0.005 0.0001" pos="0 -0.003 0" contype="0" conaffinity="0" />
+                      <geom name="M01_J1_J2_J3_J4_J5_J6_tool_finger_r_manipulator_pad_r" type="box" size="0.0075 0.001 0.005" friction="0.6 0.005 0.0001" pos="0 0.002 0" contype="0" conaffinity="0" />
                     </body>
                   </body>
                 </body>
@@ -139,46 +139,46 @@
       </body>
     </body>
     <body name="M02" pos="1.65 0.47 0">
-      <geom name="M02_manipulator_base" type="cylinder" size="0.04 0.035" friction="0.5 0.005 0.0001" pos="0 0 0.035" />
+      <geom name="M02_manipulator_base" type="cylinder" size="0.04 0.035" friction="0.5 0.005 0.0001" pos="0 0 0.035" contype="0" conaffinity="0" />
       <body name="M02_J1" pos="0 0 0.07">
-        <joint name="M02_J1_J1" type="hinge" pos="0 0 0" axis="0 0 1" range="-3.14159265 3.14159265" />
+        <joint name="M02_J1_J1" type="hinge" pos="0 0 0" axis="0 0 1" range="-3.14159265 3.14159265" damping="8" armature="0.05" />
         <inertial pos="0 0 0.03" mass="0.1" diaginertia="0.000105 0.000105 9e-05" />
-        <geom name="M02_J1_manipulator_j1_column" type="cylinder" size="0.03 0.03" friction="0.5 0.005 0.0001" pos="0 0 0.03" />
+        <geom name="M02_J1_manipulator_j1_column" type="cylinder" size="0.03 0.03" friction="0.5 0.005 0.0001" pos="0 0 0.03" contype="0" conaffinity="0" />
         <body name="M02_J1_J2" pos="0 0 0">
-          <joint name="M02_J1_J2_J2" type="hinge" pos="0 0 0" axis="0 1 0" range="-2.4 2.4" />
+          <joint name="M02_J1_J2_J2" type="hinge" pos="0 0 0" axis="0 1 0" range="-2.4 2.4" damping="12" armature="0.06" />
           <inertial pos="0 0 0" mass="0.1" diaginertia="0.000137916667 6.25e-05 0.000137916667" />
-          <geom name="M02_J1_J2_manipulator_shoulder" type="cylinder" size="0.025 0.04" euler="90 0 0" friction="0.5 0.005 0.0001" pos="0 0 0" />
+          <geom name="M02_J1_J2_manipulator_shoulder" type="cylinder" size="0.025 0.04" euler="90 0 0" friction="0.5 0.005 0.0001" pos="0 0 0" contype="0" conaffinity="0" />
           <body name="M02_J1_J2_J3" pos="0.2 0 0">
-            <joint name="M02_J1_J2_J3_J3" type="hinge" pos="0 0 0" axis="0 1 0" range="-2.6 2.6" />
+            <joint name="M02_J1_J2_J3_J3" type="hinge" pos="0 0 0" axis="0 1 0" range="-2.6 2.6" damping="10" armature="0.04" />
             <inertial pos="-0.1 0 0" mass="0.3" diaginertia="0.00016 0.00208 0.00208" />
-            <geom name="M02_J1_J2_J3_manipulator_upper_arm" type="box" size="0.1 0.02 0.02" friction="0.5 0.005 0.0001" pos="-0.1 0 0" />
+            <geom name="M02_J1_J2_J3_manipulator_upper_arm" type="box" size="0.1 0.02 0.02" friction="0.5 0.005 0.0001" pos="-0.1 0 0" contype="0" conaffinity="0" />
             <body name="M02_J1_J2_J3_J4" pos="0.18 0 0">
-              <joint name="M02_J1_J2_J3_J4_J4" type="hinge" pos="0 0 0" axis="1 0 0" range="-3.14159265 3.14159265" />
+              <joint name="M02_J1_J2_J3_J4_J4" type="hinge" pos="0 0 0" axis="1 0 0" range="-3.14159265 3.14159265" damping="4" armature="0.01" />
               <inertial pos="-0.09 0 0" mass="0.25" diaginertia="7.5e-05 0.0013875 0.0013875" />
-              <geom name="M02_J1_J2_J3_J4_manipulator_forearm" type="box" size="0.09 0.015 0.015" friction="0.5 0.005 0.0001" pos="-0.09 0 0" />
+              <geom name="M02_J1_J2_J3_J4_manipulator_forearm" type="box" size="0.09 0.015 0.015" friction="0.5 0.005 0.0001" pos="-0.09 0 0" contype="0" conaffinity="0" />
               <body name="M02_J1_J2_J3_J4_J5" pos="0.035 0 0">
-                <joint name="M02_J1_J2_J3_J4_J5_J5" type="hinge" pos="0 0 0" axis="0 1 0" range="-2.4 2.4" />
+                <joint name="M02_J1_J2_J3_J4_J5_J5" type="hinge" pos="0 0 0" axis="0 1 0" range="-2.4 2.4" damping="3" armature="0.008" />
                 <inertial pos="-0.0175 0 0" mass="0.05" diaginertia="3.08333333e-05 2e-05 3.08333333e-05" />
-                <geom name="M02_J1_J2_J3_J4_J5_manipulator_wrist1" type="cylinder" size="0.02 0.025" euler="90 0 0" friction="0.5 0.005 0.0001" pos="-0.0175 0 0" />
+                <geom name="M02_J1_J2_J3_J4_J5_manipulator_wrist1" type="cylinder" size="0.02 0.025" euler="90 0 0" friction="0.5 0.005 0.0001" pos="-0.0175 0 0" contype="0" conaffinity="0" />
                 <body name="M02_J1_J2_J3_J4_J5_J6" pos="0.025 0 0">
-                  <joint name="M02_J1_J2_J3_J4_J5_J6_J6" type="hinge" pos="0 0 0" axis="1 0 0" range="-3.14159265 3.14159265" />
+                  <joint name="M02_J1_J2_J3_J4_J5_J6_J6" type="hinge" pos="0 0 0" axis="1 0 0" range="-3.14159265 3.14159265" damping="2" armature="0.005" />
                   <inertial pos="-0.0125 0 0" mass="0.05" diaginertia="1.3125e-05 1.125e-05 1.3125e-05" />
-                  <geom name="M02_J1_J2_J3_J4_J5_J6_manipulator_wrist2" type="cylinder" size="0.015 0.015" euler="90 0 0" friction="0.5 0.005 0.0001" pos="-0.0125 0 0" />
+                  <geom name="M02_J1_J2_J3_J4_J5_J6_manipulator_wrist2" type="cylinder" size="0.015 0.015" euler="90 0 0" friction="0.5 0.005 0.0001" pos="-0.0125 0 0" contype="0" conaffinity="0" />
                   <body name="M02_J1_J2_J3_J4_J5_J6_tool" pos="0.04 0 0">
                     <inertial pos="-0.045 0 0" mass="0.08" diaginertia="7.06666667e-05 6.83333333e-05 8.33333333e-06" />
-                    <geom name="M02_J1_J2_J3_J4_J5_J6_tool_manipulator_palm" type="box" size="0.0075 0.01 0.035" friction="0.5 0.005 0.0001" pos="-0.045 0 0" />
+                    <geom name="M02_J1_J2_J3_J4_J5_J6_tool_manipulator_palm" type="box" size="0.0075 0.01 0.035" friction="0.5 0.005 0.0001" pos="-0.045 0 0" contype="0" conaffinity="0" />
                     <site name="M02_J1_J2_J3_J4_J5_J6_tool_tcp" pos="0 0 0" size="0.004" rgba="1 0 0 0.4" />
                     <body name="M02_J1_J2_J3_J4_J5_J6_tool_finger_l" pos="-0.015 0.003 0">
-                      <joint name="M02_J1_J2_J3_J4_J5_J6_tool_finger_l_gripper_finger_l" type="slide" pos="0 0 0" axis="0 1 0" range="0 0.075" />
+                      <joint name="M02_J1_J2_J3_J4_J5_J6_tool_finger_l_gripper_finger_l" type="slide" pos="0 0 0" axis="0 1 0" range="0 0.075" damping="1" armature="0.002" />
                       <inertial pos="0 0.0025 0" mass="0.01" diaginertia="2.43833333e-07 3.24166667e-06 3.15216667e-06" />
-                      <geom name="M02_J1_J2_J3_J4_J5_J6_tool_finger_l_manipulator_finger_l" type="box" size="0.0225 0.003 0.005" friction="0.5 0.005 0.0001" pos="0 0.003 0" />
-                      <geom name="M02_J1_J2_J3_J4_J5_J6_tool_finger_l_manipulator_pad_l" type="box" size="0.0075 0.001 0.005" friction="0.6 0.005 0.0001" pos="0 -0.002 0" />
+                      <geom name="M02_J1_J2_J3_J4_J5_J6_tool_finger_l_manipulator_finger_l" type="box" size="0.0225 0.003 0.005" friction="0.5 0.005 0.0001" pos="0 0.003 0" contype="0" conaffinity="0" />
+                      <geom name="M02_J1_J2_J3_J4_J5_J6_tool_finger_l_manipulator_pad_l" type="box" size="0.0075 0.001 0.005" friction="0.6 0.005 0.0001" pos="0 -0.002 0" contype="0" conaffinity="0" />
                     </body>
                     <body name="M02_J1_J2_J3_J4_J5_J6_tool_finger_r" pos="-0.015 -0.003 0">
-                      <joint name="M02_J1_J2_J3_J4_J5_J6_tool_finger_r_gripper_finger_r" type="slide" pos="0 0 0" axis="0 -1 0" range="0 0.075" />
+                      <joint name="M02_J1_J2_J3_J4_J5_J6_tool_finger_r_gripper_finger_r" type="slide" pos="0 0 0" axis="0 -1 0" range="0 0.075" damping="1" armature="0.002" />
                       <inertial pos="0 -0.0025 0" mass="0.01" diaginertia="2.43833333e-07 3.24166667e-06 3.15216667e-06" />
-                      <geom name="M02_J1_J2_J3_J4_J5_J6_tool_finger_r_manipulator_finger_r" type="box" size="0.0225 0.003 0.005" friction="0.5 0.005 0.0001" pos="0 -0.003 0" />
-                      <geom name="M02_J1_J2_J3_J4_J5_J6_tool_finger_r_manipulator_pad_r" type="box" size="0.0075 0.001 0.005" friction="0.6 0.005 0.0001" pos="0 0.002 0" />
+                      <geom name="M02_J1_J2_J3_J4_J5_J6_tool_finger_r_manipulator_finger_r" type="box" size="0.0225 0.003 0.005" friction="0.5 0.005 0.0001" pos="0 -0.003 0" contype="0" conaffinity="0" />
+                      <geom name="M02_J1_J2_J3_J4_J5_J6_tool_finger_r_manipulator_pad_r" type="box" size="0.0075 0.001 0.005" friction="0.6 0.005 0.0001" pos="0 0.002 0" contype="0" conaffinity="0" />
                     </body>
                   </body>
                 </body>
@@ -191,115 +191,116 @@
     <body name="R01" pos="0.65 0.2 0" quat="0.707106781 0 0 0.707106781">
       <freejoint name="R01_root" />
       <inertial pos="0 0 0.025" mass="0.8" diaginertia="0.00166666667 0.00346666667 0.00502666667" />
-      <geom name="R01_flat_agv_chassis" type="box" size="0.08 0.055 0.01" friction="0.5 0.005 0.0001" pos="0 0 0.025" />
+      <geom name="R01_flat_agv_chassis" type="box" size="0.08 0.055 0.01" friction="0.5 0.005 0.0001" pos="0 0 0.025" contype="2" conaffinity="6" />
       <body name="R01_flat_agv_wheel_00" pos="-0.05 -0.04 0.015">
-        <joint name="R01_flat_agv_wheel_00_flat_agv_wheel_00_spin" type="hinge" pos="0 0 0" axis="0 1 0" />
+        <joint name="R01_flat_agv_wheel_00_flat_agv_wheel_00_spin" type="hinge" pos="0 0 0" axis="0 1 0" damping="0.002" armature="0.01" />
         <inertial pos="0 0 0" mass="0.03" diaginertia="3.875e-06 6.75e-06 3.875e-06" />
-        <geom name="R01_flat_agv_wheel_00_flat_agv_wheel_00" type="cylinder" size="0.015 0.005" euler="90 0 0" friction="0.5 0.005 0.0001" pos="0 0 0" />
+        <geom name="R01_flat_agv_wheel_00_flat_agv_wheel_00" type="cylinder" size="0.015 0.005" euler="90 0 0" friction="0.5 0.005 0.0001" pos="0 0 0" contype="2" conaffinity="6" />
       </body>
       <body name="R01_flat_agv_wheel_01" pos="0.05 -0.04 0.015">
-        <joint name="R01_flat_agv_wheel_01_flat_agv_wheel_01_spin" type="hinge" pos="0 0 0" axis="0 1 0" />
+        <joint name="R01_flat_agv_wheel_01_flat_agv_wheel_01_spin" type="hinge" pos="0 0 0" axis="0 1 0" damping="0.002" armature="0.01" />
         <inertial pos="0 0 0" mass="0.03" diaginertia="3.875e-06 6.75e-06 3.875e-06" />
-        <geom name="R01_flat_agv_wheel_01_flat_agv_wheel_01" type="cylinder" size="0.015 0.005" euler="90 0 0" friction="0.5 0.005 0.0001" pos="0 0 0" />
+        <geom name="R01_flat_agv_wheel_01_flat_agv_wheel_01" type="cylinder" size="0.015 0.005" euler="90 0 0" friction="0.5 0.005 0.0001" pos="0 0 0" contype="2" conaffinity="6" />
       </body>
       <body name="R01_flat_agv_wheel_10" pos="-0.05 0.04 0.015">
-        <joint name="R01_flat_agv_wheel_10_flat_agv_wheel_10_spin" type="hinge" pos="0 0 0" axis="0 1 0" />
+        <joint name="R01_flat_agv_wheel_10_flat_agv_wheel_10_spin" type="hinge" pos="0 0 0" axis="0 1 0" damping="0.002" armature="0.01" />
         <inertial pos="0 0 0" mass="0.03" diaginertia="3.875e-06 6.75e-06 3.875e-06" />
-        <geom name="R01_flat_agv_wheel_10_flat_agv_wheel_10" type="cylinder" size="0.015 0.005" euler="90 0 0" friction="0.5 0.005 0.0001" pos="0 0 0" />
+        <geom name="R01_flat_agv_wheel_10_flat_agv_wheel_10" type="cylinder" size="0.015 0.005" euler="90 0 0" friction="0.5 0.005 0.0001" pos="0 0 0" contype="2" conaffinity="6" />
       </body>
       <body name="R01_flat_agv_wheel_11" pos="0.05 0.04 0.015">
-        <joint name="R01_flat_agv_wheel_11_flat_agv_wheel_11_spin" type="hinge" pos="0 0 0" axis="0 1 0" />
+        <joint name="R01_flat_agv_wheel_11_flat_agv_wheel_11_spin" type="hinge" pos="0 0 0" axis="0 1 0" damping="0.002" armature="0.01" />
         <inertial pos="0 0 0" mass="0.03" diaginertia="3.875e-06 6.75e-06 3.875e-06" />
-        <geom name="R01_flat_agv_wheel_11_flat_agv_wheel_11" type="cylinder" size="0.015 0.005" euler="90 0 0" friction="0.5 0.005 0.0001" pos="0 0 0" />
+        <geom name="R01_flat_agv_wheel_11_flat_agv_wheel_11" type="cylinder" size="0.015 0.005" euler="90 0 0" friction="0.5 0.005 0.0001" pos="0 0 0" contype="2" conaffinity="6" />
       </body>
       <body name="R01_flat_agv_platform" pos="0 0 0">
-        <joint name="R01_flat_agv_platform_flat_agv_lift" type="slide" pos="0 0 0" axis="0 0 1" range="0 0.02" />
+        <joint name="R01_flat_agv_platform_flat_agv_lift" type="slide" pos="0 0 0" axis="0 0 1" range="0 0.02" damping="1" armature="0.002" />
         <inertial pos="0 0 0.04" mass="0.1" diaginertia="2.83333333e-05 8.33333333e-05 0.000108333333" />
-        <geom name="R01_flat_agv_platform_flat_agv_platform" type="box" size="0.035 0.02 0.005" friction="0.5 0.005 0.0001" pos="0 0 0.04" />
+        <geom name="R01_flat_agv_platform_flat_agv_platform" type="box" size="0.035 0.02 0.005" friction="0.5 0.005 0.0001" pos="0 0 0.04" contype="2" conaffinity="6" />
       </body>
     </body>
-    <body name="F01" pos="1.55 0.9 0" quat="0.707106781 0 0 -0.707106781">
+    <body name="F01" pos="1.55 0.9 0" quat="1 0 0 0">
       <freejoint name="F01_root" />
       <inertial pos="-0.05 0 0.0973738872" mass="1.5" diaginertia="0.0305541768 0.038772389 0.0185529303" />
-      <geom name="F01_forklift_chassis" type="box" size="0.11 0.075 0.025" friction="0.5 0.005 0.0001" pos="-0.085 0 0.05" />
-      <geom name="F01_forklift_mast_rail_l" type="box" size="0.01 0.01 0.2325" friction="0.5 0.005 0.0001" pos="0.035 -0.045 0.3075" />
-      <geom name="F01_forklift_mast_rail_r" type="box" size="0.01 0.01 0.2325" friction="0.5 0.005 0.0001" pos="0.035 0.045 0.3075" />
+      <geom name="F01_forklift_chassis" type="box" size="0.11 0.075 0.025" friction="0.5 0.005 0.0001" pos="-0.085 0 0.05" contype="2" conaffinity="6" />
+      <geom name="F01_forklift_mast_rail_l" type="box" size="0.01 0.01 0.2325" friction="0.5 0.005 0.0001" pos="0.035 -0.045 0.3075" contype="2" conaffinity="6" />
+      <geom name="F01_forklift_mast_rail_r" type="box" size="0.01 0.01 0.2325" friction="0.5 0.005 0.0001" pos="0.035 0.045 0.3075" contype="2" conaffinity="6" />
       <body name="F01_wheel_drive_0" pos="0 -0.06 0.025">
-        <joint name="F01_wheel_drive_0_wheel_drive_0_spin" type="hinge" pos="0 0 0" axis="0 1 0" />
+        <joint name="F01_wheel_drive_0_wheel_drive_0_spin" type="hinge" pos="0 0 0" axis="0 1 0" damping="0.002" armature="0.01" />
         <inertial pos="0 0 0" mass="0.05" diaginertia="1.75e-05 3.125e-05 1.75e-05" />
-        <geom name="F01_wheel_drive_0_wheel_drive_0" type="cylinder" size="0.025 0.0075" euler="90 0 0" friction="0.5 0.005 0.0001" pos="0 0 0" />
+        <geom name="F01_wheel_drive_0_wheel_drive_0" type="cylinder" size="0.025 0.0075" euler="90 0 0" friction="0.5 0.005 0.0001" pos="0 0 0" contype="2" conaffinity="6" />
       </body>
       <body name="F01_wheel_drive_1" pos="0 0.06 0.025">
-        <joint name="F01_wheel_drive_1_wheel_drive_1_spin" type="hinge" pos="0 0 0" axis="0 1 0" />
+        <joint name="F01_wheel_drive_1_wheel_drive_1_spin" type="hinge" pos="0 0 0" axis="0 1 0" damping="0.002" armature="0.01" />
         <inertial pos="0 0 0" mass="0.05" diaginertia="1.75e-05 3.125e-05 1.75e-05" />
-        <geom name="F01_wheel_drive_1_wheel_drive_1" type="cylinder" size="0.025 0.0075" euler="90 0 0" friction="0.5 0.005 0.0001" pos="0 0 0" />
+        <geom name="F01_wheel_drive_1_wheel_drive_1" type="cylinder" size="0.025 0.0075" euler="90 0 0" friction="0.5 0.005 0.0001" pos="0 0 0" contype="2" conaffinity="6" />
       </body>
       <body name="F01_wheel_rear_0" pos="-0.16 -0.055 0.025">
-        <joint name="F01_wheel_rear_0_wheel_rear_0_spin" type="hinge" pos="0 0 0" axis="0 1 0" />
+        <joint name="F01_wheel_rear_0_wheel_rear_0_spin" type="hinge" pos="0 0 0" axis="0 1 0" damping="0.002" armature="0.01" />
         <inertial pos="0 0 0" mass="0.05" diaginertia="1.75e-05 3.125e-05 1.75e-05" />
-        <geom name="F01_wheel_rear_0_wheel_rear_0" type="cylinder" size="0.025 0.0075" euler="90 0 0" friction="0.5 0.005 0.0001" pos="0 0 0" />
+        <geom name="F01_wheel_rear_0_wheel_rear_0" type="cylinder" size="0.025 0.0075" euler="90 0 0" friction="0.5 0.005 0.0001" pos="0 0 0" contype="2" conaffinity="6" />
       </body>
       <body name="F01_wheel_rear_1" pos="-0.16 0.055 0.025">
-        <joint name="F01_wheel_rear_1_wheel_rear_1_spin" type="hinge" pos="0 0 0" axis="0 1 0" />
+        <joint name="F01_wheel_rear_1_wheel_rear_1_spin" type="hinge" pos="0 0 0" axis="0 1 0" damping="0.002" armature="0.01" />
         <inertial pos="0 0 0" mass="0.05" diaginertia="1.75e-05 3.125e-05 1.75e-05" />
-        <geom name="F01_wheel_rear_1_wheel_rear_1" type="cylinder" size="0.025 0.0075" euler="90 0 0" friction="0.5 0.005 0.0001" pos="0 0 0" />
+        <geom name="F01_wheel_rear_1_wheel_rear_1" type="cylinder" size="0.025 0.0075" euler="90 0 0" friction="0.5 0.005 0.0001" pos="0 0 0" contype="2" conaffinity="6" />
       </body>
       <body name="F01_forklift_carriage" pos="0 0 0">
-        <joint name="F01_forklift_carriage_forklift_lift" type="slide" pos="0 0 0" axis="0 0 1" range="0 0.43" />
-        <inertial pos="0.045 0 0.0502254098" mass="0.25" diaginertia="0.00118618308 0.000314974063 0.000975034153" />
-        <geom name="F01_forklift_carriage_forklift_carriage_plate" type="box" size="0.01 0.075 0.04" friction="0.5 0.005 0.0001" pos="0.035 0 0.05" />
-        <geom name="F01_forklift_carriage_forklift_fork_l" type="box" size="0.04 0.005 0.00125" friction="0.5 0.005 0.0001" pos="0.085 -0.015 0.06375" />
-        <geom name="F01_forklift_carriage_forklift_fork_r" type="box" size="0.04 0.005 0.00125" friction="0.5 0.005 0.0001" pos="0.085 0.015 0.06375" />
+        <joint name="F01_forklift_carriage_forklift_lift" type="slide" pos="0 0 0" axis="0 0 1" range="0 0.43" damping="200" armature="0.02" />
+        <inertial pos="0.045 0 0.0924385246" mass="0.25" diaginertia="0.000327290124 0.000356097501 0.000156984973" />
+        <geom name="F01_forklift_carriage_forklift_carriage_plate_l" type="box" size="0.01 0.007 0.04" friction="0.5 0.005 0.0001" pos="0.035 -0.015 0.095" contype="2" conaffinity="6" />
+        <geom name="F01_forklift_carriage_forklift_carriage_plate_r" type="box" size="0.01 0.007 0.04" friction="0.5 0.005 0.0001" pos="0.035 0.015 0.095" contype="2" conaffinity="6" />
+        <geom name="F01_forklift_carriage_forklift_fork_l" type="box" size="0.04 0.005 0.00125" friction="0.5 0.005 0.0001" pos="0.085 -0.015 0.06375" contype="2" conaffinity="6" />
+        <geom name="F01_forklift_carriage_forklift_fork_r" type="box" size="0.04 0.005 0.00125" friction="0.5 0.005 0.0001" pos="0.085 0.015 0.06375" contype="2" conaffinity="6" />
         <site name="F01_forklift_carriage_fork_tip" pos="0.125 0 0.065" size="0.004" rgba="1 0 0 0.4" />
       </body>
     </body>
     <body name="pallet" pos="0.25 0.25 0.055">
       <freejoint name="pallet_root" />
       <inertial pos="0 0 0.00995138269" mass="0.045" diaginertia="2.66513377e-05 5.0188696e-05 7.31525948e-05" />
-      <geom name="pallet_pallet_bottom_plate" type="box" size="0.04 0.03 0.002" friction="0.4 0.005 0.0001" pos="0 0 0.002" />
-      <geom name="pallet_pallet_top_plate" type="box" size="0.04 0.03 0.003" friction="0.4 0.005 0.0001" pos="0 0 0.015" />
-      <geom name="pallet_pallet_rib_0" type="box" size="0.04 0.003 0.004" friction="0.4 0.005 0.0001" pos="0 -0.027 0.008" />
-      <geom name="pallet_pallet_rib_1" type="box" size="0.04 0.006 0.004" friction="0.4 0.005 0.0001" pos="0 0 0.008" />
-      <geom name="pallet_pallet_rib_2" type="box" size="0.04 0.003 0.004" friction="0.4 0.005 0.0001" pos="0 0.027 0.008" />
-      <geom name="pallet_pallet_locator_n" type="box" size="0.04 0.0025 0.0015" friction="0.4 0.005 0.0001" pos="0 0.0275 0.0195" />
-      <geom name="pallet_pallet_locator_s" type="box" size="0.04 0.0025 0.0015" friction="0.4 0.005 0.0001" pos="0 -0.0275 0.0195" />
-      <geom name="pallet_pallet_locator_e" type="box" size="0.0025 0.025 0.0015" friction="0.4 0.005 0.0001" pos="0.0375 0 0.0195" />
-      <geom name="pallet_pallet_locator_w" type="box" size="0.0025 0.025 0.0015" friction="0.4 0.005 0.0001" pos="-0.0375 0 0.0195" />
+      <geom name="pallet_pallet_bottom_plate" type="box" size="0.04 0.03 0.002" friction="0.4 0.005 0.0001" pos="0 0 0.002" contype="2" conaffinity="6" />
+      <geom name="pallet_pallet_top_plate" type="box" size="0.04 0.03 0.003" friction="0.4 0.005 0.0001" pos="0 0 0.015" contype="2" conaffinity="6" />
+      <geom name="pallet_pallet_rib_0" type="box" size="0.04 0.003 0.004" friction="0.4 0.005 0.0001" pos="0 -0.027 0.008" contype="2" conaffinity="6" />
+      <geom name="pallet_pallet_rib_1" type="box" size="0.04 0.006 0.004" friction="0.4 0.005 0.0001" pos="0 0 0.008" contype="2" conaffinity="6" />
+      <geom name="pallet_pallet_rib_2" type="box" size="0.04 0.003 0.004" friction="0.4 0.005 0.0001" pos="0 0.027 0.008" contype="2" conaffinity="6" />
+      <geom name="pallet_pallet_locator_n" type="box" size="0.04 0.0025 0.0015" friction="0.4 0.005 0.0001" pos="0 0.0275 0.0195" contype="2" conaffinity="6" />
+      <geom name="pallet_pallet_locator_s" type="box" size="0.04 0.0025 0.0015" friction="0.4 0.005 0.0001" pos="0 -0.0275 0.0195" contype="2" conaffinity="6" />
+      <geom name="pallet_pallet_locator_e" type="box" size="0.0025 0.025 0.0015" friction="0.4 0.005 0.0001" pos="0.0375 0 0.0195" contype="2" conaffinity="6" />
+      <geom name="pallet_pallet_locator_w" type="box" size="0.0025 0.025 0.0015" friction="0.4 0.005 0.0001" pos="-0.0375 0 0.0195" contype="2" conaffinity="6" />
       <site name="pallet_pallet_label" pos="0 0.03 0.009" size="0.004" rgba="1 0 0 0.4" />
     </body>
     <body name="goods" pos="0.25 0.25 0.073">
       <freejoint name="goods_root" />
       <inertial pos="0 0 0.025" mass="0.2" diaginertia="0.000136666667 0.000203333333 0.000173333333" />
-      <geom name="goods_goods_body" type="box" size="0.03 0.02 0.025" friction="0.4 0.005 0.0001" pos="0 0 0.025" />
+      <geom name="goods_goods_body" type="box" size="0.03 0.02 0.025" friction="0.4 0.005 0.0001" pos="0 0 0.025" contype="2" conaffinity="6" />
       <site name="goods_goods_label" pos="0 0.02 0.025" size="0.004" rgba="1 0 0 0.4" />
     </body>
   </worldbody>
   <actuator>
-    <motor name="M01_J1_J1_drv" joint="M01_J1_J1" gear="1" forcerange="-3 3" />
-    <motor name="M01_J1_J2_J2_drv" joint="M01_J1_J2_J2" gear="1" forcerange="-5 5" />
-    <motor name="M01_J1_J2_J3_J3_drv" joint="M01_J1_J2_J3_J3" gear="1" forcerange="-2 2" />
-    <motor name="M01_J1_J2_J3_J4_J4_drv" joint="M01_J1_J2_J3_J4_J4" gear="1" forcerange="-0.8 0.8" />
-    <motor name="M01_J1_J2_J3_J4_J5_J5_drv" joint="M01_J1_J2_J3_J4_J5_J5" gear="1" forcerange="-0.8 0.8" />
-    <motor name="M01_J1_J2_J3_J4_J5_J6_J6_drv" joint="M01_J1_J2_J3_J4_J5_J6_J6" gear="1" forcerange="-0.5 0.5" />
-    <motor name="M01_J1_J2_J3_J4_J5_J6_tool_finger_l_gripper_finger_l_drv" joint="M01_J1_J2_J3_J4_J5_J6_tool_finger_l_gripper_finger_l" gear="1" forcerange="-8 8" />
-    <motor name="M01_J1_J2_J3_J4_J5_J6_tool_finger_r_gripper_finger_r_drv" joint="M01_J1_J2_J3_J4_J5_J6_tool_finger_r_gripper_finger_r" gear="1" forcerange="-8 8" />
-    <motor name="M02_J1_J1_drv" joint="M02_J1_J1" gear="1" forcerange="-3 3" />
-    <motor name="M02_J1_J2_J2_drv" joint="M02_J1_J2_J2" gear="1" forcerange="-5 5" />
-    <motor name="M02_J1_J2_J3_J3_drv" joint="M02_J1_J2_J3_J3" gear="1" forcerange="-2 2" />
-    <motor name="M02_J1_J2_J3_J4_J4_drv" joint="M02_J1_J2_J3_J4_J4" gear="1" forcerange="-0.8 0.8" />
-    <motor name="M02_J1_J2_J3_J4_J5_J5_drv" joint="M02_J1_J2_J3_J4_J5_J5" gear="1" forcerange="-0.8 0.8" />
-    <motor name="M02_J1_J2_J3_J4_J5_J6_J6_drv" joint="M02_J1_J2_J3_J4_J5_J6_J6" gear="1" forcerange="-0.5 0.5" />
-    <motor name="M02_J1_J2_J3_J4_J5_J6_tool_finger_l_gripper_finger_l_drv" joint="M02_J1_J2_J3_J4_J5_J6_tool_finger_l_gripper_finger_l" gear="1" forcerange="-8 8" />
-    <motor name="M02_J1_J2_J3_J4_J5_J6_tool_finger_r_gripper_finger_r_drv" joint="M02_J1_J2_J3_J4_J5_J6_tool_finger_r_gripper_finger_r" gear="1" forcerange="-8 8" />
-    <motor name="R01_flat_agv_wheel_00_flat_agv_wheel_00_spin_drv" joint="R01_flat_agv_wheel_00_flat_agv_wheel_00_spin" gear="1" forcerange="-0.3 0.3" />
-    <motor name="R01_flat_agv_wheel_01_flat_agv_wheel_01_spin_drv" joint="R01_flat_agv_wheel_01_flat_agv_wheel_01_spin" gear="1" forcerange="-0.3 0.3" />
-    <motor name="R01_flat_agv_wheel_10_flat_agv_wheel_10_spin_drv" joint="R01_flat_agv_wheel_10_flat_agv_wheel_10_spin" gear="1" forcerange="-0.3 0.3" />
-    <motor name="R01_flat_agv_wheel_11_flat_agv_wheel_11_spin_drv" joint="R01_flat_agv_wheel_11_flat_agv_wheel_11_spin" gear="1" forcerange="-0.3 0.3" />
-    <motor name="R01_flat_agv_platform_flat_agv_lift_drv" joint="R01_flat_agv_platform_flat_agv_lift" gear="1" forcerange="-15 15" />
-    <motor name="F01_wheel_drive_0_wheel_drive_0_spin_drv" joint="F01_wheel_drive_0_wheel_drive_0_spin" gear="1" forcerange="-0.5 0.5" />
-    <motor name="F01_wheel_drive_1_wheel_drive_1_spin_drv" joint="F01_wheel_drive_1_wheel_drive_1_spin" gear="1" forcerange="-0.5 0.5" />
-    <motor name="F01_wheel_rear_0_wheel_rear_0_spin_drv" joint="F01_wheel_rear_0_wheel_rear_0_spin" gear="1" forcerange="-0.5 0.5" />
-    <motor name="F01_wheel_rear_1_wheel_rear_1_spin_drv" joint="F01_wheel_rear_1_wheel_rear_1_spin" gear="1" forcerange="-0.5 0.5" />
-    <motor name="F01_forklift_carriage_forklift_lift_drv" joint="F01_forklift_carriage_forklift_lift" gear="1" forcerange="-14.7 14.7" />
+    <motor name="M01_J1_J1_drv" jointinparent="M01_J1_J1" gear="1" ctrlrange="0 3" forcerange="-3 3" />
+    <motor name="M01_J1_J2_J2_drv" jointinparent="M01_J1_J2_J2" gear="1" ctrlrange="0 5" forcerange="-5 5" />
+    <motor name="M01_J1_J2_J3_J3_drv" jointinparent="M01_J1_J2_J3_J3" gear="1" ctrlrange="0 2" forcerange="-2 2" />
+    <motor name="M01_J1_J2_J3_J4_J4_drv" jointinparent="M01_J1_J2_J3_J4_J4" gear="1" ctrlrange="0 0.8" forcerange="-0.8 0.8" />
+    <motor name="M01_J1_J2_J3_J4_J5_J5_drv" jointinparent="M01_J1_J2_J3_J4_J5_J5" gear="1" ctrlrange="0 0.8" forcerange="-0.8 0.8" />
+    <motor name="M01_J1_J2_J3_J4_J5_J6_J6_drv" jointinparent="M01_J1_J2_J3_J4_J5_J6_J6" gear="1" ctrlrange="0 0.5" forcerange="-0.5 0.5" />
+    <motor name="M01_J1_J2_J3_J4_J5_J6_tool_finger_l_gripper_finger_l_drv" jointinparent="M01_J1_J2_J3_J4_J5_J6_tool_finger_l_gripper_finger_l" gear="1" ctrlrange="0 8" forcerange="-8 8" />
+    <motor name="M01_J1_J2_J3_J4_J5_J6_tool_finger_r_gripper_finger_r_drv" jointinparent="M01_J1_J2_J3_J4_J5_J6_tool_finger_r_gripper_finger_r" gear="1" ctrlrange="0 8" forcerange="-8 8" />
+    <motor name="M02_J1_J1_drv" jointinparent="M02_J1_J1" gear="1" ctrlrange="0 3" forcerange="-3 3" />
+    <motor name="M02_J1_J2_J2_drv" jointinparent="M02_J1_J2_J2" gear="1" ctrlrange="0 5" forcerange="-5 5" />
+    <motor name="M02_J1_J2_J3_J3_drv" jointinparent="M02_J1_J2_J3_J3" gear="1" ctrlrange="0 2" forcerange="-2 2" />
+    <motor name="M02_J1_J2_J3_J4_J4_drv" jointinparent="M02_J1_J2_J3_J4_J4" gear="1" ctrlrange="0 0.8" forcerange="-0.8 0.8" />
+    <motor name="M02_J1_J2_J3_J4_J5_J5_drv" jointinparent="M02_J1_J2_J3_J4_J5_J5" gear="1" ctrlrange="0 0.8" forcerange="-0.8 0.8" />
+    <motor name="M02_J1_J2_J3_J4_J5_J6_J6_drv" jointinparent="M02_J1_J2_J3_J4_J5_J6_J6" gear="1" ctrlrange="0 0.5" forcerange="-0.5 0.5" />
+    <motor name="M02_J1_J2_J3_J4_J5_J6_tool_finger_l_gripper_finger_l_drv" jointinparent="M02_J1_J2_J3_J4_J5_J6_tool_finger_l_gripper_finger_l" gear="1" ctrlrange="0 8" forcerange="-8 8" />
+    <motor name="M02_J1_J2_J3_J4_J5_J6_tool_finger_r_gripper_finger_r_drv" jointinparent="M02_J1_J2_J3_J4_J5_J6_tool_finger_r_gripper_finger_r" gear="1" ctrlrange="0 8" forcerange="-8 8" />
+    <motor name="R01_flat_agv_wheel_00_flat_agv_wheel_00_spin_drv" jointinparent="R01_flat_agv_wheel_00_flat_agv_wheel_00_spin" gear="1" ctrlrange="0 0.3" forcerange="-0.3 0.3" />
+    <motor name="R01_flat_agv_wheel_01_flat_agv_wheel_01_spin_drv" jointinparent="R01_flat_agv_wheel_01_flat_agv_wheel_01_spin" gear="1" ctrlrange="0 0.3" forcerange="-0.3 0.3" />
+    <motor name="R01_flat_agv_wheel_10_flat_agv_wheel_10_spin_drv" jointinparent="R01_flat_agv_wheel_10_flat_agv_wheel_10_spin" gear="1" ctrlrange="0 0.3" forcerange="-0.3 0.3" />
+    <motor name="R01_flat_agv_wheel_11_flat_agv_wheel_11_spin_drv" jointinparent="R01_flat_agv_wheel_11_flat_agv_wheel_11_spin" gear="1" ctrlrange="0 0.3" forcerange="-0.3 0.3" />
+    <motor name="R01_flat_agv_platform_flat_agv_lift_drv" jointinparent="R01_flat_agv_platform_flat_agv_lift" gear="1" ctrlrange="0 15" forcerange="-15 15" />
+    <motor name="F01_wheel_drive_0_wheel_drive_0_spin_drv" jointinparent="F01_wheel_drive_0_wheel_drive_0_spin" gear="1" ctrlrange="0 0.5" forcerange="-0.5 0.5" />
+    <motor name="F01_wheel_drive_1_wheel_drive_1_spin_drv" jointinparent="F01_wheel_drive_1_wheel_drive_1_spin" gear="1" ctrlrange="0 0.5" forcerange="-0.5 0.5" />
+    <motor name="F01_wheel_rear_0_wheel_rear_0_spin_drv" jointinparent="F01_wheel_rear_0_wheel_rear_0_spin" gear="1" ctrlrange="0 0.5" forcerange="-0.5 0.5" />
+    <motor name="F01_wheel_rear_1_wheel_rear_1_spin_drv" jointinparent="F01_wheel_rear_1_wheel_rear_1_spin" gear="1" ctrlrange="0 0.5" forcerange="-0.5 0.5" />
+    <motor name="F01_forklift_carriage_forklift_lift_drv" jointinparent="F01_forklift_carriage_forklift_lift" gear="1" ctrlrange="0 14.7" forcerange="-14.7 14.7" />
   </actuator>
 </mujoco>

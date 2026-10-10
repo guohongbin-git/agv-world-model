@@ -1,8 +1,8 @@
 {
   "manifest_version": "1",
   "stage": "W02",
-  "design_version": "2.0.0",
-  "generated_at_utc": "2026-10-09T10:20:35+00:00",
+  "design_version": "2.1.0",
+  "generated_at_utc": "2026-10-10T12:14:43+00:00",
   "units": {
     "length": "m",
     "mass": "kg",
@@ -15,7 +15,7 @@
   },
   "inputs": {
     "config": "configs/design.yaml",
-    "config_sha256": "c17991e0cc28827d067e2ea1af77d50f46d0ff41c0cc1c94d105d6521516efa5"
+    "config_sha256": "97781a13c0d96e1acf045396063bbb1ba516c6468ee9c9c6d80f73c33c8c4f21"
   },
   "tools": {
     "generator": "cad.build",
@@ -52,8 +52,8 @@
           0.045000000000000005
         ],
         "carriage_plate_z_range_m": [
-          0.01,
-          0.09
+          0.055,
+          0.135
         ],
         "fork_x_range_m": [
           0.045000000000000005,
@@ -200,7 +200,7 @@
       "stl": "assets/cad/forklift.stl",
       "mass_kg": 1.5,
       "bodies": 6,
-      "primitives": 10,
+      "primitives": 11,
       "sites": [
         "forklift_carriage.fork_tip"
       ],
@@ -274,7 +274,7 @@
       "bodies": 1,
       "primitives": 1,
       "sites": [],
-      "note": "静体; 世界 z=0 = 桌面上表面。"
+      "note": "静体; 原点在桌面左下角, 世界 z=0 = 桌面上表面。"
     }
   },
   "files": [
@@ -282,7 +282,7 @@
       "path": "assets/cad/pallet.step",
       "kind": "step",
       "bytes": 58146,
-      "sha256": "5ab9ad948aa78ffb1be822e4a17df2c546fbf7d2b9197d028dbb80422ec4f206"
+      "sha256": "1a39582e604b116d96c0e5f6423b16d6f841d42acd27e9cb8c83e031b21160c3"
     },
     {
       "path": "assets/cad/pallet.stl",
@@ -294,7 +294,7 @@
       "path": "assets/cad/goods_box.step",
       "kind": "step",
       "bytes": 17044,
-      "sha256": "a4584d0e9f3a43018b075b99fa7341cc51c93cceef57b327b53e2584c6caf736"
+      "sha256": "bdd99d37d28a6a3249a831e636d899ff8e530c8936ba7165b0b2645615900104"
     },
     {
       "path": "assets/cad/goods_box.stl",
@@ -305,20 +305,20 @@
     {
       "path": "assets/cad/forklift.step",
       "kind": "step",
-      "bytes": 131904,
-      "sha256": "f66a5cb92f90ae53750dd32bf3187be35e57329920e26dbc6453920b68db29ec"
+      "bytes": 148315,
+      "sha256": "61ee05914f1398e92cfb75ce14d43ed3f11b3e2b1c6291f610d4cb0cff153d00"
     },
     {
       "path": "assets/cad/forklift.stl",
       "kind": "stl",
-      "bytes": 129284,
-      "sha256": "8bad168677d9a5b8aaf905b1952ac5f0c31701e97ece237329d9ae9e05869387"
+      "bytes": 129884,
+      "sha256": "89fcccd7f3171979fffaf5622b65e047f88e2fcb5653c3c27c46eff9c6ddd367"
     },
     {
       "path": "assets/cad/flat_agv.step",
       "kind": "step",
       "bytes": 66093,
-      "sha256": "ed8c47b7fbcfc0470e479cdf4c4af9ae8556ba76ee0c04664d2d1f3c02e1c3b5"
+      "sha256": "160c5df2ac35b056f1649f63481716efc91547c5abb394bf7b6c20c2a3570039"
     },
     {
       "path": "assets/cad/flat_agv.stl",
@@ -330,7 +330,7 @@
       "path": "assets/cad/station.step",
       "kind": "step",
       "bytes": 97594,
-      "sha256": "9fd2129914e13d3dfa36f56b1df1de3d4466884970f1bc07cf508602ddafb65d"
+      "sha256": "fb55a0e880ef56b0ff8a9152e86c8f0bde8193cf2a376efa54db5308d122b4ed"
     },
     {
       "path": "assets/cad/station.stl",
@@ -342,7 +342,7 @@
       "path": "assets/cad/rack_group.step",
       "kind": "step",
       "bytes": 114324,
-      "sha256": "c0008cadf6dcdf0cd061e2bcf3b7200b8f2136bd22b6a78b91261461953f720a"
+      "sha256": "a6814a5e09407ba39c5e77f08d744e66c48031a572bf608e510c0e08ea16cbfc"
     },
     {
       "path": "assets/cad/rack_group.stl",
@@ -354,7 +354,7 @@
       "path": "assets/cad/feed_tray.step",
       "kind": "step",
       "bytes": 81282,
-      "sha256": "dbc6e7f2deb37fd09fcc8f53f02c98fedd71b8269f2eb1e74714b275abc504b3"
+      "sha256": "53cebd2fdc82b54fc33a8b13581dec1fef3d00c128582ab02bc4acc264421368"
     },
     {
       "path": "assets/cad/feed_tray.stl",
@@ -366,7 +366,7 @@
       "path": "assets/cad/manipulator.step",
       "kind": "step",
       "bytes": 160673,
-      "sha256": "e25a59d05a546e9605ca834054c2e8ecb59dbdee6dd179ca466c0d8baf9f4a6d"
+      "sha256": "3bfb6e9b43d239c2b3b5d93b982d3fe5d381113f3b412e345af807d4a92f6540"
     },
     {
       "path": "assets/cad/manipulator.stl",
@@ -377,26 +377,26 @@
     {
       "path": "assets/cad/table.step",
       "kind": "step",
-      "bytes": 17088,
-      "sha256": "5573bfed22da5e94b486a9231d636e5b48dc90d4a0819e367a579a66a36eefcf"
+      "bytes": 17092,
+      "sha256": "c727b6ec647508e4e41662d7b35e9511d41b0e5e1f37128ca6da851e162c948d"
     },
     {
       "path": "assets/cad/table.stl",
       "kind": "stl",
       "bytes": 684,
-      "sha256": "6dfd4b2b7795a4a8eb6e60bfacfe1ee6d781f3b3379c67e484f1663630fba8ea"
+      "sha256": "543e73139287dec183307450d136a5ea8444f25434aa0f4cfaf3a7365e33731c"
     },
     {
       "path": "assets/collision/collision.yaml",
       "kind": "collision",
-      "bytes": 22641,
-      "sha256": "b76e5763ceb0223d27b8eff374c34e88b8ec42f88e384b2a207e46d4eca62f3c"
+      "bytes": 22936,
+      "sha256": "505d2b172e3cf1f1d71a19fe5da31c69b591fafba6776a2f104b51b09f1a062f"
     },
     {
       "path": "assets/cad/mjcf_skeleton.xml",
       "kind": "mjcf",
-      "bytes": 28684,
-      "sha256": "28835739f1456a576b1343557a6aefab6f1504d7500423b21e1a9131af4daae1"
+      "bytes": 32897,
+      "sha256": "3132ffe12e5becd1c7041c6f84e9066ccb92867a1a35ce6eed238b0119e0a976"
     }
   ]
 }

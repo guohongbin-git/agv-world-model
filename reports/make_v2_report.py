@@ -1,4 +1,7 @@
-"""生成 W07 的 v2.0.0 验收报告 (T01–T16)。
+"""按当前 design_version 生成验收报告 (T01–T16)。
+
+报告文件名/标题随 configs/design.yaml 的 design_version 派生
+(v<版本>.md / v<版本>.json); 历史版本报告不覆盖 (规则 3)。
 
 用法:
     PYTHONPATH=. .venv/bin/python reports/make_v2_report.py
@@ -26,8 +29,13 @@ sys.path.insert(0, str(REPO))
 
 from reports.acceptance_cases import CASES, CaseResult, collect  # noqa: E402
 
-OUT_MD = REPO / "reports" / "v2.0.0.md"
-OUT_JSON = REPO / "reports" / "v2.0.0.json"
+import yaml as _yaml
+
+DESIGN_VERSION = _yaml.safe_load(
+    (REPO / "configs" / "design.yaml").read_text(encoding="utf-8")
+)["design_version"]
+OUT_MD = REPO / "reports" / f"v{DESIGN_VERSION}.md"
+OUT_JSON = REPO / "reports" / f"v{DESIGN_VERSION}.json"
 
 
 def classify(res: CaseResult) -> str:
@@ -55,7 +63,7 @@ def main() -> int:
     stamp = _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
     lines: list[str] = []
     a = lines.append
-    a("# 桌面仓储 AGV 演示 v2.0.0 验收报告")
+    a(f"# 桌面仓储 AGV 演示 v{DESIGN_VERSION} 验收报告")
     a("")
     a(f"生成时间: {stamp}")
     a("")
@@ -120,15 +128,18 @@ def main() -> int:
     a("每次 `mj_step` 把 ctrl 夹到 0 —— 关节几乎不动。**在此之前所有抓取、")
     a("收拢与轨迹结果都来自一台欠驱动的臂**, 修复后收拢包络才降到 42.3mm。")
     a("")
-    a("### 6.2 T06 单车白模接力上限")
+    a("### 6.2 T06 单车白模接力上限 (10-10 复测: 已消除)")
     a("")
     a("`sim/forklift_cell.py` 是单车白模 (一个 freejoint 托盘 + 一根横梁 + 一对叉)。")
-    a("连续复用同一单元实测: r0–r3 完全一致 (托盘 4100mm、叉承托 1.000、梁 0.000),")
-    a("r4 托盘下沉 1.5mm 并压上横梁 (接触穿透 1.2µm), r5 起不可逆地留在梁上。")
+    a("旧几何下连续复用同一单元实测: r0–r3 一致, r4 托盘下沉 1.5mm 压回横梁,")
+    a("r5 起不可逆 —— 当时写成 `SUSTAINABLE_RELAYS = 4`。")
     a("")
-    a("故 T06 分两层验证: 调度/库存层跑满 50 轮 (每轮新装配物理单元),")
-    a("物理保持上限写成显式常量 `SUSTAINABLE_RELAYS = 4`。")
-    a("**未放宽任何阈值** (0.90 / 0.10 / 1µm 保持原值)。详见 `t06_relay_limit.md`。")
+    a("**复测推翻**: 漂移不是白模固有极限, 而是坏几何产物 (Ramp 传绝对时间致")
+    a("全程阶跃、插深按叉根致单齿承托、背板干涉、叉孔摩擦 0.8 承不住带载")
+    a("加减速)。修复 (commit 53c9320) 后同一单元 **50 轮全部一致**: 最低叉承托")
+    a("0.978、托盘高度最大偏差 0.33mm、放回梁承托最低 0.978; 上限已提到 50")
+    a("(commit 3c222cd)。**未放宽任何阈值** (0.90 / 0.10 / 1mm 保持原值)。")
+    a("详见 `t06_relay_limit.md`。")
     a("")
     a("## 7. 证据文件")
     a("")
@@ -138,7 +149,7 @@ def main() -> int:
     a("|`reports/stow_envelope.json`|收拢位形求解结果与逐连杆包络|")
     a("|`reports/t06_relay_limit.md`|T06 偏离说明与排除过程|")
     a("|`reports/t12_run20.json`|T12 20 轮逐帧快照与一致性校验|")
-    a("|`reports/v2.0.0.json`|本报告的机器可读版本|")
+    a(f"|`reports/v{DESIGN_VERSION}.json`|本报告的机器可读版本|")
     a("")
 
     OUT_MD.write_text("\n".join(lines), encoding="utf-8")

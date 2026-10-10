@@ -287,18 +287,22 @@ def build_forklift(p: SimpleNamespace, d: Derived) -> BodyNode:
     for i, y in enumerate(rear_y):
         chassis.children.append(_wheel(f"wheel_rear_{i}", rear_x, y))
 
-    plate = _box_prim("forklift_carriage_plate",
-                      (dv["carriage_plate_x_range_m"][1] - dv["carriage_plate_x_range_m"][0],
-                       fr.body_width_m,
-                       dv["carriage_plate_z_range_m"][1] - dv["carriage_plate_z_range_m"][0]),
-                      ((dv["carriage_plate_x_range_m"][0] + dv["carriage_plate_x_range_m"][1]) / 2,
-                       0.0,
-                       (dv["carriage_plate_z_range_m"][0] + dv["carriage_plate_z_range_m"][1]) / 2))
+    # 背板分两片, 与叉同 y 中心 (±15mm, 宽 14mm): 整片全宽的背板在
+    # 第三层升降时撞货架横梁 (横梁 y=0±6, ±27±3, 两片恰在其空隙)。
+    # 与 sim/forklift_cell.py 的 carriage_plate_l/r 同步 (规则 4)。
+    px = (dv["carriage_plate_x_range_m"][0] + dv["carriage_plate_x_range_m"][1]) / 2
+    plates = [_box_prim(f"forklift_carriage_plate_{s}",
+                        (dv["carriage_plate_x_range_m"][1] - dv["carriage_plate_x_range_m"][0],
+                         0.014,
+                         dv["carriage_plate_z_range_m"][1] - dv["carriage_plate_z_range_m"][0]),
+                        (px, cy,
+                         (dv["carriage_plate_z_range_m"][0] + dv["carriage_plate_z_range_m"][1]) / 2))
+              for s, cy in zip(("l", "r"), ft.centers_y_m)]
     fx = (dv["fork_x_range_m"][0] + dv["fork_x_range_m"][1]) / 2
     fz = dv["fork_top_z_m"] - ft.size_m[2] / 2
     forks = [_box_prim(f"forklift_fork_{s}", ft.size_m, (fx, cy, fz))
              for s, cy in zip(("l", "r"), ft.centers_y_m)]
-    carriage_prims = [plate] + forks
+    carriage_prims = plates + forks
     tip_x = dv["fork_x_range_m"][1]
     carriage = BodyNode(
         name="forklift_carriage", mass_kg=fr.carriage_mass_kg, com_x_m=fr.carriage_com_x_m,
