@@ -65,7 +65,8 @@ class ForkliftCell:
         sz = self.support_z
         return {
             "transport_z": 0.065,
-            # 叉顶须托住通道顶壁下沿 (= 支撑面 + 通道顶壁高 12mm), 留 0.5mm 间隙
+            # 承托面是通道顶壁底面 (托盘局部 12mm): 叉 y∈[-20,-10]mm 与
+            # 通道顶壁 y∈[-20,-10]mm 对齐, 叉顶顶住它即可托起托盘。
             "insert_z": sz + 0.012 - 0.0005,
             # 抬离 5mm (设计 863「离面 5mm」)
             "lift_z": sz + 0.012 + 0.005,
@@ -78,7 +79,7 @@ class ForkliftCell:
             "retreat_loaded": 0.120,
             "withdraw_empty": 0.105,
             "lift_travel": 0.385,        # 叉顶 65→450
-            "channel_top_local": 0.012,  # 叉孔顶(托盘局部)
+            "channel_top_local": 0.012,  # 通道顶壁底面(托盘局部), 仅作净空校核
             "start_axle_x": -0.560,      # 抬升安全轴: 全程无干涉
         }
 
@@ -289,8 +290,8 @@ class ForkliftCell:
             move(x_edge),                                    # 2 接近前沿
             move(x_ins),                                     # 3 插叉 65mm
             lift(k["lift_z"], 0.002),                        # 4 抬离支撑面 5mm
-            move(x_stage),                                   # 5 带载后退至暂存站(托盘中心对准 -340)
-            lift(place_z),                                   # 6 举到放托位(叉顶 57 = 台面45+通道12)
+            move(x_stage),                                   # 5 带载后退至暂存站
+            lift(place_z),                                   # 6 举到放托位
             lift(place_z - 0.0015, 0.002),                   # 7 微降, 压到台面
             move(x_stage + k["retreat_loaded"] + 0.060),     # 8 空叉退出并退开
             lift(k["insert_z"]),                             # 9 举升离开
