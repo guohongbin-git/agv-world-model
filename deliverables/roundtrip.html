@@ -63,10 +63,9 @@
   </table>
 
   <div class="note">
-    复现：<code>PYTHONPATH=. ./.venv/bin/python scripts/render_roundtrip_mp4.py</code>（渲染本视频）；
-    交互窗口：<code>.venv/bin/mjpython scripts/watch_roundtrip.py</code>。<br>
-    判据验证：<code>pytest tests/test_physics_fork.py tests/test_t04_reachability.py</code>（12 项）。
-    场景为示意白模：橙色横梁货架（第三层 400mm）、蓝色立柱、木托盘、黄色叉车（门架与立柱为纯视觉件，不参与接触与质量）。
+    白模复现：<code>PYTHONPATH=. ./.venv/bin/python scripts/render_roundtrip_mp4.py</code>；交互窗口 <code>.venv/bin/mjpython scripts/watch_roundtrip.py</code>；判据验证 <code>pytest tests/test_physics_fork.py tests/test_t04_reachability.py</code>（12 项）。<br>
+    照片级复现：<code>.venv/bin/python scripts/export_poses.py</code>（MuJoCo 逐帧位姿 → CSV）后 <code>blender -b -P scripts/render_photoreal.py -- --video /tmp/pbr/frames --step 8</code>（真实设备等比缩小模型，包络严格 = <code>configs/design.yaml</code> 碰撞尺寸；ambientCG PBR + 边缘掉漆 + HDRI/区域光 + AgX + 景深，Cycles Metal GPU）。<br>
+    两段视频由<b>同一份 <code>mj_step</code> 积分位姿</b>驱动，画面非动画。
   </div>
 </div>
 </body>
