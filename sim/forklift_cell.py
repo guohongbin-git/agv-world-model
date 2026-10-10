@@ -39,6 +39,7 @@ class ForkliftCell:
         self.pallet_bid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, "pallet")
         self.fork_geoms = [mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, f"fork_{s}")
                            for s in ("l", "r")]
+        self.fork_gids = set(self.fork_geoms)
         self.pallet_geoms = [mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, g)
                              for g in ("pal_bottom_l", "pal_bottom_r", "pal_bottom_c",
                                        "ceil_l", "ceil_r", "top_side_l", "top_side_r",
@@ -180,21 +181,29 @@ class ForkliftCell:
         return any((g1 in fg and g2 in pg) or (g2 in fg and g1 in pg)
                    for g1, g2, _ in self.contacts())
 
-    def support_load_ratio(self) -> float:
+    def support_load_ratio(self, surface: str = "beam") -> float:
         """支撑面承担的竖向力 / 托盘总重 (放置判据)。
 
         mj_contactForce 返回的是"施加于 geom1 的力"; 支撑梁 geom1 被托盘向下压,
-        故取 -fz (向上为正)。"""
+        故取 -fz (向上为正)。
+
+        surface="beam": 货架横梁 —— 托盘**放**在梁上时的判据;
+        surface="fork": 叉顶 —— 托盘**被叉举着**时的判据。
+        二者是不同事件: 插叉后托盘可能同时压着梁又压着叉, 只读一个会把
+        「叉上载着但还没离梁」误判成「叉空了」。
+        """
+        gids = (self.support_gids if surface == "beam"
+                else self.fork_gids)
         total = 0.0
         f1 = np.zeros(6)
         for i in range(self.data.ncon):
             c = self.data.contact[i]
             g1, g2 = c.geom1, c.geom2
-            if g1 not in self.support_gids and g2 not in self.support_gids:
+            if g1 not in gids and g2 not in gids:
                 continue
-            if g1 in self.support_gids and g2 in self.pallet_geoms:
+            if g1 in gids and g2 in self.pallet_geoms:
                 sign = -1.0      # 支撑梁被压 → 力向下, 取反得托盘受到的向上托力
-            elif g2 in self.support_gids and g1 in self.pallet_geoms:
+            elif g2 in gids and g1 in self.pallet_geoms:
                 sign = 1.0
             else:
                 continue        # 非托盘对象不计入

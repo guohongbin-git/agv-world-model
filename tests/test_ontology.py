@@ -49,10 +49,13 @@ def test_unbind_grip_release_offsite_lifecycle(world: World):
     world.unbind_at_output("G-001", "PAL-001", "T2", 2.0)
     assert world.pallet("PAL-001")[1] == PalletCargo.EMPTY.value
     assert world.active_binding("G-001") is None
-    assert world.in_warehouse_count() == 0  # OUTBOUND_PENDING 不计在库
+    # 设计 25.5「卸货接管」行标的是「计数不变」—— OUTBOUND_PENDING
+    # **仍计在库**, 直到显式离场边界事件才 −1。
+    assert world.in_warehouse_count() == 1, "卸货后仍计在库"
     # 离场
     world.exit_offsite("G-001", "T3", 3.0)
     assert world.goods_location("G-001") == "FEED:O-TRAY"
+    assert world.in_warehouse_count() == 0, "离场后计数 −1"
     with pytest.raises(ConstraintViolation):
         world.exit_offsite("G-001", "T4", 4.0)  # 重复离场拒绝
 

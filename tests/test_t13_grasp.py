@@ -253,7 +253,9 @@ def test_t14_low_friction_must_fail_cleanly():
     """T14: μ=0.2 低摩擦压力试验 — 允许失败, 但不得伪造成功。"""
     c = ManipulatorCell(timestep_s=0.0005)
     _settle(c)
-    assert abs(c.box_bottom_z - c.tray_top_z) < 1e-3, "起始箱件必须在托台上"
+    assert abs(c.box_bottom_z - c.pallet_support_z) < 1e-3, (
+        f"起始箱件必须在托盘承货面 (实测 {c.box_bottom_z*1000:.1f}mm, "
+        f"应为 {c.pallet_support_z*1000:.1f}mm)")
     for g in c.pad_gids:
         c.model.geom_friction[g][0] = 0.2
     _approach_and_close(c, close_gap=0.030)

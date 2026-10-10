@@ -64,7 +64,10 @@ def test_free_box_rests_on_tray(cell: ManipulatorCell):
     import mujoco
     for _ in range(3000):
         mujoco.mj_step(cell.model, cell.data)
-    assert abs(cell.box_bottom_z - 0.055) < 1e-4, f"箱底 {cell.box_bottom_z*1000:.2f}mm ≠ 55mm"
+    # 箱件起始坐在**托盘承货面** (托台 55mm + 托盘 18mm = 73mm), 不是托台面。
+    assert abs(cell.box_bottom_z - cell.pallet_support_z) < 1e-4, (
+        f"箱底 {cell.box_bottom_z*1000:.2f}mm ≠ 托盘承货面 "
+        f"{cell.pallet_support_z*1000:.2f}mm")
     assert abs(cell.box_mass - 0.200) < 1e-9, "箱件质量须 200g"
 
 

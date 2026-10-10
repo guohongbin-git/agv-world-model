@@ -260,6 +260,58 @@ class World:
                 (Loc(LocKind.FEED, "O-TRAY").__str__(), GoodsLifecycle.OFFSITE.value, goods_id))
         self.emit(task_id, "GoodsExitConfirmed", {"goods_id": goods_id}, sim_time_s)
 
+    # ---------- 入料接管 / 出料放置 / 到出库站 (设计 25.5) ----------
+    def take_from_feed(self, goods_id: str, arm_id: str, task_id: str,
+                       sim_time_s: float) -> None:
+        """入料接管: G 位置 FEED→GRIPPER, 生命周期仍 INBOUND (**不计在库**)。
+
+        设计 25.5 明确: 入料接管后「仍 INBOUND, 不计在库」—— 因此这里
+        只改位置, 不动 lifecycle, in_warehouse_count 不变。
+        """
+        row = self._conn.execute("SELECT lifecycle FROM goods WHERE goods_id=?",
+                                 (goods_id,)).fetchone()
+        if row is None:
+            raise ConstraintViolation(f"货物不存在: {goods_id}")
+        if row[0] != GoodsLifecycle.INBOUND.value:
+            raise ConstraintViolation(f"货物生命周期 {row[0]}, 非INBOUND")
+        with self._conn:
+            self._conn.execute(
+                "UPDATE goods SET location=?, entity_version=entity_version+1 WHERE goods_id=?",
+                (str(Loc(LocKind.GRIPPER, arm_id)), goods_id))
+        self.emit(task_id, "FeedPicked",
+                  {"goods_id": goods_id, "arm_id": arm_id}, sim_time_s)
+
+    def mark_outbound_pending(self, goods_id: str, task_id: str,
+                              sim_time_s: float) -> None:
+        """到出库站: G→OUTBOUND_PENDING, **仍计在库** (设计 25.5)。"""
+        row = self._conn.execute("SELECT lifecycle FROM goods WHERE goods_id=?",
+                                 (goods_id,)).fetchone()
+        if row is None or row[0] != GoodsLifecycle.IN_WAREHOUSE.value:
+            raise ConstraintViolation("仅 IN_WAREHOUSE 可转 OUTBOUND_PENDING")
+        with self._conn:
+            self._conn.execute(
+                "UPDATE goods SET lifecycle=?, entity_version=entity_version+1 WHERE goods_id=?",
+                (GoodsLifecycle.OUTBOUND_PENDING.value, goods_id))
+        self.emit(task_id, "OutboundPending", {"goods_id": goods_id}, sim_time_s)
+
+    def place_at_feed(self, goods_id: str, feed_id: str, task_id: str,
+                     sim_time_s: float) -> None:
+        """出料放置: G 位置 GRIPPER→FEED:O-TRAY, 生命周期保持 OUTBOUND_PENDING。
+
+        设计 25.5: 出料放置「保持 OUTBOUND_PENDING」—— 计数不减,
+        直到显式离场边界事件。
+        """
+        row = self._conn.execute("SELECT lifecycle FROM goods WHERE goods_id=?",
+                                 (goods_id,)).fetchone()
+        if row is None or row[0] != GoodsLifecycle.OUTBOUND_PENDING.value:
+            raise ConstraintViolation("仅 OUTBOUND_PENDING 可放置到出料托台")
+        with self._conn:
+            self._conn.execute(
+                "UPDATE goods SET location=?, entity_version=entity_version+1 WHERE goods_id=?",
+                (str(Loc(LocKind.FEED, feed_id)), goods_id))
+        self.emit(task_id, "PlacedAtOutputFeed",
+                  {"goods_id": goods_id, "feed_id": feed_id}, sim_time_s)
+
     def move_pallet(self, pallet_id: str, to: Loc, task_id: str, sim_time_s: float) -> None:
         """整托运输: 只动 PAL 位置; 绑定货物的有效位置仍是 PALLET。"""
         with self._conn:
@@ -271,9 +323,25 @@ class World:
 
     # ---------- 查询 ----------
     def in_warehouse_count(self) -> int:
+        """在场货物计数 (设计 25.5)。
+
+        含 IN_WAREHOUSE **与** OUTBOUND_PENDING —— 设计「到出库站」行明写
+        「G→OUTBOUND_PENDING 仍计在库」, 「卸货接管」与「出料放置」两行
+        也都标「计数不变」。只有「货物离场」才 −1。只数 IN_WAREHOUSE 会
+        在到出库站那一刻凭空少一件, 后面三段全是错的基线。
+        """
         return self._conn.execute(
-            "SELECT COUNT(*) FROM goods WHERE lifecycle=?",
-            (GoodsLifecycle.IN_WAREHOUSE.value,)).fetchone()[0]
+            "SELECT COUNT(*) FROM goods WHERE lifecycle IN (?,?)",
+            (GoodsLifecycle.IN_WAREHOUSE.value,
+             GoodsLifecycle.OUTBOUND_PENDING.value)).fetchone()[0]
+
+    def lifecycle_of(self, goods_id: str) -> str:
+        """货物当前生命周期 (回放前置判定用)。"""
+        row = self._conn.execute("SELECT lifecycle FROM goods WHERE goods_id=?",
+                                 (goods_id,)).fetchone()
+        if row is None:
+            raise KeyError(goods_id)
+        return row[0]
 
     def goods_location(self, goods_id: str) -> str:
         return self._conn.execute(

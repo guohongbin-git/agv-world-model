@@ -41,12 +41,32 @@ class ReservationBoard:
     renew_s: float = 0.100
     _held: dict[str, Reservation] = field(default_factory=dict)
     _locked: set[str] = field(default_factory=set)
+    #: 退出通道 → 占用它会阻塞的区域 (设计 19.3: 「源区带载退出完成前锁定;
+    #: 目标区空叉退出完成前锁定」)。资源按 ID 各自独立判断, 不显式声明
+    #: 这层关联的话, 持有 I01 退出锁**不会**阻止别人申请 H01 ——
+    #: 那正是「两车同时挤进交接站」要防的事。
+    _exit_gates: dict[str, frozenset[str]] = field(default_factory=dict)
+
+    def register_exit_gate(self, exit_resource: str, blocks: list[str]) -> None:
+        """声明某退出通道被占用时必须保持空闲的区域。"""
+        self._exit_gates[exit_resource] = frozenset(blocks)
 
     # ---------- 取得 ----------
     def acquire_all(self, resource_ids: list[str], holder: str, task_id: str,
                     sim_time_s: float) -> list[str]:
         """原子取得: 任一不可得则全部不占。返回取得的资源。"""
         want = list(dict.fromkeys(resource_ids))
+        want_set = set(want)
+        for exit_r, blocked in self._exit_gates.items():
+            if not (want_set & blocked):
+                continue
+            if exit_r in self._locked:
+                raise PartialAcquisition(f"{exit_r} RECOVERY_LOCKED")
+            h = self._held.get(exit_r)
+            if h is not None and h.holder != holder:
+                raise PartialAcquisition(
+                    f"{exit_r} 被 {h.holder} 占用 (退出未完成), "
+                    f"{sorted(want_set & blocked)} 不得进入")
         for rid in want:
             if rid in self._locked:
                 raise PartialAcquisition(f"{rid} RECOVERY_LOCKED")

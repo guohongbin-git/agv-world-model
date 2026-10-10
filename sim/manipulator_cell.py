@@ -41,6 +41,8 @@ class ManipulatorCell:
     def __init__(self, timestep_s: float = 0.0005, arm: str = "M01", seed: int = 0):
         self.cfg = load()
         self.arm = arm
+        self.tray_top_z = 0.055
+        self._init_pallet_geometry()      # 必须在 _xml() 之前: 箱件起始面用它
         self.model = mujoco.MjModel.from_xml_string(self._xml(timestep_s))
         self.data = mujoco.MjData(self.model)
         self._plan_data = mujoco.MjData(self.model)   # 雅可比求解专用
@@ -67,6 +69,9 @@ class ManipulatorCell:
         self.tcp_sid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_SITE, f"{self._p(arm)}_tcp")
         self.box_bid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, f"{arm}_goods")
         self.pad_gids = [self._geom(f"{arm}_pad_l"), self._geom(f"{arm}_pad_r")]
+        # 承托面 geom 集合: 托盘承货面 (装托判据读它) + 托台面 (取放判据)。
+        self.support_gids = {self._geom(f"{arm}_pallet_deck"),
+                             self._geom(f"{arm}_tray_top")}
         self.tray_top_z = 0.055
         # 派生几何 (来自 configs)
         g = self.cfg["goods"]["size_m"]
@@ -76,6 +81,20 @@ class ManipulatorCell:
         self.contact_speed_max = self.cfg["manipulators"]["contact_approach_speed_max_mps"]
         self.grip = self.cfg["manipulators"]["gripper"]
         self.stow_r = self.cfg["manipulators"]["stow_xy_radius_initial_m"]
+
+    def _init_pallet_geometry(self) -> None:
+        """托盘几何 (设计 pallet 段)。
+
+        必须早于 _xml() 执行 —— 箱件起始面要用 pallet_support_z。
+        没有托盘, 装托相位的「承托 ≥0.90」只能读托台面, 那测的是
+        「箱子放回原处」而不是「装到托盘上」, 是不同的物理事件。
+        """
+        pal = self.cfg["pallet"]
+        self.pallet_body_size = tuple(pal["body_size_m"])
+        self.pallet_support_local_z = pal["cargo_support_local_z_m"]
+        self.pallet_tare_mass = pal["tare_mass_kg"]
+        self.pallet_base_z = self.tray_top_z          # 托盘底贴托台面
+        self.pallet_support_z = self.tray_top_z + self.pallet_support_local_z
 
     # ------------------------------------------------------------ helpers
     def _p(self, name: str) -> str:
@@ -651,14 +670,20 @@ class ManipulatorCell:
                 force_r += mag
         return (force_l > 1e-6, force_r > 1e-6, force_l, force_r)
 
-    def box_supported_ratio(self) -> float:
-        """箱件底面承托的竖向力 / 箱重 (落托判据 ≥0.90)。"""
+    def box_supported_ratio(self, surface: str = "pallet") -> float:
+        """箱件底面承托的竖向力 / 箱重 (落托判据 ≥0.90)。
+
+        surface="pallet": 只认托盘承货面 —— 装托/卸货交接的判据;
+        surface="tray":   只认托台面 —— 放回原位的判据。
+        混在一起读会把「箱子还压在托台上」误判成「已装到托盘」。
+        """
+        key = f"{self.arm}_pallet_deck" if surface == "pallet" else f"{self.arm}_tray_top"
+        support_gids = {self._geom(key)}
         total = 0.0
         f = np.zeros(6)
-        tray_gids = {self._geom(f"{self.arm}_tray_top")}
         for i in range(self.data.ncon):
             c = self.data.contact[i]
-            if not ({c.geom1, c.geom2} & tray_gids):
+            if not ({c.geom1, c.geom2} & support_gids):
                 continue
             if self.model.geom_bodyid[c.geom1] == self.box_bid or \
                self.model.geom_bodyid[c.geom2] == self.box_bid:
@@ -704,7 +729,9 @@ class ManipulatorCell:
         a = self.arm
         base = self.cfg["regions"][f"m01_base_m" if a == "M01" else "m02_base_m"]
         feed = self.cfg["regions"]["feed_i_tray" if a == "M01" else "feed_o_tray"]
-        box_z = feed["top_z_m"] + g[2] / 2
+        # 箱件起始坐在托盘承货面上 (托台 + 18mm), 而非托台面 —— 与装托
+        # 相位的目标面一致, 起始/目标不换面就不会把「放回托台」当「装托」。
+        box_z = self.pallet_support_z + g[2] / 2
 
         def jxml(spec, i, prefix):
             off = spec["offset_m"]
@@ -776,7 +803,8 @@ class ManipulatorCell:
         trq_scale = {"J1": 2.0, "J2": 2.0, "J3": 3.0, "J4": 2.5, "J5": 2.5, "J6": 3.0}
         actuators = "".join(
             f'\n    <position name="{a}_{s["name"]}_drv" jointinparent="{a}_{s["name"]}_jn" '
-            f'kp="{kp_gain}" forcerange="-{trq_scale[s["name"]] * s["torque_max_nm"]:.1f} '
+            f'kp="{kp_gain}" ctrlrange="{s["lower_rad"]:.4f} {s["upper_rad"]:.4f}" '
+            f'forcerange="-{trq_scale[s["name"]] * s["torque_max_nm"]:.1f} '
             f'{trq_scale[s["name"]] * s["torque_max_nm"]:.1f}"/>'
             for s in j) + "".join(
             # 手指是**限力位置伺服** (设计 25.3: 每指目标法向力 5N, 上限 8N)。
@@ -789,7 +817,7 @@ class ManipulatorCell:
             # 跳动、单指接触时有时无)。5N 仍在设计承载校核 2×0.6×5=6N > 1.96N
             # 之内, 但对轻箱更稳。
             f'\n    <position name="{a}_finger_{sd}_drv" jointinparent="{a}_finger_{sd}_jn" '
-            f'kp="4000" '
+            f'kp="4000" ctrlrange="-0.02 0.12" '
             f'forcerange="-{gr["force_per_finger_target_n"]} {gr["force_per_finger_target_n"]}"/>'
             for sd in ("l", "r"))
 
@@ -882,6 +910,17 @@ class ManipulatorCell:
           contype="2" conaffinity="6"/>
     <!-- 定位凸边: 4 条, 高 3mm (台面以上), 围成 70×50mm 净区 -->
 {ridge_xml}
+    <!-- 托盘 (设计 pallet 段): 主体 80×60×18mm, 自重 45g, 承货面
+         cargo_support_local_z=18mm。装托相位把箱件放到**托盘承货面**上,
+         承托判据读托盘顶面接触力 —— 与「放回托台」是不同事件。 -->
+    <geom name="{a}_pallet_deck" type="box"
+          pos="{feed['x_m']} {feed['y_m']} {self.pallet_base_z + self.pallet_support_local_z / 2:.4f}"
+          size="{self.pallet_body_size[0]/2} {self.pallet_body_size[1]/2} {self.pallet_support_local_z/2:.4f}"
+          rgba="0.78 0.55 0.25 1" contype="2" conaffinity="6"/>
+    <geom name="{a}_pallet_foot" type="box"
+          pos="{feed['x_m']} {feed['y_m']} {self.pallet_base_z + 0.001:.4f}"
+          size="{self.pallet_body_size[0]/2 - 0.004} {self.pallet_body_size[1]/2 - 0.004} 0.001"
+          rgba="0.70 0.48 0.20 1" contype="2" conaffinity="6"/>
     <!-- 箱件 (自由刚体 200g, 设计 25.3): 指垫摩擦 μ=0.6 是设计额定值,
          承载校核 2×0.6×5N=6N vs 箱重 1.962N。箱体自身摩擦取同一额定值,
          避免"指垫 μ 达标但箱侧 μ 偏低"导致混合摩擦低于设计假设。 -->
