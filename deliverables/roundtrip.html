@@ -28,10 +28,15 @@
 </head>
 <body>
 <div class="wrap">
-  <h1><span class="tag">T04</span> 三层取放闭环 · MuJoCo 物理回放</h1>
-  <div class="sub">单叉车白模：第三层取托 → 暂存站放托，11 段梯形速度剖面轨迹，30 fps 逐帧渲染。画面里的每个位姿都是 <code>mj_step</code> 积分出来的，不是动画。</div>
+  <h1><span class="tag">T04</span> 三层取放闭环 · 物理回放</h1>
+  <div class="sub">单叉车：第三层取托 → 暂存站放托，11 段梯形速度剖面轨迹。两段视频**同一份 MuJoCo 位姿数据**驱动，画面里每个位姿都是 <code>mj_step</code> 积分出来的，不是动画。</div>
 
-  <video src="roundtrip.mp4" controls preload="metadata" poster=""></video>
+  <h2>照片级（Blender Cycles · 真实设备等比缩小模型）</h2>
+  <video src="roundtrip_photoreal.mp4" controls preload="metadata"></video>
+  <div class="sub" style="margin-top:8px">叉车/货架/托盘/纸箱均按真实设备形态建模，外形包络严格等于 <code>configs/design.yaml</code> 碰撞尺寸；ambientCG PBR 贴图 + 边缘掉漆 + 景深 + AgX。</div>
+
+  <h2>白模（MuJoCo 离屏渲染）</h2>
+  <video src="roundtrip.mp4" controls preload="metadata"></video>
 
   <h2>闭环结果（design_version 2.1.0 实测）</h2>
   <div class="cards">
