@@ -6,13 +6,14 @@
 用法:
     PYTHONPATH=. ./.venv/bin/python scripts/export_poses.py
 
-输出 /tmp/pbr/poses.csv:
+输出 assets/pbr/poses.csv:
     frame,time,seg,chassis_*(x3),chassis_q(x4),carriage_*(x3),pallet_*(x3),pallet_q(x4)
 四元数为 MuJoCo wxyz 约定, Blender 端转换。
 """
 from __future__ import annotations
 
 import csv
+import os
 
 import mujoco
 
@@ -20,7 +21,8 @@ from sim.forklift_cell import ForkliftCell
 from sim.controllers import CellController
 
 FPS = 30
-OUT = "/tmp/pbr/poses.csv"
+OUT = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                   os.pardir, "assets", "pbr", "poses.csv")
 BODIES = ("chassis", "carriage", "pallet")
 
 

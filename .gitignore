@@ -4,3 +4,4 @@ __pycache__/
 reports/runs/
 assets/frames/
 .DS_Store
+out/

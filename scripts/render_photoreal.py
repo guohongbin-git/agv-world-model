@@ -1,6 +1,6 @@
 """照片级渲染 T04 取放闭环 — Blender 5.2 Cycles(Metal) + ambientCG PBR。
 
-运动真值 = /tmp/pbr/poses.csv (MuJoCo mj_step 逐帧导出, 与测试同源);
+运动真值 = assets/pbr/poses.csv (MuJoCo mj_step 逐帧导出, 与测试同源);
 本脚本只是"贴皮": 每台设备按**真实世界设备的等比缩小模型**建模 ——
 木托盘(面板/横梁/进叉倒角)、C型钢货架+橙色step beam、平衡重叉车
 (护顶架/座椅/方向盘/双C门架/L型货叉/轮胎)、纸箱货物 —— 但外形包络
@@ -8,8 +8,8 @@
 
 用法 (headless):
     blender -b -P scripts/render_photoreal.py -- --frame 4500          # 测试帧
-    blender -b -P scripts/render_photoreal.py -- --video /tmp/pbr/frames --step 6
-资产: /tmp/pbr/{Concrete028,PaintedMetal001,MetalPlates006,Wood096}/, studio HDRI。
+    blender -b -P scripts/render_photoreal.py -- --video out/pbr-frames --step 8
+资产: assets/pbr/{Concrete028,PaintedMetal001,MetalPlates006,Wood096}/, studio HDRI。
 """
 from __future__ import annotations
 
@@ -19,7 +19,8 @@ import os
 
 import bpy
 
-PBR = "/tmp/pbr"
+ROOT = os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir)
+PBR = os.path.join(ROOT, "assets", "pbr")
 POSES = f"{PBR}/poses.csv"
 
 # ── 设计包络 (configs/design.yaml, m) ────────────────────────────────
@@ -399,7 +400,8 @@ def main() -> None:
     outdir = arg("--video")
     if tf:
         scene.frame_set(int(tf))
-        scene.render.filepath = f"{PBR}/test_frame_{tf}.png"
+        os.makedirs(os.path.join(ROOT, "out"), exist_ok=True)
+        scene.render.filepath = f"{os.path.join(ROOT, 'out')}/test_frame_{tf}.png"
         bpy.ops.render.render(write_still=True)
         print("TEST FRAME ->", scene.render.filepath)
     elif outdir:
