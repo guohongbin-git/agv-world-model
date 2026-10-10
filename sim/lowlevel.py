@@ -129,39 +129,38 @@ class DiffDriveController:
         tm = self.ctrl.torque_max_nm
         db = self.ctrl.i_deadband_radps
 
-        # 抗积分饱和 (back-calculation / conditional integration)。
+        # 抗积分饱和 (back-calculation) + 死区冻结。
         #
-        # 积分**只在输出未饱和时**累积, 饱和时冻结。关键: 饱和判断必须用
-        # **限幅后**的输出判断。原实现无条件累积, 退出饱和后带着巨大的反向
-        # 积分, 造成过冲; 实测 40 mm/s 指令下积分跑到 −1.92 (限幅 2.0),
-        # 期间转矩满负把车速从 40 推到 93 mm/s, 形成大幅极限环。
-        #
-        # 反算式: 饱和时把积分往回拉 `ki * dt`, 使未限幅输出恰好落在限幅边界。
-        self._integ_l += (wl - vl) * dt
-        ul_test = self.ctrl.kp * (wl - vl) + self.ctrl.ki * self._integ_l
-        if ul_test > tm:
-            self._integ_l -= self.ctrl.ki * dt * (ul_test - tm) / max(self.ctrl.ki, 1e-9)
-        elif ul_test < -tm:
-            self._integ_l -= self.ctrl.ki * dt * (ul_test + tm) / max(self.ctrl.ki, 1e-9)
-        self._integ_l = float(np.clip(self._integ_l, -self.ctrl.i_limit, self.ctrl.i_limit))
+        # 死区语义: 误差进入 ±db 内时**停止累积**(冻结), 不做任何清零。
+        # 曾经的错误实现是在死区内 `min(integ, 0.0)` —— 把任何**正**积分
+        # 强制清零。50 mm/s 指令下轮速误差恰好在 ±0.05 rad/s 死区边界上
+        # 反复穿越, 于是积分被不断清零又重新累积, 形成 1.8 s 周期的大幅
+        # 极限环 (车速 50→90→35 mm/s 往复, 积分 0.19→−1.38)。
+        # 冻结只阻止进一步累积, 不改已有值。
+        err_l = wl - vl
+        if abs(err_l) >= db:
+            self._integ_l += err_l * dt
+            ul_test = self.ctrl.kp * err_l + self.ctrl.ki * self._integ_l
+            if ul_test > tm:
+                self._integ_l -= (ul_test - tm) / max(self.ctrl.ki, 1e-9)
+            elif ul_test < -tm:
+                self._integ_l -= (ul_test + tm) / max(self.ctrl.ki, 1e-9)
+            self._integ_l = float(np.clip(self._integ_l,
+                                          -self.ctrl.i_limit, self.ctrl.i_limit))
 
-        self._integ_r += (wr - vr) * dt
-        ur_test = self.ctrl.kp * (wr - vr) + self.ctrl.ki * self._integ_r
-        if ur_test > tm:
-            self._integ_r -= self.ctrl.ki * dt * (ur_test - tm) / max(self.ctrl.ki, 1e-9)
-        elif ur_test < -tm:
-            self._integ_r -= self.ctrl.ki * dt * (ur_test + tm) / max(self.ctrl.ki, 1e-9)
-        self._integ_r = float(np.clip(self._integ_r, -self.ctrl.i_limit, self.ctrl.i_limit))
+        err_r = wr - vr
+        if abs(err_r) >= db:
+            self._integ_r += err_r * dt
+            ur_test = self.ctrl.kp * err_r + self.ctrl.ki * self._integ_r
+            if ur_test > tm:
+                self._integ_r -= (ur_test - tm) / max(self.ctrl.ki, 1e-9)
+            elif ur_test < -tm:
+                self._integ_r -= (ur_test + tm) / max(self.ctrl.ki, 1e-9)
+            self._integ_r = float(np.clip(self._integ_r,
+                                          -self.ctrl.i_limit, self.ctrl.i_limit))
 
         ul = float(np.clip(self.ctrl.kp * (wl - vl) + self.ctrl.ki * self._integ_l, -tm, tm))
         ur = float(np.clip(self.ctrl.kp * (wr - vr) + self.ctrl.ki * self._integ_r, -tm, tm))
-
-        # 零速死区: 误差进入 ±db 内时冻结积分, 防止低速静摩擦死区里
-        # 积分无止境地累积成极限环。
-        if abs(wl - vl) < db:
-            self._integ_l = min(self._integ_l, 0.0)
-        if abs(wr - vr) < db:
-            self._integ_r = min(self._integ_r, 0.0)
 
         for a in self.left:
             d.ctrl[self.act[a]] = ul
