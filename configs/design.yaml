@@ -1,9 +1,15 @@
 # 单一工程参数源 — 桌面AGV与机器人仓储Demo
-# design_version 2.1.0 · 所有数值单位后缀强制 · 修改须同步 design_version
+# design_version 2.2.0 · 所有数值单位后缀强制 · 修改须同步 design_version
+# 2.2.0 (2026-10-11): ForkliftCell 多车参数化 (vehicles, 一个 MJCF N 车 +
+#   共享环境, 可动件 <vid>_ 前缀命名空间)、F02 行程 range 按插叉位放宽、
+#   AisleLock 巷道互斥、mocap 锥桶 + LiDAR 观测通道 (P4a)、Decision
+#   Memory (P4b)、交接任务「前移让位」。静态环境与单车几何零改动, CAD
+#   模板不变 (仅 manifest 版本联动)。理由与实测见 reports/v2.2.0 验收
+#   报告与 tests/test_r2_compound.py。
 # 2.1.0 (2026-10-10): 叉架背板分两片置横梁 y 空隙且高于叉顶、叉孔摩擦 1.4、
 #   插深 65mm 明确为叉尖语义、ESTOP 改减速度受限斜坡 (12 m/s²)。
 #   理由与实测见 reports/t06_relay_limit.md 与 v2.1.0 验收报告 §6.2。
-design_version: "2.1.0"
+design_version: "2.2.0"
 schema_version: "2.0"
 units: {length: m, mass: kg, angle: rad, time: s}
 

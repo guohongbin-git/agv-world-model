@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<mujoco model="desktop_agv_demo_w02_d2.1.0">
+<mujoco model="desktop_agv_demo_w02_d2.2.0">
   <compiler angle="radian" autolimits="true" />
   <option timestep="0.001" />
   <default>
