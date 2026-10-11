@@ -112,6 +112,8 @@ const cam = new THREE.PerspectiveCamera(40, el('stage').clientWidth/el('stage').
 cam.position.set(1.75,1.15,-2.0);
 const ctl = new OrbitControls(cam, renderer.domElement);
 ctl.target.set(-0.17,0.28,0); ctl.enableDamping=true; ctl.maxPolarAngle=1.53;
+// 渲染循环: P1 重写本文件时遗失, 导致场景搭建正常但画面全黑 (自 P1 起回归)
+renderer.setAnimationLoop(() => { ctl.update(); renderer.render(scene, cam); });
 const coneMesh = new THREE.Mesh(
   new THREE.ConeGeometry(0.03, 0.09, 20),
   new THREE.MeshStandardMaterial({color: 0xff6a00, roughness: 0.5}));
