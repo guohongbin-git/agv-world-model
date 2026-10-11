@@ -16,6 +16,7 @@ import urllib.request
 
 LLM_BASE = os.environ.get("TWIN_LLM_BASE", "")     # e.g. http://127.0.0.1:1234/v1
 LLM_MODEL = os.environ.get("TWIN_LLM_MODEL", "")
+LLM_KEY = os.environ.get("TWIN_LLM_KEY", "")
 
 SYSTEM = (
     "你是仓储调度 Agent, 管理一个 1:15 桌面仓库数字空间"
@@ -198,20 +199,42 @@ def _llm(text: str, svc) -> tuple[str, list] | None:
     try:
         msgs = [{"role": "system", "content": SYSTEM},
                 {"role": "user", "content": text}]
-        body = json.dumps({"model": LLM_MODEL or "default",
-                           "messages": msgs, "tools": TOOLS,
-                           "temperature": 0.2}).encode()
         used: list = []
-        for _ in range(4):
+        summary = "（本轮工具调用达到上限）"
+        prev_sig = None
+        warned = False
+        for rnd in range(6):
+            body = json.dumps({"model": LLM_MODEL or "default",
+                               "messages": msgs,
+                               "temperature": 0.2,
+                               **({"tools": TOOLS} if rnd < 4 else {})})
             req = urllib.request.Request(
                 LLM_BASE.rstrip("/") + "/chat/completions", data=body,
-                headers={"content-type": "application/json"})
+                headers={"content-type": "application/json",
+                     **({"authorization": f"Bearer {LLM_KEY}"}
+                        if LLM_KEY else {})})
             with urllib.request.urlopen(req, timeout=60) as r:
                 j = json.loads(r.read())
             msg = j["choices"][0]["message"]
             calls = msg.get("tool_calls") or []
             if not calls:
-                return msg.get("content", ""), used
+                summary = msg.get("content", "") or summary
+                break
+            # 两层护栏 (业界实践: 重复检测 + 先提醒后熔断)
+            sig = json.dumps([(c["function"]["name"],
+                               c["function"].get("arguments"))
+                              for c in calls], sort_keys=True)
+            if sig == prev_sig:
+                if not warned:            # 层1: 软提醒, 不重复执行
+                    warned = True
+                    msgs.append(msg)
+                    msgs.append({"role": "user", "content":
+                                 "你上一轮已经调用过完全相同的工具并拿到了"
+                                 "结果 (见上方 tool 消息)。不要重复调用 ——"
+                                 "直接基于已有结果用中文回答用户。"})
+                    continue
+                break                     # 层2: 熔断 → 走无 tools 总结
+            prev_sig = sig
             msgs.append(msg)
             for c in calls:
                 fn = c["function"]["name"]
@@ -221,7 +244,22 @@ def _llm(text: str, svc) -> tuple[str, list] | None:
                 used.append({"tool": fn, "arg": v})
                 msgs.append({"role": "tool", "tool_call_id": c["id"],
                              "content": obs})
-        return "（本轮工具调用达到上限）", used
+        if summary == "（本轮工具调用达到上限）" and used:
+            # 熔断收口: 带 tool 结果做一次无 tools 总结请求
+            msgs.append({"role": "user", "content":
+                         "基于以上工具结果, 用中文直接简明回答用户,"
+                         "不要调用任何工具。"})
+            body = json.dumps({"model": LLM_MODEL or "default",
+                               "messages": msgs, "temperature": 0.2})
+            req = urllib.request.Request(
+                LLM_BASE.rstrip("/") + "/chat/completions", data=body,
+                headers={"content-type": "application/json",
+                     **({"authorization": f"Bearer {LLM_KEY}"}
+                        if LLM_KEY else {})})
+            with urllib.request.urlopen(req, timeout=60) as r:
+                j = json.loads(r.read())
+            summary = j["choices"][0]["message"].get("content") or summary
+        return summary, used
     except Exception:
         return None          # LLM 不可达 → 回落规则内核
 

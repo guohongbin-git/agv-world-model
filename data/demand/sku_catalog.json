@@ -1,0 +1,362 @@
+[
+ {
+  "sku": "SKU_20",
+  "abc": "A",
+  "price": 12.2,
+  "demand_mean_day": 45.2,
+  "cv": 0.3,
+  "weight_class": "light",
+  "weight_kg": 0.0279
+ },
+ {
+  "sku": "SKU_1",
+  "abc": "A",
+  "price": 21.3,
+  "demand_mean_day": 44.8,
+  "cv": 0.307,
+  "weight_class": "light",
+  "weight_kg": 0.0274
+ },
+ {
+  "sku": "SKU_3",
+  "abc": "A",
+  "price": 82.6,
+  "demand_mean_day": 43.6,
+  "cv": 0.31,
+  "weight_class": "light",
+  "weight_kg": 0.0292
+ },
+ {
+  "sku": "SKU_4",
+  "abc": "A",
+  "price": 89.65,
+  "demand_mean_day": 42.1,
+  "cv": 0.305,
+  "weight_class": "light",
+  "weight_kg": 0.03
+ },
+ {
+  "sku": "SKU_39",
+  "abc": "A",
+  "price": 76.3,
+  "demand_mean_day": 41.8,
+  "cv": 0.302,
+  "weight_class": "light",
+  "weight_kg": 0.0296
+ },
+ {
+  "sku": "SKU_31",
+  "abc": "A",
+  "price": 89.42,
+  "demand_mean_day": 41.2,
+  "cv": 0.31,
+  "weight_class": "light",
+  "weight_kg": 0.0275
+ },
+ {
+  "sku": "SKU_24",
+  "abc": "A",
+  "price": 19.06,
+  "demand_mean_day": 39.4,
+  "cv": 0.312,
+  "weight_class": "light",
+  "weight_kg": 0.032
+ },
+ {
+  "sku": "SKU_18",
+  "abc": "A",
+  "price": 71.7,
+  "demand_mean_day": 38.6,
+  "cv": 0.304,
+  "weight_class": "light",
+  "weight_kg": 0.0283
+ },
+ {
+  "sku": "SKU_2",
+  "abc": "B",
+  "price": 38.55,
+  "demand_mean_day": 37.9,
+  "cv": 0.315,
+  "weight_class": "mid",
+  "weight_kg": 0.0872
+ },
+ {
+  "sku": "SKU_45",
+  "abc": "B",
+  "price": 27.56,
+  "demand_mean_day": 37.9,
+  "cv": 0.309,
+  "weight_class": "mid",
+  "weight_kg": 0.0783
+ },
+ {
+  "sku": "SKU_21",
+  "abc": "B",
+  "price": 27.45,
+  "demand_mean_day": 37.8,
+  "cv": 0.307,
+  "weight_class": "heavy",
+  "weight_kg": 0.1546
+ },
+ {
+  "sku": "SKU_43",
+  "abc": "B",
+  "price": 37.62,
+  "demand_mean_day": 37.5,
+  "cv": 0.313,
+  "weight_class": "heavy",
+  "weight_kg": 0.1628
+ },
+ {
+  "sku": "SKU_37",
+  "abc": "B",
+  "price": 24.39,
+  "demand_mean_day": 36.3,
+  "cv": 0.316,
+  "weight_class": "light",
+  "weight_kg": 0.0277
+ },
+ {
+  "sku": "SKU_26",
+  "abc": "B",
+  "price": 47.67,
+  "demand_mean_day": 36.3,
+  "cv": 0.311,
+  "weight_class": "light",
+  "weight_kg": 0.0319
+ },
+ {
+  "sku": "SKU_25",
+  "abc": "B",
+  "price": 89.21,
+  "demand_mean_day": 35.6,
+  "cv": 0.303,
+  "weight_class": "light",
+  "weight_kg": 0.0305
+ },
+ {
+  "sku": "SKU_38",
+  "abc": "B",
+  "price": 58.62,
+  "demand_mean_day": 33.5,
+  "cv": 0.312,
+  "weight_class": "mid",
+  "weight_kg": 0.078
+ },
+ {
+  "sku": "SKU_32",
+  "abc": "B",
+  "price": 63.42,
+  "demand_mean_day": 33.0,
+  "cv": 0.308,
+  "weight_class": "mid",
+  "weight_kg": 0.073
+ },
+ {
+  "sku": "SKU_5",
+  "abc": "B",
+  "price": 69.38,
+  "demand_mean_day": 31.9,
+  "cv": 0.31,
+  "weight_class": "light",
+  "weight_kg": 0.0282
+ },
+ {
+  "sku": "SKU_44",
+  "abc": "B",
+  "price": 28.5,
+  "demand_mean_day": 30.5,
+  "cv": 0.311,
+  "weight_class": "mid",
+  "weight_kg": 0.0788
+ },
+ {
+  "sku": "SKU_47",
+  "abc": "B",
+  "price": 97.86,
+  "demand_mean_day": 29.5,
+  "cv": 0.319,
+  "weight_class": "light",
+  "weight_kg": 0.0305
+ },
+ {
+  "sku": "SKU_46",
+  "abc": "C",
+  "price": 98.59,
+  "demand_mean_day": 28.4,
+  "cv": 0.308,
+  "weight_class": "heavy",
+  "weight_kg": 0.1632
+ },
+ {
+  "sku": "SKU_40",
+  "abc": "C",
+  "price": 84.54,
+  "demand_mean_day": 27.7,
+  "cv": 0.31,
+  "weight_class": "heavy",
+  "weight_kg": 0.1768
+ },
+ {
+  "sku": "SKU_11",
+  "abc": "C",
+  "price": 52.2,
+  "demand_mean_day": 24.6,
+  "cv": 0.326,
+  "weight_class": "mid",
+  "weight_kg": 0.0812
+ },
+ {
+  "sku": "SKU_29",
+  "abc": "C",
+  "price": 78.89,
+  "demand_mean_day": 23.7,
+  "cv": 0.318,
+  "weight_class": "heavy",
+  "weight_kg": 0.1828
+ },
+ {
+  "sku": "SKU_14",
+  "abc": "C",
+  "price": 70.38,
+  "demand_mean_day": 23.6,
+  "cv": 0.317,
+  "weight_class": "heavy",
+  "weight_kg": 0.1628
+ },
+ {
+  "sku": "SKU_33",
+  "abc": "C",
+  "price": 41.5,
+  "demand_mean_day": 23.0,
+  "cv": 0.32,
+  "weight_class": "heavy",
+  "weight_kg": 0.157
+ },
+ {
+  "sku": "SKU_36",
+  "abc": "C",
+  "price": 77.01,
+  "demand_mean_day": 22.7,
+  "cv": 0.331,
+  "weight_class": "heavy",
+  "weight_kg": 0.1787
+ },
+ {
+  "sku": "SKU_35",
+  "abc": "C",
+  "price": 36.1,
+  "demand_mean_day": 22.2,
+  "cv": 0.331,
+  "weight_class": "mid",
+  "weight_kg": 0.0798
+ },
+ {
+  "sku": "SKU_15",
+  "abc": "C",
+  "price": 56.62,
+  "demand_mean_day": 21.1,
+  "cv": 0.332,
+  "weight_class": "mid",
+  "weight_kg": 0.0827
+ },
+ {
+  "sku": "SKU_12",
+  "abc": "C",
+  "price": 60.88,
+  "demand_mean_day": 20.7,
+  "cv": 0.337,
+  "weight_class": "heavy",
+  "weight_kg": 0.1725
+ },
+ {
+  "sku": "SKU_8",
+  "abc": "C",
+  "price": 18.75,
+  "demand_mean_day": 18.2,
+  "cv": 0.348,
+  "weight_class": "heavy",
+  "weight_kg": 0.1637
+ },
+ {
+  "sku": "SKU_17",
+  "abc": "C",
+  "price": 62.32,
+  "demand_mean_day": 16.2,
+  "cv": 0.345,
+  "weight_class": "heavy",
+  "weight_kg": 0.1732
+ },
+ {
+  "sku": "SKU_41",
+  "abc": "C",
+  "price": 86.24,
+  "demand_mean_day": 15.6,
+  "cv": 0.354,
+  "weight_class": "heavy",
+  "weight_kg": 0.1685
+ },
+ {
+  "sku": "SKU_30",
+  "abc": "C",
+  "price": 40.97,
+  "demand_mean_day": 15.2,
+  "cv": 0.36,
+  "weight_class": "heavy",
+  "weight_kg": 0.1851
+ },
+ {
+  "sku": "SKU_50",
+  "abc": "C",
+  "price": 92.33,
+  "demand_mean_day": 15.1,
+  "cv": 0.361,
+  "weight_class": "heavy",
+  "weight_kg": 0.1756
+ },
+ {
+  "sku": "SKU_28",
+  "abc": "C",
+  "price": 99.99,
+  "demand_mean_day": 14.1,
+  "cv": 0.376,
+  "weight_class": "mid",
+  "weight_kg": 0.0832
+ },
+ {
+  "sku": "SKU_19",
+  "abc": "C",
+  "price": 40.82,
+  "demand_mean_day": 14.0,
+  "cv": 0.374,
+  "weight_class": "heavy",
+  "weight_kg": 0.1868
+ },
+ {
+  "sku": "SKU_34",
+  "abc": "C",
+  "price": 39.6,
+  "demand_mean_day": 13.7,
+  "cv": 0.369,
+  "weight_class": "heavy",
+  "weight_kg": 0.1627
+ },
+ {
+  "sku": "SKU_49",
+  "abc": "C",
+  "price": 30.29,
+  "demand_mean_day": 12.3,
+  "cv": 0.386,
+  "weight_class": "mid",
+  "weight_kg": 0.0827
+ },
+ {
+  "sku": "SKU_23",
+  "abc": "C",
+  "price": 46.82,
+  "demand_mean_day": 11.5,
+  "cv": 0.389,
+  "weight_class": "mid",
+  "weight_kg": 0.0794
+ }
+]
