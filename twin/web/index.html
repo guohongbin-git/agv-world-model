@@ -113,6 +113,18 @@ cam.position.set(1.75,1.15,-2.0);
 const ctl = new OrbitControls(cam, renderer.domElement);
 ctl.target.set(-0.17,0.28,0); ctl.enableDamping=true; ctl.maxPolarAngle=1.53;
 let nodes = {};
+const coneMesh = new THREE.Mesh(
+  new THREE.ConeGeometry(0.03, 0.09, 20),
+  new THREE.MeshStandardMaterial({color: 0xff6a00, roughness: 0.5}));
+coneMesh.rotation.x = Math.PI;   // 尖朝上
+coneMesh.castShadow = true; coneMesh.visible = false;
+scene.add(coneMesh);
+function updateCones(list){
+  if (!list.length){ coneMesh.visible = false; return; }
+  const [x, y] = list[0];
+  coneMesh.position.set(x, 0.045, -y);
+  coneMesh.visible = true;
+}
 window.__dbg = {err: null, loaded: 0, found: []};
 window.__b.push(5);
 new GLTFLoader().load('agv_twin.glb', g => {
@@ -149,6 +161,7 @@ function apply(s){
   document.querySelectorAll('#sp button').forEach(b=>b.classList.toggle('on', parseFloat(b.dataset.v)===s.speed));
   board(s.board);
   for (const c of s.chat) if (c.seq > chatCur){ chatCur = c.seq; addMsg('agent', c.text); }
+  updateCones(s.cones || []);
   for (const ev of s.events) if (!evSeen.has(ev.eid)){
     evSeen.add(ev.eid);
     const d = document.createElement('div');

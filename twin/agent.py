@@ -46,6 +46,13 @@ TOOLS = [
         "name": "inventory_query", "description": "查询库存板: 货位/托盘/货物/计数",
         "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {
+        "name": "inject_cone", "description": "向巷道注入锥桶障碍 (x 位置)",
+        "parameters": {"type": "object",
+                       "properties": {"value": {"type": "number"}}}}},
+    {"type": "function", "function": {
+        "name": "clear_cone", "description": "移除场景中的锥桶",
+        "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {
         "name": "events_query", "description": "查询最近世界模型事件",
         "parameters": {"type": "object",
                        "properties": {"limit": {"type": "integer"}}}}},
@@ -69,6 +76,10 @@ def _exec(cmd: str, svc, value=None) -> str:
         return json.dumps(svc.board(), ensure_ascii=False)
     if cmd == "task_dispatch":
         return json.dumps(svc.cmd("dispatch", value), ensure_ascii=False)
+    if cmd == "inject_cone":
+        return json.dumps(svc.cmd("inject_cone", value), ensure_ascii=False)
+    if cmd == "clear_cone":
+        return json.dumps(svc.cmd("clear_cone"), ensure_ascii=False)
     if cmd == "events_query":
         rows, ev = svc.events_since(max(0, len(rows0(svc)) - int(value or 5)))
         return json.dumps(ev, ensure_ascii=False)
@@ -117,6 +128,17 @@ def rules(text: str, svc) -> tuple[str, list]:
                           [("PAL-001", "G-001", "L3", "STAGE")]))
             reply = ("任务已下发: PAL-001 下架 A-L3-C1 → H01。执行走判据层,"
                      " 库存只在物理证据成立后提交 —— 看右侧事件流。")
+    elif any(w in t for w in ("移走", "移除", "拿走", "清走", "搬走")):
+        tools.append(("clear_cone", None))
+        reply = ("锥桶已移出场景。F01 会先用 LiDAR 连续确认通道恢复, "
+                 "再重新规划并继续任务 —— 恢复需要感知证据, 不靠一句口令。")
+    elif any(w in t for w in ("锥桶", "障碍", "挡住", "注入")):
+        m2 = re.search(r"(-?\d+\.?\d*)", t)
+        x = float(m2.group(1)) if m2 else -0.25
+        tools.append(("inject_cone", x))
+        reply = (f"已在巷道 x={x:+.2f}m 注入锥桶。这是环境变化 —— "
+                 "如果 F01 正在执行任务, 它的 LiDAR 会自行检测并安全停车, "
+                 "我随后报告处置结果。")
     elif any(w in t for w in ("库存", "多少货", "盘点", "几托", "状态")):
         tools.append(("inventory_query", None))
         b = svc.board()

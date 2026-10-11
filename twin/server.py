@@ -129,8 +129,13 @@ class WorldService:
         self.adapter = PacedForkliftAdapter("F01", cell, self.gate,
                                             capabilities=FORK_CAPS)
         RUNS.mkdir(exist_ok=True)
+        from twin.perception import Lidar
+        self.lidar = Lidar(cell)
+        self.blocked_reason: str | None = None
+        self.cones: list[list[float]] = []
         self.world = World(run_id=RUN_ID,
-                           db_path=str(RUNS / f"{RUN_ID}.sqlite"))
+                           db_path=str(RUNS /
+                                       f"{RUN_ID}-{time.time_ns()}.sqlite"))
         self._seed_ledger()
         with self.gate.lock:
             self.gate.sim0 = float(d.time)
@@ -183,7 +188,10 @@ class WorldService:
         q0x, tz = self.cell.q0_x, k["transport_z"]
 
         def mv(x, v, calm=False, label="", commit=None):
-            return (lambda: self._ramp(ax, qx, x - q0x, v, calm), label, commit)
+            direction = float(np.sign(x - self.cell.axle_x)) or 1.0
+            return (lambda: self._ramp(ax, qx, x - q0x, v, calm,
+                                       watch=direction),
+                    label, commit)
 
         def up(z, v, calm=False, label="", commit=None):
             return (lambda: self._ramp(lf, ql, z - tz, v, calm), label, commit)
@@ -281,7 +289,7 @@ class WorldService:
             self.narrate(f"mission 线程异常: {e!r} — 未提交的事务保持原状。")
 
     def _ramp(self, idx: int, qadr: int, q_target: float,
-              speed: float, calm: bool = False) -> bool:
+              speed: float, calm: bool = False, watch: float = 0.0) -> bool:
         """梯形速度剖面驱动到 q_target (R04 限速语义), 复用 adapter._tick
         (配速/采样/暂停门都在里面)。到位判据 = 位置误差 + 可选全域静止。"""
         from sim.controllers import Ramp
@@ -291,9 +299,18 @@ class WorldService:
         t0 = d.time
         tick = self.adapter._tick
         n = int((ramp.duration + 12.0) * 2000)      # 预算: 行程 + 12s 整定
+        last_check = 0.0
         for _ in range(n):
             d.ctrl[idx] = ramp.at(min(d.time - t0, ramp.duration))
             tick()
+            # P4 行车避障: 每 0.5s 仿真用 LiDAR 检查前方 (观测通道, 禁上帝视角)
+            if watch and d.time - last_check >= 0.5:
+                last_check = d.time
+                dd = self.lidar.front_distance(watch)
+                if dd < 0.12:
+                    with self.gate.lock:
+                        self.blocked_reason = "cone"
+                    return False
             if abs(float(d.qpos[qadr]) - q_target) <= 1e-3:
                 if not calm or float(np.abs(d.qvel).max()) < 5e-3:
                     return True
@@ -314,19 +331,35 @@ class WorldService:
                          f"{self.SLOT_OF[src]} → {self.SLOT_OF[dst]} —")
             for fn, label, commit in steps:
                 i += 1
-                with self.gate.lock:
-                    self.step = i
-                    self.step_label = f"T{n}·{label}"
-                if not fn():
-                    with self.db_lock:
-                        self.world.emit(TASK_ID, "StepFailed",
-                                        {"step": i, "label": label},
-                                        float(d.time))
-                    self.mode = "failed"
-                    self.step_label = f"失败: {label}"
-                    self.narrate(f"步骤 [{label}] FAILED — 不提交事务, "
-                                 "状态保持, 等待人工/agent 决策。")
-                    return
+                attempts = 0
+                while True:
+                    with self.gate.lock:
+                        self.step = i
+                        self.step_label = f"T{n}·{label}"
+                    if not fn():
+                        br = self.blocked_reason
+                        if not br:
+                            break                       # 真失败
+                        # 避障停车: PATH_INFEASIBLE (巷道无法绕行)
+                        with self.db_lock:
+                            self.world.emit(TASK_ID, "ObstacleDetected",
+                                            {"step": i, "label": label,
+                                             "reason": br},
+                                            float(d.time))
+                        self.mode = "blocked"
+                        self.step_label = f"受阻: {label}"
+                        self.narrate("LiDAR 检测到前方障碍, 车辆已安全停车。"
+                                     "原路径 PATH_INFEASIBLE (巷道无法绕行) — "
+                                     "请移除障碍, 我会重新感知并恢复执行。")
+                        while self.blocked_reason and self.mode == "blocked":
+                            time.sleep(0.2)
+                        if self.mode != "blocked":
+                            return                      # reset 打断
+                        attempts += 1
+                        self.narrate(f"重新感知: 通道恢复确认 (第 {attempts} 次"
+                                     "重试), 从当前位姿继续执行。")
+                        continue
+                    break
                 if commit is not None:
                     with self.db_lock:
                         ok = commit()
@@ -388,6 +421,15 @@ class WorldService:
         elif op == "dispatch":
             self.tasks = [tuple(t) for t in (value or [])]
             return self.cmd("start")
+        elif op == "inject_cone":
+            x = float(value if value is not None else -0.25)
+            self.place_cone(x)
+            self.narrate(f"模拟现场注入锥桶 @ x={x:+.2f}m (巷道主通道)。"
+                         "注意: 这是环境变化, 不是任务指令。")
+        elif op == "clear_cone":
+            self.remove_cones()
+            self.narrate("锥桶已移出场景。等待 LiDAR 连续确认通道恢复后"
+                         "才会恢复运动 —— 不会因为一句话就盲目开动。")
         elif op == "reset":
             self.tasks = None
             self.mode = "idle"
@@ -395,6 +437,31 @@ class WorldService:
             self.narrate("已复位: 新 run、账本重播种、与物理初态一致。")
         return {"mode": self.mode, "step": self.step,
                 "label": self.step_label, "speed": self.gate.speed}
+
+    # ---------- 锥桶注入/移除 (mocap) ----------
+    def place_cone(self, x: float) -> None:
+        d = self.cell.data
+        for i, mid in enumerate(self.cell.cone_mocapid):
+            if mid < 0:
+                continue
+            cur = d.mocap_pos[mid]
+            if abs(cur[1]) < 1.0:                     # 场景内已有锥桶
+                continue
+            d.mocap_pos[mid] = [x, 0.0, 0.045]
+            self.cones.append([x, 0.0])
+            with self.db_lock:
+                self.world.emit(TASK_ID, "ConeInjected",
+                                {"x_m": x}, float(d.time))
+            return
+
+    def remove_cones(self) -> None:
+        d = self.cell.data
+        for i, mid in enumerate(self.cell.cone_mocapid):
+            if mid >= 0:
+                d.mocap_pos[mid] = [0.0, 5.0, 0.045]
+        if self.cones:
+            self.cones = []
+            self.blocked_reason = None
 
     # ---------- 输出 ----------
     def narrate(self, text: str) -> None:
@@ -445,6 +512,7 @@ class WorldService:
             "step": self.step, "total": self.steps_total,
             "step_label": self.step_label,
             "events": events, "n_events": len(rows),
+            "cones": self.cones, "blocked": self.blocked_reason,
             "chat": chats, "board": self.board(),
         }
 

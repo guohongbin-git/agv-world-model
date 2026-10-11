@@ -21,14 +21,19 @@ class ForkliftCell:
 
     def __init__(self, timestep_s: float = 0.001, seed: int = 0,
                  support_z: float | None = None,
-                 levels: list[float] | None = None):
+                 levels: list[float] | None = None,
+                 cones: list[tuple[float, float]] | None = None):
         """levels: 多层货架扩展 (P2 多货物), 如 [0.100, 0.250, 0.400]。
         给定则每层各建一组支撑梁 + 一个自由托盘 (pallet / pallet_b / pallet_c),
-        support_z 参数被 levels 覆盖; 不给则保持 S00 单层基准 (T01-T04 测试)。"""
-        self.cfg = load()
+        support_z 参数被 levels 覆盖; 不给则保持 S00 单层基准 (T01-T04 测试)。
+        cones: 巷道锥桶 [(x,y),...], 静态圆柱 r25 h90 (P4 避障/感知)。
+        锥桶实现为 **mocap 体** (cone_0/cone_1): 运行时可经 data.mocap_pos
+        注入/移除 (移除 = 移出场景 y=5), 无需重建模型。"""
         # 支撑面高度可参数化 (T04 三层货位 100/250/400mm)。留空则用设计默认
         # 最高层 —— T01-T03 的单台架基准即此高度。
         self.levels = [float(z) for z in levels] if levels else None
+        self.cone_xy = [tuple(c) for c in (cones or [])][:2]
+        self.cfg = load()
         self.support_z = float(self.cfg["rack"]["support_z_m"][-1]
                                if support_z is None else support_z)
         if self.levels:
@@ -56,6 +61,14 @@ class ForkliftCell:
                                    f"pallet{_sfx}")
             if _b >= 0:
                 self.pallet_bids[f"pallet{_sfx}"] = _b
+        # 锥桶 mocap 地址 (运行时经 data.mocap_pos 注入/移除)
+        self.cone_mocapid = []
+        for i in range(2):
+            b = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, f"cone_{i}")
+            self.cone_mocapid.append(m.body_mocapid[b] if b >= 0 else -1)
+        for i, (cx, cy) in enumerate(self.cone_xy):
+            if self.cone_mocapid[i] >= 0:
+                d.mocap_pos[self.cone_mocapid[i]] = [cx, cy, 0.045]
         self.fork_geoms = [mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, f"fork_{s}")
                            for s in ("l", "r")]
         self.fork_gids = set(self.fork_geoms)
@@ -138,6 +151,15 @@ class ForkliftCell:
                 f'rgba="0.80 0.42 0.10 1"/>\n')
             extra_pal += self._pal_block(f"pallet{sfx}", z + 0.001, sfx)
         nc = 200 + 150 * max(0, len(lv) - 1)
+        cones_xml = ""
+        for i in range(2):
+            cx, cy = self.cone_xy[i] if i < len(self.cone_xy) else (0.0, 5.0)
+            cones_xml += (f'    <body name="cone_{i}" mocap="true" '
+                          f'pos="{cx} {cy} 0.045">\n'
+                          f'      <geom name="cone_{i}" type="cylinder" '
+                          f'size="0.025 0.045" rgba="0.95 0.45 0.05 1" '
+                          f'friction="0.8 0.005 0.0001"/>\n'
+                          f'    </body>\n')
         return f"""
 <mujoco model="S00_bench">
   <!-- MuJoCo 3.15 起 <compiler angle> 默认为 degree; 本项目统一 SI 弧度 -->
@@ -222,6 +244,7 @@ class ForkliftCell:
            使 support_load_ratio('beam') 长期读到非零值而误判托盘仍压梁。 -->
     </body>
 {extra_pal}
+{cones_xml}
     <!-- 叉车: 平面底盘(滑动x+铰z) + 升降滑轨; T05 稳定性另用自由体变体 -->
     <body name="chassis" pos="{k['start_axle_x']} 0 0">
       <!-- 行程上限须覆盖满插入深度: 插叉深 65mm 指**叉尖**越过托盘近边,
