@@ -100,8 +100,15 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 el('stage').appendChild(renderer.domElement);
 window.__b.push(3);
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x14181d);
-scene.fog = new THREE.Fog(0x14181d, 4, 14);
+scene.background = new THREE.Color(0x30343a);
+scene.fog = new THREE.Fog(0x30343a, 6, 26);
+// 大地面垫层: 场地外视野不再露出黑背景 (视觉铺满)
+const groundPad = new THREE.Mesh(
+  new THREE.PlaneGeometry(60, 60),
+  new THREE.MeshStandardMaterial({color: 0x30343a, roughness: 0.95}));
+groundPad.rotation.x = -Math.PI/2; groundPad.position.y = -0.002;
+groundPad.receiveShadow = true;
+scene.add(groundPad);
 scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
 window.__b.push(4);
 const sun = new THREE.DirectionalLight(0xfff2e0, 2.4);
