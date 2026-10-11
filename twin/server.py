@@ -129,8 +129,13 @@ class WorldService:
         self.adapter = PacedForkliftAdapter("F01", cell, self.gate,
                                             capabilities=FORK_CAPS)
         RUNS.mkdir(exist_ok=True)
+        from twin.memory import DecisionMemory
         from twin.perception import Lidar
         self.lidar = Lidar(cell)
+        self.memory = DecisionMemory(RUNS / "decision_memory.jsonl")
+        self._blocked_sig: str | None = None
+        self._blocked_t0: float | None = None
+        self._blocked_retries = 0
         self.blocked_reason: str | None = None
         self.cones: list[list[float]] = []
         self.world = World(run_id=RUN_ID,
@@ -348,17 +353,35 @@ class WorldService:
                                             float(d.time))
                         self.mode = "blocked"
                         self.step_label = f"受阻: {label}"
+                        obs_x = self.cones[0][0] if self.cones else None
+                        self._blocked_sig = self.memory.signature(
+                            br, label, obs_x)
+                        self._blocked_t0 = time.monotonic()
+                        self._blocked_retries = 0
                         self.narrate("LiDAR 检测到前方障碍, 车辆已安全停车。"
                                      "原路径 PATH_INFEASIBLE (巷道无法绕行) — "
                                      "请移除障碍, 我会重新感知并恢复执行。")
+                        hint = self.memory.hint(self._blocked_sig)
+                        if hint:
+                            self.narrate(hint)
                         while self.blocked_reason and self.mode == "blocked":
                             time.sleep(0.2)
                         if self.mode != "blocked":
                             return                      # reset 打断
                         attempts += 1
+                        self._blocked_retries = attempts
                         self.narrate(f"重新感知: 通道恢复确认 (第 {attempts} 次"
                                      "重试), 从当前位姿继续执行。")
                         continue
+                    # 恢复成功 -> 记录决策经验 (Paper II)
+                    if self._blocked_sig and attempts:
+                        self.memory.record(
+                            self._blocked_sig,
+                            ["remove_obstacle(user)", "lidar_recheck"],
+                            "recovered",
+                            time.monotonic() - (self._blocked_t0 or 0),
+                            self._blocked_retries)
+                        self._blocked_sig = None
                     break
                 if commit is not None:
                     with self.db_lock:
