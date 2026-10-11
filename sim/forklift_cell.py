@@ -20,12 +20,19 @@ class ForkliftCell:
     """S00: 单叉车 + 单托盘 + 400mm 支撑面。坐标: 托盘中心=原点, 车沿 -X 侧接近。"""
 
     def __init__(self, timestep_s: float = 0.001, seed: int = 0,
-                 support_z: float | None = None):
+                 support_z: float | None = None,
+                 levels: list[float] | None = None):
+        """levels: 多层货架扩展 (P2 多货物), 如 [0.100, 0.250, 0.400]。
+        给定则每层各建一组支撑梁 + 一个自由托盘 (pallet / pallet_b / pallet_c),
+        support_z 参数被 levels 覆盖; 不给则保持 S00 单层基准 (T01-T04 测试)。"""
         self.cfg = load()
         # 支撑面高度可参数化 (T04 三层货位 100/250/400mm)。留空则用设计默认
         # 最高层 —— T01-T03 的单台架基准即此高度。
+        self.levels = [float(z) for z in levels] if levels else None
         self.support_z = float(self.cfg["rack"]["support_z_m"][-1]
                                if support_z is None else support_z)
+        if self.levels:
+            self.support_z = self.levels[-1]
         self.model = mujoco.MjModel.from_xml_string(self._xml(timestep_s))
         self.data = mujoco.MjData(self.model)
         mujoco.mj_forward(self.model, self.data)
@@ -42,6 +49,13 @@ class ForkliftCell:
         self.q0_x = float(self.model.body_pos[
             mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, "chassis")][0])
         self.pallet_bid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, "pallet")
+        # 多层扩展 (levels): 附加托盘 id 表 (基准 pallet 之外)
+        self.pallet_bids = {"pallet": self.pallet_bid}
+        for _sfx in ("_b", "_c", "_d"):
+            _b = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY,
+                                   f"pallet{_sfx}")
+            if _b >= 0:
+                self.pallet_bids[f"pallet{_sfx}"] = _b
         self.fork_geoms = [mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, f"fork_{s}")
                            for s in ("l", "r")]
         self.fork_gids = set(self.fork_geoms)
@@ -89,16 +103,48 @@ class ForkliftCell:
         }
 
     # ---------- MJCF ----------
+    def _pal_block(self, name: str, z: float, sfx: str) -> str:
+        """标准托盘自由体 XML (底条×3 + 通道顶壁×2 + 顶板×3), geom 名加后缀。"""
+        return f"""
+    <body name="{name}" pos="0 0 {z}">
+      <freejoint name="pal{sfx}"/>
+      <geom name="pal_bottom_l{sfx}" type="box" pos="0 -0.027 0.002" size="0.040 0.003 0.002" mass="0.006" rgba="0.55 0.40 0.22 1"/>
+      <geom name="pal_bottom_r{sfx}" type="box" pos="0 0.027 0.002" size="0.040 0.003 0.002" mass="0.006" rgba="0.55 0.40 0.22 1"/>
+      <geom name="pal_bottom_c{sfx}" type="box" pos="0 0 0.002" size="0.040 0.006 0.002" mass="0.010" rgba="0.55 0.40 0.22 1"/>
+      <geom name="ceil_l{sfx}" type="box" pos="0 -0.015 0.0135" size="0.040 0.007 0.0015"
+            mass="0.008" friction="1.4 0.005 0.0001" rgba="0.72 0.55 0.32 1"/>
+      <geom name="ceil_r{sfx}" type="box" pos="0 0.015 0.0135" size="0.040 0.007 0.0015"
+            mass="0.008" friction="1.4 0.005 0.0001" rgba="0.72 0.55 0.32 1"/>
+      <geom name="top_side_l{sfx}" type="box" pos="0 -0.027 0.0175" size="0.040 0.003 0.0025" mass="0.002" rgba="0.78 0.62 0.38 1"/>
+      <geom name="top_side_r{sfx}" type="box" pos="0 0.027 0.0175" size="0.040 0.003 0.0025" mass="0.002" rgba="0.78 0.62 0.38 1"/>
+      <geom name="top_mid{sfx}" type="box" pos="0 0 0.017" size="0.040 0.008 0.001" mass="0.002" rgba="0.78 0.62 0.38 1"/>
+    </body>"""
+
     def _xml(self, dt: float) -> str:
         k = self.k
-        # 托盘: 三条底条(z0-4) + 顶板(z12-18) + 背块; 总 45g
+        lv = self.levels or []
+        extra_sup, extra_pal = "", ""
+        for i, z in enumerate(lv[:-1]):        # 最高层 = 基准 pallet
+            sfx = ("_b", "_c", "_d")[i]
+            extra_sup += (
+                f'    <geom name="support_l{sfx}" type="box" pos="0 -0.027 '
+                f'{z - 0.0025}" size="0.20 0.003 0.0025" '
+                f'rgba="0.80 0.42 0.10 1"/>\n'
+                f'    <geom name="support_c{sfx}" type="box" pos="0 0 '
+                f'{z - 0.0025}" size="0.20 0.006 0.0025" '
+                f'rgba="0.80 0.42 0.10 1"/>\n'
+                f'    <geom name="support_r{sfx}" type="box" pos="0 0.027 '
+                f'{z - 0.0025}" size="0.20 0.003 0.0025" '
+                f'rgba="0.80 0.42 0.10 1"/>\n')
+            extra_pal += self._pal_block(f"pallet{sfx}", z + 0.001, sfx)
+        nc = 200 + 150 * max(0, len(lv) - 1)
         return f"""
 <mujoco model="S00_bench">
   <!-- MuJoCo 3.15 起 <compiler angle> 默认为 degree; 本项目统一 SI 弧度 -->
   <compiler angle="radian"/>
   <option timestep="{dt}" gravity="0 0 -9.81" iterations="200"
           tolerance="1e-10" noslip_iterations="30" noslip_tolerance="1e-8"/>
-  <size nconmax="200" njmax="300"/>
+  <size nconmax="{nc}" njmax="300"/>
   <visual>
     <global offwidth="1920" offheight="1080"/>   <!-- 离屏帧缓冲 (纯视觉) -->
     <headlight diffuse="0.45 0.45 0.48" specular="0.1 0.1 0.1"/>
@@ -139,6 +185,7 @@ class ForkliftCell:
     <geom name="support_l" type="box" pos="0 -0.027 {k['support_z'] - 0.0025}" size="0.20 0.003 0.0025" rgba="0.80 0.42 0.10 1"/>
     <geom name="support_c" type="box" pos="0 0 {k['support_z'] - 0.0025}" size="0.20 0.006 0.0025" rgba="0.80 0.42 0.10 1"/>
     <geom name="support_r" type="box" pos="0 0.027 {k['support_z'] - 0.0025}" size="0.20 0.003 0.0025" rgba="0.80 0.42 0.10 1"/>
+{extra_sup}
     <!-- 暂存站 (T03 第二货位): 台面顶 z=45mm; 台下净空 z=0..44mm 供底盘(宽±75mm)通过,
          立柱 y=±85mm 在底盘宽度之外; 叉(±20mm)从台下中心贯通 -->
     <geom name="stage_top" type="box" pos="-0.340 0 0.0445" size="0.060 0.050 0.0005" rgba="0.32 0.46 0.52 1"/>
@@ -171,6 +218,7 @@ class ForkliftCell:
            原先有 pal_back_l/r 两块 condim=1 挡块, 压在货架横梁上,
            使 support_load_ratio('beam') 长期读到非零值而误判托盘仍压梁。 -->
     </body>
+{extra_pal}
     <!-- 叉车: 平面底盘(滑动x+铰z) + 升降滑轨; T05 稳定性另用自由体变体 -->
     <body name="chassis" pos="{k['start_axle_x']} 0 0">
       <!-- 行程上限须覆盖满插入深度: 插叉深 65mm 指**叉尖**越过托盘近边,
