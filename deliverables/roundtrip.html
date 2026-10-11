@@ -29,11 +29,15 @@
 <body>
 <div class="wrap">
   <h1><span class="tag">T04</span> 三层取放闭环 · 物理回放</h1>
-  <div class="sub">单叉车：第三层取托 → 暂存站放托，11 段梯形速度剖面轨迹。两段视频**同一份 MuJoCo 位姿数据**驱动，画面里每个位姿都是 <code>mj_step</code> 积分出来的，不是动画。</div>
+  <div class="sub">单叉车：第三层取托 → 暂存站放托，11 段梯形速度剖面轨迹。三段视频<b>同一份 MuJoCo 位姿数据</b>驱动，画面里每个位姿都是 <code>mj_step</code> 积分出来的，不是动画。实时交互版见 <code>/twin/</code> 世界模型服务（agent 唯一指令入口）。</div>
 
-  <h2>照片级（Blender Cycles · 真实设备等比缩小模型）</h2>
+  <h2>投资人版 · 无人叉车 AGV（Blender Cycles · 生产级形态）</h2>
+  <video src="roundtrip_agv.mp4" controls preload="metadata"></video>
+  <div class="sub" style="margin-top:8px">真实 selective rack（立柱在巷道开口、横梁沿深度、托盘纵梁横跨双梁）+ 无人叉车（激光安全扫描仪/顶置 LiDAR/琥珀警示灯/急停/双级门架/油缸联动/调叉钩臂）+ 抛光地坪伸缩缝 + 磨损标线 + 斑马警示带；包络严格 = <code>configs/design.yaml</code>。</div>
+
+  <h2>照片级 v1（Blender Cycles · 等比缩小模型）</h2>
   <video src="roundtrip_photoreal.mp4" controls preload="metadata"></video>
-  <div class="sub" style="margin-top:8px">叉车/货架/托盘/纸箱均按真实设备形态建模，外形包络严格等于 <code>configs/design.yaml</code> 碰撞尺寸；ambientCG PBR 贴图 + 边缘掉漆 + 景深 + AgX。</div>
+  <div class="sub" style="margin-top:8px">叉车/货架/托盘/纸箱按真实设备形态建模，ambientCG PBR 贴图 + 边缘掉漆 + 景深 + AgX。</div>
 
   <h2>白模（MuJoCo 离屏渲染）</h2>
   <video src="roundtrip.mp4" controls preload="metadata"></video>
