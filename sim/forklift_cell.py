@@ -10,25 +10,100 @@
 """
 from __future__ import annotations
 
+import re
+
 import mujoco
 import numpy as np
 
 from configs.loader import load  # 参数单一来源
 
 
+class VehicleView:
+    """多车参数化后的**单车轻量视图** (per-车量只读句柄)。
+
+    ForkliftCell 的 XML 中每辆车的可动部分以 ``<vid>_`` 前缀命名, 顶层
+    ``a_x``/``qadr_x``/``axle_x`` 等属性固定指向**首车**以保持单车 API
+    兼容; 其它车辆经 ``cell.vehicle(vid)`` 取本视图。共享量 (model/data/
+    pallet/rack/接触审计) 留在 cell 顶层, 不在此重复暴露。
+    """
+
+    __slots__ = ("cell", "vid", "j_x", "j_lift", "qadr_x", "qadr_lift",
+                 "a_x", "a_lift", "q0_x", "fork_geoms")
+
+    def __init__(self, cell: "ForkliftCell", vid: str,
+                 j_x: int, j_lift: int, qadr_x: int, qadr_lift: int,
+                 a_x: int, a_lift: int, q0_x: float,
+                 fork_geoms: tuple[int, int]):
+        self.cell = cell
+        self.vid = vid
+        self.j_x = j_x
+        self.j_lift = j_lift
+        self.qadr_x = qadr_x
+        self.qadr_lift = qadr_lift
+        self.a_x = a_x
+        self.a_lift = a_lift
+        self.q0_x = q0_x
+        self.fork_geoms = fork_geoms
+
+    @property
+    def fork_gids(self) -> set[int]:
+        return set(self.fork_geoms)
+
+    @property
+    def start_axle_x(self) -> float:
+        """本车初始前轴 x (chassis body_pos[0]); 编队错位见 _start_axle_x。"""
+        return self.q0_x
+
+    @property
+    def axle_x(self) -> float:
+        return self.q0_x + float(self.cell.data.qpos[self.qadr_x])
+
+    @property
+    def fork_top_z(self) -> float:
+        return 0.065 + float(self.cell.data.qpos[self.qadr_lift])
+
+    def fork_tip_x(self) -> float:
+        return self.axle_x + self.cell.k["fork_root_x"] + self.cell.k["fork_len"]
+
+    def __repr__(self) -> str:
+        return (f"<VehicleView {self.vid} axle_x={self.axle_x:+.3f} "
+                f"fork_top_z={self.fork_top_z:.3f}>")
+
+
 class ForkliftCell:
-    """S00: 单叉车 + 单托盘 + 400mm 支撑面。坐标: 托盘中心=原点, 车沿 -X 侧接近。"""
+    """S00: N 辆叉车 + 单托盘 + 400mm 支撑面。坐标: 托盘中心=原点, 车沿 -X 侧接近。
+
+    多车参数化 (P3 双车交接前置): ``vehicles=["F01","F02"]`` 在同一巷道
+    生成 N 辆同规格车, 每辆车的可动部分 (chassis body 树 + drive_x/lift
+    执行器) 在 XML 中以 ``<vid>_`` 前缀命名; 静态环境 (地面/货架/暂存台/
+    托盘) 只有一份共享。后车沿 -X 依次后撤停放, 见 ``_start_axle_x``。
+    ``vehicles`` 缺省为 ``["F01"]``, 与参数化前的单车行为逐位一致;
+    顶层 ``a_x``/``qadr_x`` 等属性固定指向**首车**以保持单车 API 兼容,
+    其它车辆经 ``cell.vehicle(vid)`` 取 :class:`VehicleView` 视图。
+    """
 
     def __init__(self, timestep_s: float = 0.001, seed: int = 0,
                  support_z: float | None = None,
                  levels: list[float] | None = None,
-                 cones: list[tuple[float, float]] | None = None):
+                 cones: list[tuple[float, float]] | None = None,
+                 vehicles: list[str] | None = None):
         """levels: 多层货架扩展 (P2 多货物), 如 [0.100, 0.250, 0.400]。
         给定则每层各建一组支撑梁 + 一个自由托盘 (pallet / pallet_b / pallet_c),
         support_z 参数被 levels 覆盖; 不给则保持 S00 单层基准 (T01-T04 测试)。
         cones: 巷道锥桶 [(x,y),...], 静态圆柱 r25 h90 (P4 避障/感知)。
         锥桶实现为 **mocap 体** (cone_0/cone_1): 运行时可经 data.mocap_pos
-        注入/移除 (移除 = 移出场景 y=5), 无需重建模型。"""
+        注入/移除 (移除 = 移出场景 y=5), 无需重建模型。
+        vehicles: 编队车辆 id (F01/F02/...), id 仅允许 [A-Za-z0-9_] 且不得
+        重复 (id 直接进 MuJoCo 元素名); None = ["F01"] 单车基准。"""
+        # --- 编队参数 (须在建模前定, XML 按车辆数生成) ---
+        self.vehicles = ["F01"] if vehicles is None else [str(v) for v in vehicles]
+        if not self.vehicles:
+            raise ValueError("vehicles 不能为空列表")
+        _bad = [v for v in self.vehicles if not re.fullmatch(r"[A-Za-z0-9_]+", v)]
+        if _bad:
+            raise ValueError(f"车辆 id 只允许 [A-Za-z0-9_] (进 MuJoCo 名): {_bad}")
+        if len(set(self.vehicles)) != len(self.vehicles):
+            raise ValueError(f"车辆 id 重复: {self.vehicles}")
         # 支撑面高度可参数化 (T04 三层货位 100/250/400mm)。留空则用设计默认
         # 最高层 —— T01-T03 的单台架基准即此高度。
         self.levels = [float(z) for z in levels] if levels else None
@@ -42,17 +117,22 @@ class ForkliftCell:
         self.data = mujoco.MjData(self.model)
         mujoco.mj_forward(self.model, self.data)
         self.rng = np.random.default_rng(seed)
-        # 关键 id
+        # 关键 id —— 每车一份 (movable 部分以 <vid>_ 前缀命名, 见 _vehicle_xml)
         m, d = self.model, self.data
-        self.j_x = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_JOINT, "chassis_x")
-        self.j_lift = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_JOINT, "lift")
-        self.qadr_x = m.jnt_qposadr[self.j_x]     # qpos 按地址, 非关节id
-        self.qadr_lift = m.jnt_qposadr[self.j_lift]
-        self.a_x = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_ACTUATOR, "drive_x")
-        self.a_lift = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_ACTUATOR, "lift")
-        # chassis_x 的 q 是相对车体初始位姿的位移; 初始 x=-0.215
-        self.q0_x = float(self.model.body_pos[
-            mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, "chassis")][0])
+        self._veh: dict[str, VehicleView] = {
+            vid: self._vehicle_ids(vid) for vid in self.vehicles}
+        # 单车 API 兼容: 顶层属性 = 首车 (缺省即唯一车 F01) 的 id。
+        _v0 = self._veh[self.vehicles[0]]
+        self.j_x = _v0.j_x
+        self.j_lift = _v0.j_lift
+        self.qadr_x = _v0.qadr_x
+        self.qadr_lift = _v0.qadr_lift
+        self.a_x = _v0.a_x
+        self.a_lift = _v0.a_lift
+        # chassis_x 的 q 是相对车体初始位姿的位移; 初始 x=该车的 start_axle_x
+        self.q0_x = _v0.q0_x
+        self.fork_geoms = list(_v0.fork_geoms)
+        self.fork_gids = set(_v0.fork_geoms)
         self.pallet_bid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, "pallet")
         # 多层扩展 (levels): 附加托盘 id 表 (基准 pallet 之外)
         self.pallet_bids = {"pallet": self.pallet_bid}
@@ -69,9 +149,6 @@ class ForkliftCell:
         for i, (cx, cy) in enumerate(self.cone_xy):
             if self.cone_mocapid[i] >= 0:
                 d.mocap_pos[self.cone_mocapid[i]] = [cx, cy, 0.045]
-        self.fork_geoms = [mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, f"fork_{s}")
-                           for s in ("l", "r")]
-        self.fork_gids = set(self.fork_geoms)
         self.pallet_geoms = [mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, g)
                              for g in ("pal_bottom_l", "pal_bottom_r", "pal_bottom_c",
                                        "ceil_l", "ceil_r", "top_side_l", "top_side_r",
@@ -80,6 +157,54 @@ class ForkliftCell:
                              for g in ("support_l", "support_c", "support_r", "stage_top")]
         self.floor_gid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, "floor")
         self._ctrl_target = np.zeros(2)  # [x, lift] 位置目标
+
+    # ---------- 多车编队 ----------
+    def vehicle(self, vid: str) -> VehicleView:
+        """按车辆 id 取单车视图 (per-车量: a_x/axle_x/fork_top_z/...)。"""
+        try:
+            return self._veh[vid]
+        except KeyError:
+            raise KeyError(f"未知车辆 {vid!r}; 已编入: {self.vehicles}") from None
+
+    def _start_axle_x(self, i: int) -> float:
+        """车 i 的初始前轴 x —— P3 编队同巷道错位停放。
+
+        车体包络相对前轴: 最后端 = 配重后缘 axle−0.21m, 最前端 = 叉尖
+        axle+0.12m (fork_root 0.040 + fork_len 0.080), 全长 0.33m。
+        纵队取 k["vehicle_spacing"]=0.40m → 相邻两车初始净空 ≥70mm,
+        初始位姿零重叠 (双车 smoke 实测)。F01 (i=0) **精确取**
+        k["start_axle_x"] (抬升安全轴), 单车初始位姿与参数化前逐位一致;
+        车 i 后撤 i×0.40m。后续车初始更靠后, chassis_x 的关节 range
+        (−0.8..+0.65, 位移量) 仍按单车工作包络设置 —— 后车开到货架前
+        所需的 range 放宽属 P3 交接波, 本波不改。
+        """
+        return self.k["start_axle_x"] - i * self.k["vehicle_spacing"]
+
+    def _vehicle_ids(self, vid: str) -> VehicleView:
+        """解析单车 `<vid>_` 前缀的全部关键 id (找不到即抛错, 不静默 −1)。"""
+        m = self.model
+        T = mujoco.mjtObj
+
+        def _id(kind, name):
+            i = mujoco.mj_name2id(m, kind, name)
+            if i < 0:
+                raise KeyError(f"模型中找不到 {name!r} (车辆 {vid}) —— "
+                               f"XML 模板与 id 缓存不同步")
+            return i
+
+        j_x = _id(T.mjOBJ_JOINT, f"{vid}_chassis_x")
+        j_lift = _id(T.mjOBJ_JOINT, f"{vid}_lift")
+        return VehicleView(
+            cell=self, vid=vid,
+            j_x=j_x, j_lift=j_lift,
+            qadr_x=m.jnt_qposadr[j_x],      # qpos 按地址, 非关节id
+            qadr_lift=m.jnt_qposadr[j_lift],
+            a_x=_id(T.mjOBJ_ACTUATOR, f"{vid}_drive_x"),
+            a_lift=_id(T.mjOBJ_ACTUATOR, f"{vid}_lift"),
+            q0_x=float(m.body_pos[_id(T.mjOBJ_BODY, f"{vid}_chassis")][0]),
+            fork_geoms=(_id(T.mjOBJ_GEOM, f"{vid}_fork_l"),
+                        _id(T.mjOBJ_GEOM, f"{vid}_fork_r")),
+        )
 
     # ---------- 几何常量 (由 design.yaml 派生, mm→m) ----------
     #
@@ -113,6 +238,10 @@ class ForkliftCell:
             "lift_travel": 0.385,        # 叉顶 65→450
             "channel_top_local": 0.012,  # 通道顶壁底面(托盘局部), 仅作净空校核
             "start_axle_x": -0.560,      # 抬升安全轴: 全程无干涉
+            # 多车同巷道纵队间距: 车体包络相对前轴 [−0.21, +0.12] 全长 0.33m
+            # (配重后缘→叉尖), 0.40m 间距使相邻两车初始净空 ≥70mm, 零重叠。
+            # 见 _start_axle_x。
+            "vehicle_spacing": 0.40,
         }
 
     # ---------- MJCF ----------
@@ -133,6 +262,62 @@ class ForkliftCell:
       <geom name="top_mid{sfx}" type="box" pos="0 0 0.017" size="0.040 0.008 0.001" mass="0.002" rgba="0.78 0.62 0.38 1"/>
     </body>"""
 
+    def _vehicle_xml(self, vid: str, axle0: float) -> str:
+        """单车可动部分 XML (chassis body 树), 全部 body/geom/joint 名加
+        ``<vid>_`` 前缀 —— MuJoCo 名字全局唯一, 多车同名即编译失败。
+
+        静态环境 (地面/货架/暂存台/托盘) 不在本块, N 车共享一份。
+        与单车的唯一差异是 chassis 初始 pos (=axle0, 见 _start_axle_x);
+        关节/执行器/几何参数与单车完全一致。
+        """
+        k = self.k
+        p = f"{vid}_"
+        return f"""
+    <!-- 车辆 {vid}: 平面底盘(滑动x+铰z) + 升降滑轨; 初始前轴 x={axle0:.3f} -->
+    <body name="{p}chassis" pos="{axle0} 0 0">
+      <!-- 行程上限须覆盖满插入深度: 插叉深 65mm 指**叉尖**越过托盘近边,
+           axle 到 -95mm, qpos = -95-(-560) = +465mm。原 range 上限 +500mm
+           曾把 axle 挡在 -60mm (按叉根算的错误插深), 托盘抬不起来。 -->
+      <joint name="{p}chassis_x" type="slide" axis="1 0 0" range="-0.8 0.65" damping="20"/>
+      <joint name="{p}chassis_yaw" type="hinge" axis="0 0 1" range="-0.2 0.2" damping="5"/>
+      <geom name="{p}chassis_body" type="box" pos="-0.085 0 0.0175"
+            size="0.110 0.075 0.0175" mass="1.50" rgba="0.90 0.66 0.05 1"/>
+      <geom name="{p}counterweight" type="box" pos="-0.20 0 0.0175"
+            size="0.010 0.060 0.0175" mass="0.0" rgba="0.18 0.18 0.20 1"/>
+      <!-- 装饰门架 (contype=0 纯视觉): 双导轨 + 顶横梁, 叉车轮廓 -->
+      <geom name="{p}mast_l" type="box" pos="0.005 -0.045 0.25" size="0.006 0.006 0.25"
+            mass="0" rgba="0.30 0.32 0.36 1" contype="0" conaffinity="0"/>
+      <geom name="{p}mast_r" type="box" pos="0.005 0.045 0.25" size="0.006 0.006 0.25"
+            mass="0" rgba="0.30 0.32 0.36 1" contype="0" conaffinity="0"/>
+      <geom name="{p}mast_top" type="box" pos="0.005 0 0.497" size="0.008 0.051 0.006"
+            mass="0" rgba="0.30 0.32 0.36 1" contype="0" conaffinity="0"/>
+      <body name="{p}carriage" pos="0 0 0">
+        <joint name="{p}lift" type="slide" axis="0 0 1" range="-0.050 {k['lift_travel']}" damping="60"/>
+        <!-- 背板 (托盘后立面挡板), 分两片置于 y∈[8,22]/[-22,-8] —— 与叉孔
+           通道顶壁 ceil_l/r 同 y, 即三条支撑横梁 (y=0±6, ±27±3) 之间的空隙:
+           - 整片 y±60 的背板升到第三层必撞横梁下沿 (实测 support_*↔背板
+             12 个接触, ctrl 打满 +5N 而 qpos 锁死 319mm, 叉顶卡 384mm);
+           - 背板还须**高于叉顶**: 放托时叉顶降到台面 45+12=57mm, 若背板
+             在叉下方会先压上暂存台面 (实测承 2.07N 整叉架重量, 叉顶死锁)。
+           两片与 ceil_l/r 接触即可阻止托盘滑向车 (刚性连接)。 -->
+        <geom name="{p}carriage_plate_l" type="box" pos="0.020 -0.015 0.068"
+              size="0.010 0.007 0.008" mass="0.125" rgba="0.35 0.36 0.40 1"/>
+        <geom name="{p}carriage_plate_r" type="box" pos="0.020 0.015 0.068"
+              size="0.010 0.007 0.008" mass="0.125" rgba="0.35 0.36 0.40 1"/>
+        <geom name="{p}fork_l" type="box" pos="{k['fork_root_x'] + k['fork_len']/2} -0.015 {k['transport_z'] - 0.00125}"
+              size="{k['fork_len']/2} 0.005 0.00125" mass="0.02" friction="1.4 0.02 0.0002" rgba="0.15 0.15 0.17 1"/>
+        <geom name="{p}fork_r" type="box" pos="{k['fork_root_x'] + k['fork_len']/2} 0.015 {k['transport_z'] - 0.00125}"
+              size="{k['fork_len']/2} 0.005 0.00125" mass="0.02" friction="1.4 0.02 0.0002" rgba="0.15 0.15 0.17 1"/>
+      </body>
+    </body>"""
+
+    def _vehicle_actuators_xml(self, vid: str) -> str:
+        """单车两个位置执行器 (行车/升降), 同样按 `<vid>_` 前缀命名。"""
+        p = f"{vid}_"
+        return f"""
+    <position name="{p}drive_x" joint="{p}chassis_x" kp="800" forcerange="-20 20"/>
+    <position name="{p}lift" joint="{p}lift" kp="10000" forcerange="-5 5"/>"""
+
     def _xml(self, dt: float) -> str:
         k = self.k
         lv = self.levels or []
@@ -150,7 +335,7 @@ class ForkliftCell:
                 f'{z - 0.0025}" size="0.046 0.003 0.0025" '
                 f'rgba="0.80 0.42 0.10 1"/>\n')
             extra_pal += self._pal_block(f"pallet{sfx}", z + 0.001, sfx)
-        nc = 200 + 150 * max(0, len(lv) - 1)
+        nc = 200 + 150 * max(0, len(lv) - 1) + 120 * (len(self.vehicles) - 1)
         cones_xml = ""
         for i in range(2):
             cx, cy = self.cone_xy[i] if i < len(self.cone_xy) else (0.0, 5.0)
@@ -160,6 +345,12 @@ class ForkliftCell:
                           f'size="0.025 0.045" rgba="0.95 0.45 0.05 1" '
                           f'friction="0.8 0.005 0.0001"/>\n'
                           f'    </body>\n')
+        # 每辆车一份可动块 + 执行器; 静态环境 (上方全部) 只有一份共享
+        vehicles_xml = "".join(
+            self._vehicle_xml(vid, self._start_axle_x(i))
+            for i, vid in enumerate(self.vehicles))
+        actuators_xml = "".join(self._vehicle_actuators_xml(vid)
+                                for vid in self.vehicles)
         return f"""
 <mujoco model="S00_bench">
   <!-- MuJoCo 3.15 起 <compiler angle> 默认为 degree; 本项目统一 SI 弧度 -->
@@ -245,47 +436,9 @@ class ForkliftCell:
     </body>
 {extra_pal}
 {cones_xml}
-    <!-- 叉车: 平面底盘(滑动x+铰z) + 升降滑轨; T05 稳定性另用自由体变体 -->
-    <body name="chassis" pos="{k['start_axle_x']} 0 0">
-      <!-- 行程上限须覆盖满插入深度: 插叉深 65mm 指**叉尖**越过托盘近边,
-           axle 到 -95mm, qpos = -95-(-560) = +465mm。原 range 上限 +500mm
-           曾把 axle 挡在 -60mm (按叉根算的错误插深), 托盘抬不起来。 -->
-      <joint name="chassis_x" type="slide" axis="1 0 0" range="-0.8 0.65" damping="20"/>
-      <joint name="chassis_yaw" type="hinge" axis="0 0 1" range="-0.2 0.2" damping="5"/>
-      <geom name="chassis_body" type="box" pos="-0.085 0 0.0175"
-            size="0.110 0.075 0.0175" mass="1.50" rgba="0.90 0.66 0.05 1"/>
-      <geom name="counterweight" type="box" pos="-0.20 0 0.0175"
-            size="0.010 0.060 0.0175" mass="0.0" rgba="0.18 0.18 0.20 1"/>
-      <!-- 装饰门架 (contype=0 纯视觉): 双导轨 + 顶横梁, 叉车轮廓 -->
-      <geom name="mast_l" type="box" pos="0.005 -0.045 0.25" size="0.006 0.006 0.25"
-            mass="0" rgba="0.30 0.32 0.36 1" contype="0" conaffinity="0"/>
-      <geom name="mast_r" type="box" pos="0.005 0.045 0.25" size="0.006 0.006 0.25"
-            mass="0" rgba="0.30 0.32 0.36 1" contype="0" conaffinity="0"/>
-      <geom name="mast_top" type="box" pos="0.005 0 0.497" size="0.008 0.051 0.006"
-            mass="0" rgba="0.30 0.32 0.36 1" contype="0" conaffinity="0"/>
-      <body name="carriage" pos="0 0 0">
-        <joint name="lift" type="slide" axis="0 0 1" range="-0.050 {k['lift_travel']}" damping="60"/>
-        <!-- 背板 (托盘后立面挡板), 分两片置于 y∈[8,22]/[-22,-8] —— 与叉孔
-           通道顶壁 ceil_l/r 同 y, 即三条支撑横梁 (y=0±6, ±27±3) 之间的空隙:
-           - 整片 y±60 的背板升到第三层必撞横梁下沿 (实测 support_*↔背板
-             12 个接触, ctrl 打满 +5N 而 qpos 锁死 319mm, 叉顶卡 384mm);
-           - 背板还须**高于叉顶**: 放托时叉顶降到台面 45+12=57mm, 若背板
-             在叉下方会先压上暂存台面 (实测承 2.07N 整叉架重量, 叉顶死锁)。
-           两片与 ceil_l/r 接触即可阻止托盘滑向车 (刚性连接)。 -->
-        <geom name="carriage_plate_l" type="box" pos="0.020 -0.015 0.068"
-              size="0.010 0.007 0.008" mass="0.125" rgba="0.35 0.36 0.40 1"/>
-        <geom name="carriage_plate_r" type="box" pos="0.020 0.015 0.068"
-              size="0.010 0.007 0.008" mass="0.125" rgba="0.35 0.36 0.40 1"/>
-        <geom name="fork_l" type="box" pos="{k['fork_root_x'] + k['fork_len']/2} -0.015 {k['transport_z'] - 0.00125}"
-              size="{k['fork_len']/2} 0.005 0.00125" mass="0.02" friction="1.4 0.02 0.0002" rgba="0.15 0.15 0.17 1"/>
-        <geom name="fork_r" type="box" pos="{k['fork_root_x'] + k['fork_len']/2} 0.015 {k['transport_z'] - 0.00125}"
-              size="{k['fork_len']/2} 0.005 0.00125" mass="0.02" friction="1.4 0.02 0.0002" rgba="0.15 0.15 0.17 1"/>
-      </body>
-    </body>
+{vehicles_xml}
   </worldbody>
-  <actuator>
-    <position name="drive_x" joint="chassis_x" kp="800" forcerange="-20 20"/>
-    <position name="lift" joint="lift" kp="10000" forcerange="-5 5"/>
+  <actuator>{actuators_xml}
   </actuator>
 </mujoco>
 """

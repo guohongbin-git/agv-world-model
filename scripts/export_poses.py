@@ -23,11 +23,13 @@ from sim.controllers import CellController
 FPS = 30
 OUT = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                    os.pardir, "assets", "pbr", "poses.csv")
-BODIES = ("chassis", "carriage", "pallet")
 
 
 def main() -> int:
     cell = ForkliftCell(timestep_s=0.0005)
+    # 可动车体名按编队前缀参数化 (P3 多车: <vid>_chassis); 托盘是共享体无前缀
+    _vid = cell.vehicles[0]
+    bodies = (f"{_vid}_chassis", f"{_vid}_carriage", "pallet")
     c = CellController(cell)
     d = cell.data
     d.ctrl[cell.a_x] = cell.k["start_axle_x"] - cell.q0_x
@@ -42,7 +44,7 @@ def main() -> int:
         nonlocal next_frame
         mujoco.mj_forward(cell.model, d)
         row = [len(rows), round(d.time, 4), seg]
-        for b in BODIES:
+        for b in bodies:
             bid = mujoco.mj_name2id(cell.model, mujoco.mjtObj.mjOBJ_BODY, b)
             row += list(d.xpos[bid]) + list(d.xquat[bid])
         rows.append(row)
@@ -70,7 +72,7 @@ def main() -> int:
             sample(12)
 
     cols = (["frame", "time", "seg"]
-            + [f"{b}_{p}" for b in BODIES for p in ("x", "y", "z", "qw", "qx", "qy", "qz")])
+            + [f"{b}_{p}" for b in bodies for p in ("x", "y", "z", "qw", "qx", "qy", "qz")])
     with open(OUT, "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(cols)
