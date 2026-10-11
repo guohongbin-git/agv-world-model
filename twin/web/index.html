@@ -112,7 +112,6 @@ const cam = new THREE.PerspectiveCamera(40, el('stage').clientWidth/el('stage').
 cam.position.set(1.75,1.15,-2.0);
 const ctl = new OrbitControls(cam, renderer.domElement);
 ctl.target.set(-0.17,0.28,0); ctl.enableDamping=true; ctl.maxPolarAngle=1.53;
-let nodes = {};
 const coneMesh = new THREE.Mesh(
   new THREE.ConeGeometry(0.03, 0.09, 20),
   new THREE.MeshStandardMaterial({color: 0xff6a00, roughness: 0.5}));
@@ -125,14 +124,46 @@ function updateCones(list){
   coneMesh.position.set(x, 0.045, -y);
   coneMesh.visible = true;
 }
+let palletNode = null, gltfScene = null, lastState = null;
+const vehNodes = {};   // vid -> {chassis, carriage}; 由 /api/state 的 vehicles 列表驱动
 window.__dbg = {err: null, loaded: 0, found: []};
+function setPose(node, q){
+  if (!node || !q) return;
+  node.position.set(q[0], q[2], -q[1]);
+  node.quaternion.set(q[4], q[6], -q[5], q[3]);
+}
+function buildVehicles(vids){
+  if (!gltfScene) return;
+  const srcCh = gltfScene.getObjectByName('agv');
+  const srcCr = gltfScene.getObjectByName('carriage');
+  for (let i = 0; i < vids.length; i++){
+    const vid = vids[i];
+    if (!srcCh || vehNodes[vid]) continue;
+    let ch = srcCh, cr = srcCr;
+    if (i > 0){
+      ch = srcCh.clone(true);
+      scene.add(ch);
+      // F02 车身冷色偏移, 与 F01 可辨 (材质逐克隆, 不污染共享材质)
+      ch.traverse(o=>{ if(o.isMesh && o.material && o.material.color){
+        o.material = o.material.clone(); o.material.color.offsetHSL(0.5, 0, -0.03); }});
+      cr = (srcCr && srcCh.getObjectByName(srcCr.name) === srcCr)
+        ? ch.getObjectByName(srcCr.name)          // carriage 在 agv 子树内 → 克隆体自带
+        : null;
+      if (srcCr && !cr){ cr = srcCr.clone(true); scene.add(cr); }  // 兄弟节点 → 单独克隆
+    }
+    vehNodes[vid] = {chassis: ch, carriage: cr};
+  }
+  window.__dbg.found = Object.keys(vehNodes);
+  window.__veh = vehNodes;   // QA 探针: 与 __dbg/__b 同类的调试钩子
+}
 window.__b.push(5);
 new GLTFLoader().load('agv_twin.glb', g => {
+  gltfScene = g.scene;
   scene.add(g.scene);
   g.scene.traverse(o=>{ if(o.isMesh){o.castShadow=true;o.receiveShadow=true;} });
-  for (const n of ['agv','carriage','pallet']) nodes[n]=g.scene.getObjectByName(n);
+  palletNode = g.scene.getObjectByName('pallet');
+  buildVehicles((lastState && lastState.vehicles) || ['F01']);
   window.__dbg.loaded = g.scene.children.length;
-  window.__dbg.found = Object.keys(nodes).filter(k=>nodes[k]);
   document.documentElement.dataset.boot = JSON.stringify({b: window.__b, dbg: window.__dbg});
 }, undefined, e => { window.__dbg.err = String(e && e.message || e); });
 addEventListener('resize',()=>{cam.aspect=el('stage').clientWidth/el('stage').clientHeight;cam.updateProjectionMatrix();renderer.setSize(el('stage').clientWidth,el('stage').clientHeight);});
@@ -146,14 +177,16 @@ function connect(){
 }
 connect();
 function apply(s){
-  const p = s.poses;
-  const map = {agv:'chassis', carriage:'carriage', pallet:'pallet'};
-  for (const [n,k] of Object.entries(map)){
-    if (!nodes[n] || !p[k]) continue;
-    const q = p[k];
-    nodes[n].position.set(q[0], q[2], -q[1]);
-    nodes[n].quaternion.set(q[4], q[6], -q[5], q[3]);
+  lastState = s;
+  buildVehicles(s.vehicles || []);
+  const p = s.poses || {};
+  for (const vid of (s.vehicles || [])){
+    const n = vehNodes[vid], pv = p[vid];
+    if (!n || !pv) continue;
+    setPose(n.chassis, pv.chassis);
+    setPose(n.carriage, pv.carriage);
   }
+  if (palletNode) setPose(palletNode, p.pallet);
   el('t').textContent = (s.sim_t||0).toFixed(1)+' s';
   const mb = el('mode'); mb.textContent = s.mode + (s.paused?' · 暂停':'');
   mb.className = 'badge m-' + s.mode;
@@ -205,7 +238,7 @@ el('sp').onclick = async e => {
   const b = e.target.closest('button'); if (!b) return;
   await fetch('/api/chat', {method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({text:`快 ${b.dataset.v} 倍`})});
 };
-addMsg('agent','你好，我是本仓的调度 Agent。说\u201c把 A-L3-C1 那托下架到 H01\u201d开始，或先问我\u201c库存\u201d\u201c进度\u201d\u201c事件\u201d。所有指令都走同一条判据→物理→事务链，没有旁路。');
+addMsg('agent','你好，我是本仓的调度 Agent，管理 F01/F02 两台叉车。说\u201c把 A-L3-C1 那托下架到 H01\u201d开始单车任务，或说\u201cF02 接力送 H01\u201d发起双车交接；也可问我\u201c库存\u201d\u201c进度\u201d\u201c事件\u201d。所有指令都走同一条判据→物理→事务链，没有旁路。');
 </script>
 </body>
 </html>

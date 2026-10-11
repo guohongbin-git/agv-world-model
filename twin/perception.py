@@ -113,15 +113,19 @@ class Lidar:
                 "cones": cone_hits}
 
     # ------------------------------------------------------------------
-    def front_distance(self, direction: float = +1.0) -> float:
+    def front_distance(self, direction: float = +1.0,
+                       axle_x: float | None = None) -> float:
         """行车方向 ±45° 锥内最近障碍距离 (含噪), 无则 max_range。
+
+        axle_x: 观测原点 (该车前轴 x); 缺省 = cell 首车前轴 (单车 API 不变)。
+        P3 Wave2: F02 的行车避障用自己的前轴作原点。
 
         实现: 对已注册动态障碍 (锥桶 mocap 体) 做 AABB-射线解析相交 ——
         等价 mj_ray 但不受 binding 语义影响; 锥桶真值坐标只用于
         射线相交测试, 不直接暴露给导航 (设计 §19.2 观测通道)。
         """
         d = self.cell.data
-        pnt_x = self.cell.axle_x
+        pnt_x = self.cell.axle_x if axle_x is None else float(axle_x)
         best = self.max_range
         for i, bid in enumerate(self.cone_bids):
             if bid < 0 or self.cell.cone_mocapid[i] < 0:

@@ -13,9 +13,14 @@
     ForkliftCell (MuJoCo 2kHz)          World (SQLite 事务 + Event, 唯一业务写入)
         └── 60Hz 位姿快照 → /ws ──→ three.js 投影 + 库存板 + 事件流
 
-演示任务 (单 F01 一轮下架, 经真实判据链):
-    A-L3-C1 货架第三层托盘 → 暂存站 H01;
-    离梁后提交 PAL-001→ROBOT:F01; 放托退叉验真后提交 →STATION:H01 + 出库待命。
+演示任务 (判据链执行, 库存只在物理证据成立后提交):
+    单车闭环: A-L3-C1 下架 → 暂存站 H01 → 放回 A-L3-C1 (旧式 4 元组队列);
+    双车交接 (P3 Wave2): F01 从货架取 PAL-001 放交接台 S1 (STATION),
+    随后前移让位清出巷道; F02 等巷道空闲后接力, S1 取托送出库位 H01
+    (SLOT) 并标记 OutboundPending。交接 = 单一托盘所有权转移:
+    ROBOT:F01 → STATION:S1 → ROBOT:F02 → SLOT:H01。
+    巷道作业区 (x > -1.0) 由 AisleLock 互斥 —— 两车同处 y=0 单巷道,
+    并发作业几何上必然碰撞。
 """
 from __future__ import annotations
 
@@ -43,10 +48,47 @@ RUNS = Path(__file__).parent / "runs"
 PUB_HZ = 60
 FORK_CAPS = frozenset({"drive", "fork_lift", "fork_insert",
                        "fork_withdraw", "stop"})
-BODIES = ("chassis", "carriage", "pallet")
-
 RUN_ID = time.strftime("DEMO-%Y%m%d-%H%M%S")
 TASK_ID = RUN_ID + "-T01"
+
+# 巷道作业区: 货架 (x≈0) 与暂存台/交接台 (x=-0.340) 所在区段。两车同在
+# y=0 单巷道 (底盘只有 x 向自由度), 同一时刻只允许一车在此区作业。
+AISLE_X_MIN = -1.0
+
+
+class AisleLock:
+    """巷道互斥锁 (P3 Wave2): 同一时刻只允许一辆车在作业区 (x > AISLE_X_MIN)
+    作业。
+
+    两车共用一条 y=0 巷道且底盘只有 x 向自由度 —— 几何上不存在让行路径,
+    并发作业必然碰撞; 互斥是安全性约束而非优化。持有者是具体车辆 id,
+    任务相同也不共用 (对齐 ReservationBoard 语义); 非持有者释放是 no-op,
+    防止异常路径误释放。
+    """
+
+    def __init__(self) -> None:
+        self._cond = threading.Condition()
+        self.owner: str | None = None
+
+    def acquire(self, vid: str, block: bool = True) -> bool:
+        with self._cond:
+            if self.owner == vid:            # 重入 (同一任务重试路径)
+                return True
+            if not block:
+                if self.owner is not None:
+                    return False
+            else:
+                while self.owner is not None:
+                    self._cond.wait()
+            self.owner = vid
+            return True
+
+    def release(self, vid: str) -> None:
+        with self._cond:
+            if self.owner != vid:
+                return
+            self.owner = None
+            self._cond.notify_all()
 
 
 class Gate:
@@ -62,12 +104,27 @@ class Gate:
 
 
 class PacedForkliftAdapter(ForkliftAdapter):
-    """物理步进唯一入口 hook: 暂停门 + 墙钟配速 (速度倍率) + 60Hz 位姿采样。"""
+    """物理步进唯一入口 hook: 暂停门 + 墙钟配速 (速度倍率) + 60Hz 位姿采样。
+
+    P3 Wave2: 每辆车一个实例 (robot_id = 车辆 id), 绑同一 cell 的
+    :class:`~sim.forklift_cell.VehicleView` (``self.view``)。物理步进本身
+    仍是整车一级的 (``_tick`` 推进共享 ``cell.data``), per-vehicle 的只是
+    判据/计划层用的视图与位姿采样键。
+    """
 
     def __init__(self, robot_id, cell, gate: Gate, **kw):
         super().__init__(robot_id=robot_id, cell=cell, **kw)
         self.gate = gate
         self._n = 0
+        self.view = cell.vehicle(robot_id)
+        # 位姿采样键缓存: <vid>_chassis / <vid>_carriage + 共享 pallet
+        m = cell.model
+        self._body_ids = {
+            **{f"{vid}_{b}": mujoco.mj_name2id(
+                m, mujoco.mjtObj.mjOBJ_BODY, f"{vid}_{b}")
+               for vid in cell.vehicles for b in ("chassis", "carriage")},
+            "pallet": cell.pallet_bid,
+        }
 
     def _tick(self) -> None:
         mujoco.mj_step(self.cell.model, self.cell.data)
@@ -85,11 +142,9 @@ class PacedForkliftAdapter(ForkliftAdapter):
         if d.time >= g.snap.get("next_t", 0.0):
             mujoco.mj_forward(self.cell.model, d)
             snap = {"t": round(d.time, 3), "next_t": d.time + 1.0 / PUB_HZ}
-            for b in BODIES:
-                bid = mujoco.mj_name2id(self.cell.model,
-                                        mujoco.mjtObj.mjOBJ_BODY, b)
-                snap[b] = [round(v, 5) for v in d.xpos[bid]] + \
-                          [round(v, 5) for v in d.xquat[bid]]
+            for name, bid in self._body_ids.items():
+                snap[name] = [round(v, 5) for v in d.xpos[bid]] + \
+                             [round(v, 5) for v in d.xquat[bid]]
             with g.lock:
                 snap["next_t"] = max(snap["next_t"], g.snap.get("next_t", 0))
                 g.snap = snap
@@ -106,6 +161,7 @@ class WorldService:
 
     def __init__(self) -> None:
         self.gate = Gate()
+        self.aisle = AisleLock()
         self.mode = "idle"          # idle|running|paused|done|failed
         self.step = -1
         self.step_label = "待命"
@@ -119,15 +175,22 @@ class WorldService:
 
     # ---------- 构建/复位 ----------
     def build(self) -> None:
-        cell = ForkliftCell(timestep_s=0.0005, levels=[0.100, 0.250, 0.400])
+        cell = ForkliftCell(timestep_s=0.0005, levels=[0.100, 0.250, 0.400],
+                            vehicles=["F01", "F02"])
         d = cell.data
-        d.ctrl[cell.a_x] = cell.k["start_axle_x"] - cell.q0_x
-        d.ctrl[cell.a_lift] = 0.0
+        for vid in cell.vehicles:      # 每车回安全车位 (F02 初始已在自身车位)
+            v = cell.vehicle(vid)
+            d.ctrl[v.a_x] = v.start_axle_x - v.q0_x
+            d.ctrl[v.a_lift] = 0.0
         for _ in range(1000):
             mujoco.mj_step(cell.model, d)
         self.cell = cell
-        self.adapter = PacedForkliftAdapter("F01", cell, self.gate,
-                                            capabilities=FORK_CAPS)
+        # 双车各一个配速适配器: robot_id 即车辆 id, view 绑单车视图。
+        # 物理步进是整车一级的 (共享 cell.data), 但判定/采样按车分流。
+        self.adapters = {
+            vid: PacedForkliftAdapter(vid, cell, self.gate,
+                                      capabilities=FORK_CAPS)
+            for vid in cell.vehicles}
         RUNS.mkdir(exist_ok=True)
         from twin.memory import DecisionMemory
         from twin.perception import Lidar
@@ -147,17 +210,26 @@ class WorldService:
             self.gate.t0 = time.monotonic()
             self.gate.paused = False
             self.gate.snap = {"t": round(float(d.time), 3), "next_t": 0.0}
+        # 初始位姿快照 (mission 未跑时 /api/state 也有完整 per-vehicle 位姿)
+        mujoco.mj_forward(cell.model, d)
+        init_snap = dict(self.gate.snap)
+        for name, bid in self.adapters[self.cell.vehicles[0]]._body_ids.items():
+            init_snap[name] = [round(v, 5) for v in d.xpos[bid]] + \
+                              [round(v, 5) for v in d.xquat[bid]]
+        with self.gate.lock:
+            self.gate.snap = init_snap
         self.mode = "idle"
         self.step = -1
         self.step_label = "待命"
 
     def _seed_ledger(self) -> None:
-        """注册本体事实 (与物理初态一致): 3 货位 + H01 + 3 托盘 + 3 货物。"""
+        """注册本体事实 (与物理初态一致): 3 货位 + H01 出库位 + 3 托盘 + 3 货物。"""
         w = self.world
         w.register_slot(Slot("A-L3-C1", (0.0, 0.0, 0.400), SlotOcc.OCCUPIED))
         w.register_slot(Slot("A-L2-C1", (0.0, 0.0, 0.250), SlotOcc.OCCUPIED))
         w.register_slot(Slot("A-L1-C1", (0.0, 0.0, 0.100), SlotOcc.OCCUPIED))
-        w.register_slot(Slot("H01", (-0.340, 0.0, 0.045), SlotOcc.EMPTY))
+        w.register_slot(Slot("H01", (self.LOC_X["H01"], 0.0, 0.045),
+                             SlotOcc.EMPTY))
         for pid, slot in (("PAL-001", "A-L3-C1"), ("PAL-002", "A-L1-C1"),
                           ("PAL-003", "A-L2-C1")):
             w.register_pallet(Pallet(pid, 0.022, Loc(LocKind.SLOT, slot),
@@ -173,43 +245,70 @@ class WorldService:
         w._conn.commit()
 
     # ---------- 位置常量与通用取放任务 (P2 多货物/任务队列) ----------
-    LOC = {"L1": 0.100, "L2": 0.250, "L3": 0.400, "STAGE": 0.045}
+    LOC = {"L1": 0.100, "L2": 0.250, "L3": 0.400, "STAGE": 0.045,
+           "S1": 0.045, "H01": 0.045}
+    # 暂存台台上托盘中心 x: 台面 x∈[-0.400,-0.280], 托盘半长 40mm →
+    # 中心可行域 [-0.350,-0.330]。S1 = F01 的交接放托位 (靠巷道侧),
+    # H01 = F02 的最终出库位 (靠货架侧), 相距 20mm —— 交接是真实的位置
+    # 转移, 不是原地过户; 单车旧任务键 "STAGE" 统一到 H01 位。
+    LOC_X = {"STAGE": -0.330, "S1": -0.350, "H01": -0.330}
     SLOT_OF = {"L1": "A-L1-C1", "L2": "A-L2-C1", "L3": "A-L3-C1",
-               "STAGE": "H01"}
-    # 任务队列: (pallet, goods, src, dst); agent dispatch 覆盖
+               "STAGE": "H01", "H01": "H01"}   # S1 是 STATION, 无 slot 行
+    # 任务队列: (vid, pallet, goods, src, dst) 或旧式 4 元组 (=首车);
+    # agent dispatch 覆盖。交接链 (P3 Wave2): 单托盘所有权转移
+    # ROBOT:F01 → STATION:S1 → ROBOT:F02 → SLOT:H01。
+    HANDOFF_TASKS = [("F01", "PAL-001", "G-001", "L3", "S1"),
+                     ("F02", "PAL-001", "G-001", "S1", "H01")]
     DEFAULT_TASKS = [("PAL-001", "G-001", "L3", "STAGE"),
                      ("PAL-001", "G-001", "STAGE", "L3")]
 
-    def _task_steps(self, src: str, dst: str, pid: str, gid: str) -> list:
+    def _task_steps(self, src: str, dst: str, pid: str, gid: str,
+                    vid: str | None = None,
+                    clear_lane: bool = False) -> list:
+        """per-vehicle 取放计划 (P3 Wave2 参数化, 不复制 roundtrip_plan)。
+
+        vid 缺省 = 首车 (单车任务与 P3 前逐位一致); clear_lane=True 时在
+        计划尾部追加「前移让位」段 —— 双车同巷道 (y=0 同线, 底盘只有 x 向
+        自由度): 前车放托交接台后若停在退出位 (axle≈-0.624), 车尾距后车
+        车头仅 ~16mm, 后车永远无法进近交接台, 而向后让位会被后车挡死。
+        唯一可行让位方向是**前移**: 降叉至叉顶 20mm (< 台面下沿 44mm <
+        托盘底 45mm), 从暂存台台下净空与货架底层梁下穿过, 停在货位底层
+        下方待命位 (axle=+0.020, 车尾 -0.190, 后车进近最前点 -0.304,
+        净空 ≥90mm)。
+        """
         k = self.cell.k
-        x_ins = -0.040 + k["insert_depth"] - (k["fork_root_x"] + k["fork_len"])
+        ad = self.adapters[vid or self.cell.vehicles[0]]
+        v = ad.view
+        x_ins = k["rack_insert_axle_x"]
         x_edge = -0.040 - k["approach_gap"] - k["fork_len"] - k["fork_root_x"]
         x_clear = -0.200 - k["fork_root_x"] - k["fork_len"] - 0.010
         off = 0.094                       # 托盘中心相对轴偏置 (实测值)
-        x_stage = -0.340 - off
-        x_stage_out = x_stage - k["retreat_loaded"] - 0.060
-        ax, lf = self.cell.a_x, self.cell.a_lift
-        qx, ql = self.cell.qadr_x, self.cell.qadr_lift
-        q0x, tz = self.cell.q0_x, k["transport_z"]
+        x_src_stage = self.LOC_X[src] - off if src in self.LOC_X else None
+        x_dst_stage = self.LOC_X[dst] - off if dst in self.LOC_X else None
+        ax, lf = v.a_x, v.a_lift
+        qx, ql = v.qadr_x, v.qadr_lift
+        q0x, tz = v.q0_x, k["transport_z"]
 
-        def mv(x, v, calm=False, label="", commit=None):
-            direction = float(np.sign(x - self.cell.axle_x)) or 1.0
-            return (lambda: self._ramp(ax, qx, x - q0x, v, calm,
+        def mv(x, sp, calm=False, label="", commit=None):
+            direction = float(np.sign(x - v.axle_x)) or 1.0
+            return (lambda: self._ramp(ad, ax, qx, x - q0x, sp, calm,
                                        watch=direction),
                     label, commit)
 
-        def up(z, v, calm=False, label="", commit=None):
-            return (lambda: self._ramp(lf, ql, z - tz, v, calm), label, commit)
+        def up(z, sp, calm=False, label="", commit=None):
+            return (lambda: self._ramp(ad, lf, ql, z - tz, sp, calm),
+                    label, commit)
         zs, zd = self.LOC[src], self.LOC[dst]
-        pick = lambda: self._commit_pick(src, pid)
-        place = lambda: self._commit_place(dst, pid, gid)
+        pick = lambda: self._commit_pick(src, pid, ad.robot_id)
+        place = lambda: self._commit_place(dst, pid, gid, ad.robot_id)
         steps = []
-        if src == "STAGE":
+        if x_src_stage is not None:
             steps += [
                 up(zs + 0.010, 0.010, False, f"[{pid}] 叉降至台面临时高度 (+10)"),
-                mv(x_stage, 0.020, False, "低位进近暂存站 (≤5mm/s 前插)"),
+                mv(x_src_stage, 0.020, False, "低位进近暂存站 (≤5mm/s 前插)"),
                 up(zs + 0.017, 0.002, True, "抬叉离台 (+17)", pick),
-                mv(x_stage_out, 0.020, True, "带载退出暂存站"),
+                mv(x_src_stage - k["retreat_loaded"] - 0.060, 0.020, True,
+                   "带载退出暂存站"),
                 up(tz, 0.010, True, "升至运输高度")]
         else:
             steps += [
@@ -220,13 +319,13 @@ class WorldService:
                 up(zs + 0.017, 0.002, True, "举升离梁 (+17)", pick),
                 mv(x_clear, 0.020, True, "带载直线退出 (叉尖越过横梁)"),
                 up(tz, 0.010, True, "降至运输高度 65mm")]
-        if dst == "STAGE":
+        if x_dst_stage is not None:
             steps += [
-                mv(x_stage, 0.020, True, "低位转运至暂存站上方"),
+                mv(x_dst_stage, 0.020, True, "低位转运至暂存站上方"),
                 up(zd + 0.012, 0.010, True, "举至放托位 (台面+12)"),
                 up(zd + 0.010, 0.002, False, "微降脱离叉孔上壁"),
-                mv(x_stage_out, 0.020, False, "空叉退出 (越过近边+10mm)",
-                   place)]
+                mv(x_dst_stage - k["retreat_loaded"] - 0.060, 0.020, False,
+                   "空叉退出 (越过近边+10mm)", place)]
         else:
             steps += [
                 mv(x_edge, 0.020, False, "转运至货架前沿"),
@@ -235,37 +334,54 @@ class WorldService:
                 up(zd + 0.012, 0.002, False, "缓降至支撑面 (托盘落梁)"),
                 up(zd + 0.010, 0.002, False, "再降 2mm 脱离叉孔上壁"),
                 mv(x_edge, 0.020, False, "空叉撤出叉孔"),
-                mv(k["start_axle_x"], 0.020, False, "返回安全车位", place),
+                mv(v.start_axle_x, 0.020, False, "返回安全车位", place),
                 up(tz, 0.010, False, "叉架复位运输高度")]
+        if clear_lane:
+            steps += [
+                up(0.020, 0.005, False, "让位准备: 降叉至台下净空 (叉顶 20mm)"),
+                mv(0.020, 0.020, False,
+                   "前移让位: 穿越台下净空, 给 F02 让出交接台进近路径"),
+                up(tz, 0.010, False, "待命位叉架复位运输高度")]
         return steps
 
-    # 提交点: 只在物理证据成立时写 World
-    def _commit_pick(self, src: str, pid: str) -> bool:
+    # 提交点: 只在物理证据成立时写 World (P3 Wave2: 参数化车辆)
+    def _commit_pick(self, src: str, pid: str, vid: str = "F01") -> bool:
         c = self.cell
-        if not c.pallet_fork_contact() or \
+        if not c.pallet_fork_contact(vid) or \
                 c.pallet_bottom_z < self.LOC[src] + 0.003:
             return False
-        self.world.move_pallet(pid, Loc(LocKind.ROBOT, "F01"),
-                               TASK_ID, float(c.data.time))
-        self.world._conn.execute(
-            "UPDATE slots SET occupancy='EMPTY' WHERE slot_id=?",
-            (self.SLOT_OF[src],))
+        t = float(c.data.time)
+        self.world.move_pallet(pid, Loc(LocKind.ROBOT, vid), TASK_ID, t)
+        if src in self.SLOT_OF:               # S1 是 STATION, 无 slot 行
+            self.world._conn.execute(
+                "UPDATE slots SET occupancy='EMPTY' WHERE slot_id=?",
+                (self.SLOT_OF[src],))
         self.world._conn.commit()
-        self.narrate(f"物理证据确认: {pid} 已离面、由 F01 叉臂承托。"
-                     f"事务提交 {pid}→ROBOT:F01, 货位 {self.SLOT_OF[src]} "
-                     "释放。在库计数不变。")
+        self.narrate(f"物理证据确认: {pid} 已离面、由 {vid} 叉臂承托。"
+                     f"事务提交 {pid}→ROBOT:{vid}"
+                     + (f", 货位 {self.SLOT_OF[src]} 释放" if src in self.SLOT_OF
+                        else "") + "。在库计数不变。")
         return True
 
-    def _commit_place(self, dst: str, pid: str, gid: str) -> bool:
+    def _commit_place(self, dst: str, pid: str, gid: str,
+                      vid: str = "F01") -> bool:
         c = self.cell
         z = self.LOC[dst]
-        if c.pallet_fork_contact() or not (z - 0.002 <= c.pallet_bottom_z
-                                           <= z + 0.005):
+        if c.pallet_fork_contact(vid) or not (z - 0.002 <= c.pallet_bottom_z
+                                              <= z + 0.005):
             return False
         t = float(c.data.time)
+        if dst == "S1":      # 交接台过户: 只转移 pallet 所有权到 STATION
+            self.world.move_pallet(pid, Loc(LocKind.STATION, "S1"),
+                                   TASK_ID, t)
+            self.world._conn.commit()
+            self.narrate(f"交接验真: 叉臂脱离、{pid} 底面落在交接台 S1 支撑面 "
+                         f"{z*1000:.0f}mm。事务提交 {pid}→STATION:S1 "
+                         f"(ROBOT:{vid} → 交接台), 待 F02 接力。在库计数不变。")
+            return True
         kind = LocKind.STATION if dst == "STAGE" else LocKind.SLOT
         self.world.move_pallet(pid, Loc(kind, self.SLOT_OF[dst]), TASK_ID, t)
-        if dst == "STAGE":
+        if dst in ("STAGE", "H01"):     # 到出库位: G→OUTBOUND_PENDING 仍计在库
             self.world.mark_outbound_pending(gid, TASK_ID, t)
         else:  # 回架: 出库待命 → 在库 (同一事务)
             self.world._conn.execute(
@@ -278,7 +394,7 @@ class WorldService:
             "UPDATE slots SET occupancy='OCCUPIED' WHERE slot_id=?",
             (self.SLOT_OF[dst],))
         self.world._conn.commit()
-        self.narrate(f"放托验真: 叉臂脱离、{pid} 底面落在 "
+        self.narrate(f"放托验真 ({vid}): 叉臂脱离、{pid} 底面落在 "
                      f"{self.SLOT_OF[dst]} 支撑面 {z*1000:.0f}mm。"
                      f"事务提交 {pid}→{self.SLOT_OF[dst]}。")
         return True
@@ -293,16 +409,18 @@ class WorldService:
             self.step_label = f"异常: {type(e).__name__}"
             self.narrate(f"mission 线程异常: {e!r} — 未提交的事务保持原状。")
 
-    def _ramp(self, idx: int, qadr: int, q_target: float,
-              speed: float, calm: bool = False, watch: float = 0.0) -> bool:
+    def _ramp(self, ad: PacedForkliftAdapter, idx: int, qadr: int,
+              q_target: float, speed: float, calm: bool = False,
+              watch: float = 0.0) -> bool:
         """梯形速度剖面驱动到 q_target (R04 限速语义), 复用 adapter._tick
-        (配速/采样/暂停门都在里面)。到位判据 = 位置误差 + 可选全域静止。"""
+        (配速/采样/暂停门都在里面)。到位判据 = 位置误差 + 可选全域静止。
+        ad 决定配速入口与避障观测原点 (per-vehicle, P3 Wave2)。"""
         from sim.controllers import Ramp
         d = self.cell.data
         q0 = float(d.qpos[qadr])
         ramp = Ramp(q0, q_target, speed)
         t0 = d.time
-        tick = self.adapter._tick
+        tick = ad._tick
         n = int((ramp.duration + 12.0) * 2000)      # 预算: 行程 + 12s 整定
         last_check = 0.0
         for _ in range(n):
@@ -311,7 +429,7 @@ class WorldService:
             # P4 行车避障: 每 0.5s 仿真用 LiDAR 检查前方 (观测通道, 禁上帝视角)
             if watch and d.time - last_check >= 0.5:
                 last_check = d.time
-                dd = self.lidar.front_distance(watch)
+                dd = self.lidar.front_distance(watch, axle_x=ad.view.axle_x)
                 if dd < 0.12:
                     with self.gate.lock:
                         self.blocked_reason = "cone"
@@ -323,88 +441,121 @@ class WorldService:
 
     def _run_steps(self, d) -> None:
         tasks = self.tasks or self.DEFAULT_TASKS
-        plans = [(t, self._task_steps(t[2], t[3], t[0], t[1])) for t in tasks]
-        self.steps_total = sum(len(s) for _, s in plans)
+        # 任务规范化: 4 元组 = 首车 (P3 前旧队列兼容), 5 元组 = (vid, ...)
+        plans = []
+        for t in tasks:
+            if len(t) == 5:
+                vid, pid, gid, src, dst = t
+            else:
+                vid, (pid, gid, src, dst) = self.cell.vehicles[0], t
+            # 单巷道让位: 双车编队时, 前车放托交接台 (S1) 后必须前移清出
+            # 进近路径, 后车才可能接力 (几何推导见 _task_steps docstring)。
+            clear = (len(self.cell.vehicles) > 1 and dst == "S1"
+                     and vid == self.cell.vehicles[0])
+            steps = self._task_steps(src, dst, pid, gid, vid,
+                                     clear_lane=clear)
+            plans.append((vid, pid, gid, src, dst, steps))
+        self.steps_total = sum(len(s) for *_, s in plans)
         i = 0
-        for n, ((pid, gid, src, dst), steps) in enumerate(plans, 1):
+        for n, (vid, pid, gid, src, dst, steps) in enumerate(plans, 1):
             with self.db_lock:
                 self.world.emit(TASK_ID, "TaskStarted",
-                                {"task": n, "pallet": pid,
-                                 "from": self.SLOT_OF[src],
-                                 "to": self.SLOT_OF[dst]}, float(d.time))
-            self.narrate(f"— 任务 {n}/{len(plans)}: {pid} "
-                         f"{self.SLOT_OF[src]} → {self.SLOT_OF[dst]} —")
-            for fn, label, commit in steps:
-                i += 1
-                attempts = 0
-                while True:
-                    with self.gate.lock:
-                        self.step = i
-                        self.step_label = f"T{n}·{label}"
-                    if not fn():
-                        br = self.blocked_reason
-                        if not br:
-                            break                       # 真失败
-                        # 避障停车: PATH_INFEASIBLE (巷道无法绕行)
+                                {"task": n, "vehicle": vid, "pallet": pid,
+                                 "from": self.SLOT_OF.get(src, src),
+                                 "to": self.SLOT_OF.get(dst, dst)},
+                                float(d.time))
+            self.narrate(f"— 任务 {n}/{len(plans)}: {vid} 承运 {pid} "
+                         f"{self.SLOT_OF.get(src, src)} → "
+                         f"{self.SLOT_OF.get(dst, dst)} —")
+            # 巷道互斥 (P3 Wave2): 作业区 x > -1.0 同一时刻只允许一车。
+            if not self.aisle.acquire(vid, block=False):
+                self.narrate(f"{vid} 等待巷道空闲 (当前占用: "
+                             f"{self.aisle.owner}) — 作业区 x>{AISLE_X_MIN} "
+                             "互斥, 同一时刻只允许一车作业。")
+                with self.gate.lock:
+                    self.step_label = f"T{n}·等待巷道空闲"
+                while not self.aisle.acquire(vid, block=False):
+                    if self.mode != "running":
+                        return                  # reset 打断
+                    time.sleep(0.2)
+                self.narrate(f"巷道空闲确认, {vid} 进入作业区。")
+            try:
+                for fn, label, commit in steps:
+                    i += 1
+                    attempts = 0
+                    while True:
+                        with self.gate.lock:
+                            self.step = i
+                            self.step_label = f"T{n}·{label}"
+                        if not fn():
+                            br = self.blocked_reason
+                            if not br:
+                                break                       # 真失败
+                            # 避障停车: PATH_INFEASIBLE (巷道无法绕行)
+                            with self.db_lock:
+                                self.world.emit(TASK_ID, "ObstacleDetected",
+                                                {"step": i, "label": label,
+                                                 "reason": br},
+                                                float(d.time))
+                            self.mode = "blocked"
+                            self.step_label = f"受阻: {label}"
+                            obs_x = self.cones[0][0] if self.cones else None
+                            self._blocked_sig = self.memory.signature(
+                                br, label, obs_x)
+                            self._blocked_t0 = time.monotonic()
+                            self._blocked_retries = 0
+                            self.narrate("LiDAR 检测到前方障碍, 车辆已安全停车。"
+                                         "原路径 PATH_INFEASIBLE (巷道无法绕行) — "
+                                         "请移除障碍, 我会重新感知并恢复执行。")
+                            hint = self.memory.hint(self._blocked_sig)
+                            if hint:
+                                self.narrate(hint)
+                            while self.blocked_reason and self.mode == "blocked":
+                                time.sleep(0.2)
+                            if self.mode != "blocked":
+                                return                      # reset 打断
+                            attempts += 1
+                            self._blocked_retries = attempts
+                            self.narrate(f"重新感知: 通道恢复确认 (第 {attempts} 次"
+                                         "重试), 从当前位姿继续执行。")
+                            continue
+                        # 恢复成功 -> 记录决策经验 (Paper II)
+                        if self._blocked_sig and attempts:
+                            self.memory.record(
+                                self._blocked_sig,
+                                ["remove_obstacle(user)", "lidar_recheck"],
+                                "recovered",
+                                time.monotonic() - (self._blocked_t0 or 0),
+                                self._blocked_retries)
+                            self._blocked_sig = None
+                        break
+                    if commit is not None:
                         with self.db_lock:
-                            self.world.emit(TASK_ID, "ObstacleDetected",
-                                            {"step": i, "label": label,
-                                             "reason": br},
-                                            float(d.time))
-                        self.mode = "blocked"
-                        self.step_label = f"受阻: {label}"
-                        obs_x = self.cones[0][0] if self.cones else None
-                        self._blocked_sig = self.memory.signature(
-                            br, label, obs_x)
-                        self._blocked_t0 = time.monotonic()
-                        self._blocked_retries = 0
-                        self.narrate("LiDAR 检测到前方障碍, 车辆已安全停车。"
-                                     "原路径 PATH_INFEASIBLE (巷道无法绕行) — "
-                                     "请移除障碍, 我会重新感知并恢复执行。")
-                        hint = self.memory.hint(self._blocked_sig)
-                        if hint:
-                            self.narrate(hint)
-                        while self.blocked_reason and self.mode == "blocked":
-                            time.sleep(0.2)
-                        if self.mode != "blocked":
-                            return                      # reset 打断
-                        attempts += 1
-                        self._blocked_retries = attempts
-                        self.narrate(f"重新感知: 通道恢复确认 (第 {attempts} 次"
-                                     "重试), 从当前位姿继续执行。")
-                        continue
-                    # 恢复成功 -> 记录决策经验 (Paper II)
-                    if self._blocked_sig and attempts:
-                        self.memory.record(
-                            self._blocked_sig,
-                            ["remove_obstacle(user)", "lidar_recheck"],
-                            "recovered",
-                            time.monotonic() - (self._blocked_t0 or 0),
-                            self._blocked_retries)
-                        self._blocked_sig = None
-                    break
-                if commit is not None:
+                            ok = commit()
+                        if not ok:
+                            with self.db_lock:
+                                self.world.emit(TASK_ID,
+                                                "CommitEvidenceMissing",
+                                                {"step": i, "label": label},
+                                                float(d.time))
+                            self.mode = "failed"
+                            self.step_label = f"证据不足: {label}"
+                            self.narrate(f"[{label}] 物理执行完成但承托/脱离"
+                                         "证据不满足 — 拒绝提交 (agent 可改"
+                                         "计划, 不能改事实)。")
+                            return
                     with self.db_lock:
-                        ok = commit()
-                    if not ok:
-                        with self.db_lock:
-                            self.world.emit(TASK_ID,
-                                            "CommitEvidenceMissing",
-                                            {"step": i, "label": label},
-                                            float(d.time))
-                        self.mode = "failed"
-                        self.step_label = f"证据不足: {label}"
-                        self.narrate(f"[{label}] 物理执行完成但承托/脱离"
-                                     "证据不满足 — 拒绝提交 (agent 可改"
-                                     "计划, 不能改事实)。")
-                        return
+                        self.world.emit(TASK_ID, "StepCompleted",
+                                        {"step": i, "label": label},
+                                        float(d.time))
                 with self.db_lock:
-                    self.world.emit(TASK_ID, "StepCompleted",
-                                    {"step": i, "label": label},
-                                    float(d.time))
-            with self.db_lock:
-                self.world.emit(TASK_ID, "TaskCompleted",
-                                {"task": n, "pallet": pid}, float(d.time))
+                    self.world.emit(TASK_ID, "TaskCompleted",
+                                    {"task": n, "vehicle": vid,
+                                     "pallet": pid}, float(d.time))
+            finally:
+                self.aisle.release(vid)
+                if self.mode in ("running", "done"):
+                    self.narrate(f"{vid} 退出作业区, 巷道释放。")
         self.step = i
         self.step_label = "队列完成"
         self.mode = "done"
@@ -422,8 +573,15 @@ class WorldService:
                                                 daemon=True)
                 self._thread.start()
                 q = self.tasks or self.DEFAULT_TASKS
-                self.narrate(f"任务队列已受理 ({len(q)} 个任务): "
-                             "判据层限速执行, 库存只在物理证据成立后提交。")
+                def _desc(t):
+                    vid = t[0] if len(t) == 5 else self.cell.vehicles[0]
+                    src, dst = (t[3], t[4]) if len(t) == 5 else (t[2], t[3])
+                    return (f"{vid}:{self.SLOT_OF.get(src, src)}→"
+                            f"{self.SLOT_OF.get(dst, dst)}")
+                self.narrate(f"任务队列已受理 ({len(q)} 个任务: "
+                             + "; ".join(_desc(t) for t in q)
+                             + "): 判据层限速执行, 库存只在物理证据成立后提交,"
+                               " 巷道作业区互斥。")
         elif op == "pause":
             with self.gate.lock:
                 self.gate.paused = True
@@ -529,8 +687,14 @@ class WorldService:
             paused = self.gate.paused
         rows, events = self.events_since(ev_cursor)
         chats = [m for m in self.chat if m["seq"] > chat_cursor]
+        # per-vehicle 位姿 (P3 Wave2): snap 平铺键 <vid>_chassis → 按车嵌套
+        poses = {"pallet": snap.get("pallet")}
+        for vid in self.cell.vehicles:
+            poses[vid] = {b: snap.get(f"{vid}_{b}")
+                          for b in ("chassis", "carriage")}
         return {
-            "poses": snap, "sim_t": snap.get("t", 0),
+            "poses": poses, "sim_t": snap.get("t", 0),
+            "vehicles": list(self.cell.vehicles),
             "mode": self.mode, "paused": paused, "speed": speed,
             "step": self.step, "total": self.steps_total,
             "step_label": self.step_label,

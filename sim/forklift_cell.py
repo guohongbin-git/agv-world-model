@@ -174,9 +174,8 @@ class ForkliftCell:
         纵队取 k["vehicle_spacing"]=0.40m → 相邻两车初始净空 ≥70mm,
         初始位姿零重叠 (双车 smoke 实测)。F01 (i=0) **精确取**
         k["start_axle_x"] (抬升安全轴), 单车初始位姿与参数化前逐位一致;
-        车 i 后撤 i×0.40m。后续车初始更靠后, chassis_x 的关节 range
-        (−0.8..+0.65, 位移量) 仍按单车工作包络设置 —— 后车开到货架前
-        所需的 range 放宽属 P3 交接波, 本波不改。
+        车 i 后撤 i×0.40m。后车 chassis_x 关节位移上限按货架插叉位反推
+        放宽 (P3 Wave2, 见 _vehicle_xml 的 q_hi 注释)。
         """
         return self.k["start_axle_x"] - i * self.k["vehicle_spacing"]
 
@@ -215,7 +214,7 @@ class ForkliftCell:
     def k(self):
         c = self.cfg
         sz = self.support_z
-        return {
+        k = {
             "transport_z": 0.065,
             # 设计 176 行: 「插叉时货叉顶面设置为支撑面上方 10 mm, 先保留 2 mm
             # 竖向间隙; 举升至上方 17 mm, 接触叉孔顶部后使托盘底面抬离
@@ -243,6 +242,13 @@ class ForkliftCell:
             # 见 _start_axle_x。
             "vehicle_spacing": 0.40,
         }
+        # 货架插叉位的前轴 x —— 「叉尖越过托盘近边 65mm」的作业点 (托盘中
+        # 心 = 原点, 托盘 -X 边 = -0.040): axle = -0.040 + insert_depth
+        # − (fork_root_x + fork_len) = -0.095。非首车 chassis_x 行程上限
+        # 由此推导 (_vehicle_xml), 行车计划的 x_ins 亦取此单源。
+        k["rack_insert_axle_x"] = (-0.040 + k["insert_depth"]
+                                   - (k["fork_root_x"] + k["fork_len"]))
+        return k
 
     # ---------- MJCF ----------
     def _pal_block(self, name: str, z: float, sfx: str) -> str:
@@ -272,13 +278,23 @@ class ForkliftCell:
         """
         k = self.k
         p = f"{vid}_"
+        # chassis_x 行程上限 (P3 Wave2): 首车保持 +0.65 —— 单车工作包络,
+        # max() 取等, XML 与参数化前逐位一致。后车初始位每车后撤
+        # k["vehicle_spacing"] (见 _start_axle_x), 要到达**同一点**作业
+        # (货架插叉位 axle = k["rack_insert_axle_x"] = -0.095), 关节位移
+        # 上限按 q_hi = x_ins − axle0 + 5mm 余量推导:
+        #   i=1: -0.095 − (-0.960) = +0.865 → range 上限 0.870
+        # (交接台放托 axle≈-0.444/-0.424 所需 +0.536/+0.516 均被覆盖)。
+        # 只放宽限位, 不改任何动力学参数 —— 单车物理行为逐位不变。
+        # 下限 -0.8 保持: 后撤需求 = 编队净空 + 退距, 远小于 0.8m。
+        q_hi = max(0.65, k["rack_insert_axle_x"] - axle0 + 0.005)
         return f"""
     <!-- 车辆 {vid}: 平面底盘(滑动x+铰z) + 升降滑轨; 初始前轴 x={axle0:.3f} -->
     <body name="{p}chassis" pos="{axle0} 0 0">
       <!-- 行程上限须覆盖满插入深度: 插叉深 65mm 指**叉尖**越过托盘近边,
-           axle 到 -95mm, qpos = -95-(-560) = +465mm。原 range 上限 +500mm
-           曾把 axle 挡在 -60mm (按叉根算的错误插深), 托盘抬不起来。 -->
-      <joint name="{p}chassis_x" type="slide" axis="1 0 0" range="-0.8 0.65" damping="20"/>
+           axle 到 -95mm。首车 qpos = -95-(-560) = +465mm, 原上限 +500mm;
+           后车初始更靠后, 上限按插叉位反推 (见上方 q_hi 注释)。 -->
+      <joint name="{p}chassis_x" type="slide" axis="1 0 0" range="-0.8 {q_hi:.3f}" damping="20"/>
       <joint name="{p}chassis_yaw" type="hinge" axis="0 0 1" range="-0.2 0.2" damping="5"/>
       <geom name="{p}chassis_body" type="box" pos="-0.085 0 0.0175"
             size="0.110 0.075 0.0175" mass="1.50" rgba="0.90 0.66 0.05 1"/>
@@ -477,24 +493,28 @@ class ForkliftCell:
     def max_penetration(self) -> float:
         return max((-d for _, _, d in self.contacts()), default=0.0)
 
-    def pallet_fork_contact(self) -> bool:
-        fg, pg = set(self.fork_geoms), set(self.pallet_geoms)
+    def pallet_fork_contact(self, vid: str | None = None) -> bool:
+        """托盘与指定车辆货叉的接触 (vid 缺省 = 首车, 单车 API 不变)。"""
+        fg = self.vehicle(vid or self.vehicles[0]).fork_gids
+        pg = set(self.pallet_geoms)
         return any((g1 in fg and g2 in pg) or (g2 in fg and g1 in pg)
                    for g1, g2, _ in self.contacts())
 
-    def support_load_ratio(self, surface: str = "beam") -> float:
+    def support_load_ratio(self, surface: str = "beam",
+                           vid: str | None = None) -> float:
         """支撑面承担的竖向力 / 托盘总重 (放置判据)。
 
         mj_contactForce 返回的是"施加于 geom1 的力"; 支撑梁 geom1 被托盘向下压,
         故取 -fz (向上为正)。
 
         surface="beam": 货架横梁 —— 托盘**放**在梁上时的判据;
-        surface="fork": 叉顶 —— 托盘**被叉举着**时的判据。
+        surface="fork": 叉顶 —— 托盘**被叉举着**时的判据 (vid 指明哪辆车,
+        缺省 = 首车)。
         二者是不同事件: 插叉后托盘可能同时压着梁又压着叉, 只读一个会把
         「叉上载着但还没离梁」误判成「叉空了」。
         """
         gids = (self.support_gids if surface == "beam"
-                else self.fork_gids)
+                else self.vehicle(vid or self.vehicles[0]).fork_gids)
         total = 0.0
         f1 = np.zeros(6)
         for i in range(self.data.ncon):

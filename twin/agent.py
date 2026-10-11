@@ -18,7 +18,8 @@ LLM_BASE = os.environ.get("TWIN_LLM_BASE", "")     # e.g. http://127.0.0.1:1234/
 LLM_MODEL = os.environ.get("TWIN_LLM_MODEL", "")
 
 SYSTEM = (
-    "你是仓储调度 Agent, 管理一个 1:15 桌面仓库数字空间 (F01 无人叉车)。"
+    "你是仓储调度 Agent, 管理一个 1:15 桌面仓库数字空间"
+    " (F01/F02 两台无人叉车, 同一巷道互斥作业)。"
     "你只能通过工具影响世界: 下发任务、暂停、调速、查询库存与事件。"
     "你不能修改库存事实 —— 事实只由物理执行证据经世界模型事务产生。"
     "回答用简体中文, 简短专业。"
@@ -27,6 +28,12 @@ SYSTEM = (
 TOOLS = [
     {"type": "function", "function": {
         "name": "task_start", "description": "下发一轮下架任务: A-L3-C1 → H01",
+        "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {
+        "name": "task_handoff",
+        "description": "下发双车交接: F01 取货放交接台 S1, F02 等巷道空闲后"
+                       "接力送 H01 ( pallet 所有权 ROBOT:F01→STATION:S1→"
+                       "ROBOT:F02→SLOT:H01 )",
         "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {
         "name": "task_pause", "description": "暂停当前任务",
@@ -64,6 +71,9 @@ def _exec(cmd: str, svc, value=None) -> str:
     if cmd == "task_start":
         r = svc.cmd("start")
         return json.dumps(r, ensure_ascii=False)
+    if cmd == "task_handoff":
+        return json.dumps(svc.cmd("dispatch", list(svc.HANDOFF_TASKS)),
+                          ensure_ascii=False)
     if cmd == "task_pause":
         return json.dumps(svc.cmd("pause"), ensure_ascii=False)
     if cmd == "task_resume":
@@ -110,6 +120,18 @@ def rules(text: str, svc) -> tuple[str, list]:
         st = svc.state(0, 0)
         reply = (f"任务状态 {svc.mode}, 第 {st['step']}/{st['total'] or '?'} 步: "
                  f"{svc.step_label}; 仿真时间 {st['sim_t']:.1f}s。")
+    elif any(w in t for w in ("接力", "交接", "双车", "F02")):
+        if svc.mode == "running":
+            reply = ("已有任务在执行中 (双车互斥, 交接须等当前队列完成); "
+                     "可先\u201c暂停\u201d或\u201c复位\u201d。")
+        else:
+            tools.append(("task_handoff", None))
+            reply = ("已下发双车交接: ①F01 从 A-L3-C1 取 PAL-001 放交接台 S1"
+                     " (放托验真后提交 STATION:S1, 随即前移让位清出巷道) "
+                     "②F02 等巷道空闲后接力, S1 取托送出库位 H01"
+                     " (提交 SLOT:H01 + 出库待命)。交接是单一托盘的所有权"
+                     "转移链 ROBOT:F01 → STATION:S1 → ROBOT:F02 → SLOT:H01,"
+                     " 巷道作业区全程互斥。")
     elif any(w in t for w in ("放回", "上架", "归位", "回架")):
         tools.append(("task_dispatch", [("PAL-001", "G-001", "STAGE", "L3")]))
         reply = ("已下发上架任务: PAL-001 从 H01 放回 A-L3-C1。"
@@ -155,13 +177,15 @@ def rules(text: str, svc) -> tuple[str, list]:
             f"{e['payload'].get('to_location', '')}" for e in ev) or "无") \
             + "。完整事件账本在 SQLite, 可回放。"
     elif any(w in t for w in ("你好", "介绍", "能做什么", "help", "帮助")):
-        reply = ("我能: ①\u201c把 A-L3-C1 那托下架到 H01\u201d下发任务 "
-                 "②\u201c暂停/继续/复位\u201d控制执行 ③\u201c快 4 倍\u201d调播放倍率 "
-                 "④\u201c库存/进度/事件\u201d查询世界模型。所有指令走同一条"
+        reply = ("我能: ①\u201c把 A-L3-C1 那托下架到 H01\u201d下发单车任务 "
+                 "②\u201cF02 接力送 H01\u201d下发双车交接 "
+                 "③\u201c暂停/继续/复位\u201d控制执行 ④\u201c快 4 倍\u201d调播放倍率 "
+                 "⑤\u201c库存/进度/事件\u201d查询世界模型。所有指令走同一条"
                  "判据→物理→事务链, 没有旁路。")
     else:
         reply = ("没听懂。试试: \u201c把 A-L3-C1 那托下架到 H01\u201d / "
-                 "\u201c暂停\u201d / \u201c快 4 倍\u201d / \u201c库存\u201d / \u201c事件\u201d。")
+                 "\u201cF02 接力送 H01\u201d / \u201c暂停\u201d / \u201c快 4 倍\u201d / "
+                 "\u201c库存\u201d / \u201c事件\u201d。")
     for cmd, v in tools:
         _exec(cmd, svc, v)
     return reply, [{"tool": c, "arg": v} for c, v in tools]

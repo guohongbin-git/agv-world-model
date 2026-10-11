@@ -42,6 +42,10 @@ CAPABILITIES: dict[str, set[Action]] = {
     "F01": {Action.MOVE_TO, Action.ALIGN, Action.DOCK_LINEAR, Action.INSERT_FORKS,
             Action.LIFT_TO, Action.LOWER_UNTIL_SUPPORTED, Action.WITHDRAW_FORKS,
             Action.RETREAT_LOADED, Action.STOP},
+    # P3 Wave2: F02 与 F01 同规格 (同一 MJCF 模板), 能力集一致。
+    "F02": {Action.MOVE_TO, Action.ALIGN, Action.DOCK_LINEAR, Action.INSERT_FORKS,
+            Action.LIFT_TO, Action.LOWER_UNTIL_SUPPORTED, Action.WITHDRAW_FORKS,
+            Action.RETREAT_LOADED, Action.STOP},
     "M01": {Action.ARM_MOVE_JOINTS, Action.ARM_MOVE_TCP, Action.GRIPPER_CLOSE,
             Action.GRIPPER_OPEN, Action.ARM_STOW, Action.STOP},
     "M02": {Action.ARM_MOVE_JOINTS, Action.ARM_MOVE_TCP, Action.GRIPPER_CLOSE,
@@ -175,7 +179,7 @@ class Command(BaseModel):
     clock_domain: ClockDomain = ClockDomain.SIMULATION
     command_id: str = Field(min_length=1)
     task_id: str = Field(min_length=1)
-    robot_id: Literal["R01", "F01", "M01", "M02"]
+    robot_id: Literal["R01", "F01", "F02", "M01", "M02"]
     action: Action
     params: dict[str, Any]
     timeout_s: Annotated[float, Field(gt=0)]

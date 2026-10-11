@@ -34,7 +34,7 @@ World (SQLite 事务: 托盘位置·货位占用·绑定·计数 + Event 账本)
 PYTHONPATH=. python twin/server.py     # http://127.0.0.1:8300
 ```
 
-页面内对 Agent 说：`把 A-L3-C1 那托下架到 H01` · `快 4 倍` · `库存` · `事件`。
+页面内对 Agent 说：`把 A-L3-C1 那托下架到 H01` · `F01 取货放交接台, F02 接力送 H01`（双车交接）· `快 4 倍` · `库存` · `事件`。
 理论页 `/theory.html`；照片级影片在 `deliverables/`。
 
 ## 目录
@@ -52,8 +52,8 @@ PYTHONPATH=. python twin/server.py     # http://127.0.0.1:8300
 
 ## 进行中
 
-- **P2** 多货物多货位 + 任务 DAG（物理多层 cell 已落地，210 测试全绿）
-- **P3** 双车（F01+R01）+ 交接事务链
+- **P2 完成** 多货物多货位 + 任务 DAG（物理多层 cell 已落地，210 测试全绿）
+- **P3 Wave2 完成** 双车（F01+F02）同巷道交接：F02 行程放宽、AisleLock 巷道互斥、S1 交接台所有权转移链（`tests/test_p3_wave2_handoff.py` 实测零碰撞）；R01 机械臂车与三段交接属后续
 - **P4** 锥桶 + `mj_multiRay` 激光雷达 + 占据栅格重规划 + E0–E6 消融
 - **Learning loop** 自课程 + Decision Memory + 成长曲线
 
