@@ -113,11 +113,13 @@ class WorldService:
         self.chat_seq = 0
         self.db_lock = threading.RLock()   # 串行化 World 跨线程访问
         self._board_cache: tuple | None = None
+        self.tasks: list | None = None
+        self.steps_total = 0
         self.build()
 
     # ---------- 构建/复位 ----------
     def build(self) -> None:
-        cell = ForkliftCell(timestep_s=0.0005)
+        cell = ForkliftCell(timestep_s=0.0005, levels=[0.100, 0.250, 0.400])
         d = cell.data
         d.ctrl[cell.a_x] = cell.k["start_axle_x"] - cell.q0_x
         d.ctrl[cell.a_lift] = 0.0
@@ -140,81 +142,132 @@ class WorldService:
         self.step_label = "待命"
 
     def _seed_ledger(self) -> None:
-        """注册本体事实 (与物理初态一致): 货位/托盘/货物/绑定。"""
+        """注册本体事实 (与物理初态一致): 3 货位 + H01 + 3 托盘 + 3 货物。"""
         w = self.world
         w.register_slot(Slot("A-L3-C1", (0.0, 0.0, 0.400), SlotOcc.OCCUPIED))
+        w.register_slot(Slot("A-L2-C1", (0.0, 0.0, 0.250), SlotOcc.OCCUPIED))
+        w.register_slot(Slot("A-L1-C1", (0.0, 0.0, 0.100), SlotOcc.OCCUPIED))
         w.register_slot(Slot("H01", (-0.340, 0.0, 0.045), SlotOcc.EMPTY))
-        w.register_pallet(Pallet("PAL-001", 0.022,
-                                 Loc(LocKind.SLOT, "A-L3-C1"),
-                                 PalletCargo.LOADED))
-        w.register_goods(GoodsUnit("G-001", "COKE-500ML×24", 0.023,
-                                   Loc(LocKind.PALLET, "PAL-001"),
-                                   GoodsLifecycle.IN_WAREHOUSE))
-        w._conn.execute("INSERT INTO bindings VALUES(?,?,?,1)",
-                        ("G-001", "PAL-001", 1))
+        for pid, slot in (("PAL-001", "A-L3-C1"), ("PAL-002", "A-L1-C1"),
+                          ("PAL-003", "A-L2-C1")):
+            w.register_pallet(Pallet(pid, 0.022, Loc(LocKind.SLOT, slot),
+                                     PalletCargo.LOADED))
+        for gid, pid, sku in (("G-001", "PAL-001", "COKE-500ML×24"),
+                              ("G-002", "PAL-002", "SPARKLING-330ML×24"),
+                              ("G-003", "PAL-003", "MIZONE-500ML×12")):
+            w.register_goods(GoodsUnit(gid, sku, 0.023,
+                                       Loc(LocKind.PALLET, pid),
+                                       GoodsLifecycle.IN_WAREHOUSE))
+            w._conn.execute("INSERT INTO bindings VALUES(?,?,?,1)",
+                            (gid, pid, 1))
         w._conn.commit()
 
-    # ---------- 任务步骤 (判据层动作序列 + 事务提交点) ----------
-    def _steps(self) -> list:
+    # ---------- 位置常量与通用取放任务 (P2 多货物/任务队列) ----------
+    LOC = {"L1": 0.100, "L2": 0.250, "L3": 0.400, "STAGE": 0.045}
+    SLOT_OF = {"L1": "A-L1-C1", "L2": "A-L2-C1", "L3": "A-L3-C1",
+               "STAGE": "H01"}
+    # 任务队列: (pallet, goods, src, dst); agent dispatch 覆盖
+    DEFAULT_TASKS = [("PAL-001", "G-001", "L3", "STAGE"),
+                     ("PAL-001", "G-001", "STAGE", "L3")]
+
+    def _task_steps(self, src: str, dst: str, pid: str, gid: str) -> list:
         k = self.cell.k
         x_ins = -0.040 + k["insert_depth"] - (k["fork_root_x"] + k["fork_len"])
         x_edge = -0.040 - k["approach_gap"] - k["fork_len"] - k["fork_root_x"]
         x_clear = -0.200 - k["fork_root_x"] - k["fork_len"] - 0.010
         off = 0.094                       # 托盘中心相对轴偏置 (实测值)
         x_stage = -0.340 - off
-        x_out = x_stage - k["retreat_loaded"] - 0.060
-        return [
-            ("lift", dict(target_z=k["insert_z"], speed_mps=0.010),
-             "升至插叉高度 (支撑面+10)", None),
-            ("move", dict(target_axle_x=x_edge, speed_mps=0.020),
-             "接近货架前沿", None),
-            ("move", dict(target_axle_x=x_ins, speed_mps=0.005),
-             "插叉 65mm (≤5mm/s 判据)", None),
-            ("lift", dict(target_z=k["lift_z"], speed_mps=0.002),
-             "举升离梁 (支撑面+17)", self._commit_on_robot),
-            ("move", dict(target_axle_x=x_clear, speed_mps=0.020),
-             "带载直线退出 (叉尖越过横梁)", None),
-            ("lift", dict(target_z=k["transport_z"], speed_mps=0.010),
-             "降至运输高度 65mm", None),
-            ("move", dict(target_axle_x=x_stage, speed_mps=0.020),
-             "低位转运至暂存站上方", None),
-            ("lift", dict(target_z=0.057, speed_mps=0.010),
-             "举至放托位 (台面+12)", None),
-            ("lift", dict(target_z=0.0565, speed_mps=0.002),
-             "微降脱离叉孔上壁", None),
-            ("move", dict(target_axle_x=x_out, speed_mps=0.020),
-             "空叉退出 (越过近边+10mm)", self._commit_on_stage),
-        ]
+        x_stage_out = x_stage - k["retreat_loaded"] - 0.060
+        ax, lf = self.cell.a_x, self.cell.a_lift
+        qx, ql = self.cell.qadr_x, self.cell.qadr_lift
+        q0x, tz = self.cell.q0_x, k["transport_z"]
+
+        def mv(x, v, calm=False, label="", commit=None):
+            return (lambda: self._ramp(ax, qx, x - q0x, v, calm), label, commit)
+
+        def up(z, v, calm=False, label="", commit=None):
+            return (lambda: self._ramp(lf, ql, z - tz, v, calm), label, commit)
+        zs, zd = self.LOC[src], self.LOC[dst]
+        pick = lambda: self._commit_pick(src, pid)
+        place = lambda: self._commit_place(dst, pid, gid)
+        steps = []
+        if src == "STAGE":
+            steps += [
+                up(zs + 0.010, 0.010, False, f"[{pid}] 叉降至台面临时高度 (+10)"),
+                mv(x_stage, 0.020, False, "低位进近暂存站 (≤5mm/s 前插)"),
+                up(zs + 0.017, 0.002, True, "抬叉离台 (+17)", pick),
+                mv(x_stage_out, 0.020, True, "带载退出暂存站"),
+                up(tz, 0.010, True, "升至运输高度")]
+        else:
+            steps += [
+                up(zs + 0.010, 0.010, False,
+                   f"[{pid}] 升至插叉高度 ({self.SLOT_OF[src]}+10)"),
+                mv(x_edge, 0.020, False, "接近货架前沿"),
+                mv(x_ins, 0.005, False, "插叉 65mm (≤5mm/s 判据)"),
+                up(zs + 0.017, 0.002, True, "举升离梁 (+17)", pick),
+                mv(x_clear, 0.020, True, "带载直线退出 (叉尖越过横梁)"),
+                up(tz, 0.010, True, "降至运输高度 65mm")]
+        if dst == "STAGE":
+            steps += [
+                mv(x_stage, 0.020, True, "低位转运至暂存站上方"),
+                up(zd + 0.012, 0.010, True, "举至放托位 (台面+12)"),
+                up(zd + 0.010, 0.002, False, "微降脱离叉孔上壁"),
+                mv(x_stage_out, 0.020, False, "空叉退出 (越过近边+10mm)",
+                   place)]
+        else:
+            steps += [
+                mv(x_edge, 0.020, False, "转运至货架前沿"),
+                up(zd + 0.017, 0.010, True, f"升至插入高度 ({self.SLOT_OF[dst]}+17)"),
+                mv(x_ins, 0.005, False, "对位插入 (≤5mm/s)"),
+                up(zd + 0.012, 0.002, False, "缓降至支撑面 (托盘落梁)"),
+                up(zd + 0.010, 0.002, False, "再降 2mm 脱离叉孔上壁"),
+                mv(x_edge, 0.020, False, "空叉撤出叉孔"),
+                mv(k["start_axle_x"], 0.020, False, "返回安全车位", place),
+                up(tz, 0.010, False, "叉架复位运输高度")]
+        return steps
 
     # 提交点: 只在物理证据成立时写 World
-    def _commit_on_robot(self) -> bool:
+    def _commit_pick(self, src: str, pid: str) -> bool:
         c = self.cell
-        if not c.pallet_fork_contact() or c.pallet_bottom_z < 0.402:
+        if not c.pallet_fork_contact() or \
+                c.pallet_bottom_z < self.LOC[src] + 0.003:
             return False
-        self.world.move_pallet("PAL-001", Loc(LocKind.ROBOT, "F01"),
+        self.world.move_pallet(pid, Loc(LocKind.ROBOT, "F01"),
                                TASK_ID, float(c.data.time))
         self.world._conn.execute(
-            "UPDATE slots SET occupancy='EMPTY' WHERE slot_id='A-L3-C1'")
+            "UPDATE slots SET occupancy='EMPTY' WHERE slot_id=?",
+            (self.SLOT_OF[src],))
         self.world._conn.commit()
-        self.narrate("物理证据确认: PAL-001 已离梁、由 F01 叉臂承托。"
-                     "事务提交 PAL-001→ROBOT:F01, 货位 A-L3-C1 释放。"
-                     "在库计数不变 (绑定 G-001 有效位置仍是 PALLET)。")
+        self.narrate(f"物理证据确认: {pid} 已离面、由 F01 叉臂承托。"
+                     f"事务提交 {pid}→ROBOT:F01, 货位 {self.SLOT_OF[src]} "
+                     "释放。在库计数不变。")
         return True
 
-    def _commit_on_stage(self) -> bool:
+    def _commit_place(self, dst: str, pid: str, gid: str) -> bool:
         c = self.cell
-        if c.pallet_fork_contact() or not (0.042 <= c.pallet_bottom_z <= 0.048):
+        z = self.LOC[dst]
+        if c.pallet_fork_contact() or not (z - 0.002 <= c.pallet_bottom_z
+                                           <= z + 0.005):
             return False
         t = float(c.data.time)
-        self.world.move_pallet("PAL-001", Loc(LocKind.STATION, "H01"),
-                               TASK_ID, t)
-        self.world.mark_outbound_pending("G-001", TASK_ID, t)
+        kind = LocKind.STATION if dst == "STAGE" else LocKind.SLOT
+        self.world.move_pallet(pid, Loc(kind, self.SLOT_OF[dst]), TASK_ID, t)
+        if dst == "STAGE":
+            self.world.mark_outbound_pending(gid, TASK_ID, t)
+        else:  # 回架: 出库待命 → 在库 (同一事务)
+            self.world._conn.execute(
+                "UPDATE goods SET lifecycle='IN_WAREHOUSE', "
+                "entity_version=entity_version+1 WHERE goods_id=?", (gid,))
+            self.world._conn.commit()
+            self.world.emit(TASK_ID, "InboundConfirmed",
+                            {"goods_id": gid, "slot": self.SLOT_OF[dst]}, t)
         self.world._conn.execute(
-            "UPDATE slots SET occupancy='OCCUPIED' WHERE slot_id='H01'")
+            "UPDATE slots SET occupancy='OCCUPIED' WHERE slot_id=?",
+            (self.SLOT_OF[dst],))
         self.world._conn.commit()
-        self.narrate("放托验真: 叉臂脱离、托盘底面 45mm 落在 H01 台面。"
-                     "事务提交 PAL-001→STATION:H01, G-001→出库待命 "
-                     "(仍计在库, 只有离场才减)。任务完成。")
+        self.narrate(f"放托验真: 叉臂脱离、{pid} 底面落在 "
+                     f"{self.SLOT_OF[dst]} 支撑面 {z*1000:.0f}mm。"
+                     f"事务提交 {pid}→{self.SLOT_OF[dst]}。")
         return True
 
     # ---------- mission 线程 ----------
@@ -246,72 +299,58 @@ class WorldService:
                     return True
         return abs(float(d.qpos[qadr]) - q_target) <= 2e-3
 
-    def _steps(self) -> list:
-        k = self.cell.k
-        x_ins = -0.040 + k["insert_depth"] - (k["fork_root_x"] + k["fork_len"])
-        x_edge = -0.040 - k["approach_gap"] - k["fork_len"] - k["fork_root_x"]
-        x_clear = -0.200 - k["fork_root_x"] - k["fork_len"] - 0.010
-        off = 0.094                       # 托盘中心相对轴偏置 (实测值)
-        x_stage = -0.340 - off
-        x_out = x_stage - k["retreat_loaded"] - 0.060
-        ax, lf = self.cell.a_x, self.cell.a_lift
-        qx, ql = self.cell.qadr_x, self.cell.qadr_lift
-        q0x, tz = self.cell.q0_x, k["transport_z"]
-
-        def mv(x, v, calm=False):
-            return lambda: self._ramp(ax, qx, x - q0x, v, calm)
-
-        def up(z, v, calm=False):
-            return lambda: self._ramp(lf, ql, z - tz, v, calm)
-        return [
-            (up(k["insert_z"], 0.010), "升至插叉高度 (支撑面+10)", None),
-            (mv(x_edge, 0.020), "接近货架前沿", None),
-            (mv(x_ins, 0.005), "插叉 65mm (≤5mm/s 判据)", None),
-            (up(k["lift_z"], 0.002), "举升离梁 (支撑面+17)",
-             self._commit_on_robot),
-            (mv(x_clear, 0.020, True), "带载直线退出 (叉尖越过横梁)", None),
-            (up(tz, 0.010, True), "降至运输高度 65mm", None),
-            (mv(x_stage, 0.020, True), "低位转运至暂存站上方", None),
-            (up(0.057, 0.010, True), "举至放托位 (台面+12)", None),
-            (up(0.0565, 0.002, True), "微降脱离叉孔上壁", None),
-            (mv(x_out, 0.020), "空叉退出 (越过近边+10mm)",
-             self._commit_on_stage),
-        ]
-
     def _run_steps(self, d) -> None:
-        for i, (fn, label, commit) in enumerate(self._steps()):
-            with self.gate.lock:
-                self.step = i
-                self.step_label = label
-            self.narrate(f"[{i + 1}/10] {label} — 开始 (判据层限速执行)")
-            if not fn():
-                with self.db_lock:
-                    self.world.emit(TASK_ID, "StepFailed",
-                                    {"step": i, "label": label},
-                                    float(d.time))
-                self.mode = "failed"
-                self.step_label = f"失败: {label}"
-                self.narrate(f"步骤 [{label}] FAILED — 不提交事务, "
-                             "状态保持, 等待人工/agent 决策。")
-                return
-            if commit is not None:
-                with self.db_lock:
-                    ok = commit()
-                if not ok:
+        tasks = self.tasks or self.DEFAULT_TASKS
+        plans = [(t, self._task_steps(t[2], t[3], t[0], t[1])) for t in tasks]
+        self.steps_total = sum(len(s) for _, s in plans)
+        i = 0
+        for n, ((pid, gid, src, dst), steps) in enumerate(plans, 1):
+            with self.db_lock:
+                self.world.emit(TASK_ID, "TaskStarted",
+                                {"task": n, "pallet": pid,
+                                 "from": self.SLOT_OF[src],
+                                 "to": self.SLOT_OF[dst]}, float(d.time))
+            self.narrate(f"— 任务 {n}/{len(plans)}: {pid} "
+                         f"{self.SLOT_OF[src]} → {self.SLOT_OF[dst]} —")
+            for fn, label, commit in steps:
+                i += 1
+                with self.gate.lock:
+                    self.step = i
+                    self.step_label = f"T{n}·{label}"
+                if not fn():
                     with self.db_lock:
-                        self.world.emit(TASK_ID, "CommitEvidenceMissing",
+                        self.world.emit(TASK_ID, "StepFailed",
                                         {"step": i, "label": label},
                                         float(d.time))
                     self.mode = "failed"
-                    self.step_label = f"证据不足: {label}"
-                    self.narrate(f"[{label}] 物理执行完成但承托/脱离证据不满足"
-                                 " — 拒绝提交 (agent 可改计划, 不能改事实)。")
+                    self.step_label = f"失败: {label}"
+                    self.narrate(f"步骤 [{label}] FAILED — 不提交事务, "
+                                 "状态保持, 等待人工/agent 决策。")
                     return
+                if commit is not None:
+                    with self.db_lock:
+                        ok = commit()
+                    if not ok:
+                        with self.db_lock:
+                            self.world.emit(TASK_ID,
+                                            "CommitEvidenceMissing",
+                                            {"step": i, "label": label},
+                                            float(d.time))
+                        self.mode = "failed"
+                        self.step_label = f"证据不足: {label}"
+                        self.narrate(f"[{label}] 物理执行完成但承托/脱离"
+                                     "证据不满足 — 拒绝提交 (agent 可改"
+                                     "计划, 不能改事实)。")
+                        return
+                with self.db_lock:
+                    self.world.emit(TASK_ID, "StepCompleted",
+                                    {"step": i, "label": label},
+                                    float(d.time))
             with self.db_lock:
-                self.world.emit(TASK_ID, "StepCompleted",
-                                {"step": i, "label": label}, float(d.time))
-        self.step = 10
-        self.step_label = "任务完成"
+                self.world.emit(TASK_ID, "TaskCompleted",
+                                {"task": n, "pallet": pid}, float(d.time))
+        self.step = i
+        self.step_label = "队列完成"
         self.mode = "done"
 
     # ---------- 命令 (只接受来自 agent 层的调用) ----------
@@ -326,9 +365,9 @@ class WorldService:
                 self._thread = threading.Thread(target=self.run_mission,
                                                 daemon=True)
                 self._thread.start()
-                self.narrate("任务已受理: 将 A-L3-C1 的 PAL-001 下架至 H01。"
-                             "执行走判据层 (插叉≤5mm/s、退叉门禁、承托验真),"
-                             "库存只在证据成立后提交。")
+                q = self.tasks or self.DEFAULT_TASKS
+                self.narrate(f"任务队列已受理 ({len(q)} 个任务): "
+                             "判据层限速执行, 库存只在物理证据成立后提交。")
         elif op == "pause":
             with self.gate.lock:
                 self.gate.paused = True
@@ -346,7 +385,11 @@ class WorldService:
                 self.gate.speed = v
                 self.gate.t0 = time.monotonic() - sim_now / v
             self.narrate(f"播放倍率 = {v:g}× (物理仿真不变, 只改墙钟配速)。")
+        elif op == "dispatch":
+            self.tasks = [tuple(t) for t in (value or [])]
+            return self.cmd("start")
         elif op == "reset":
+            self.tasks = None
             self.mode = "idle"
             self.build()
             self.narrate("已复位: 新 run、账本重播种、与物理初态一致。")
@@ -399,7 +442,8 @@ class WorldService:
         return {
             "poses": snap, "sim_t": snap.get("t", 0),
             "mode": self.mode, "paused": paused, "speed": speed,
-            "step": self.step, "step_label": self.step_label,
+            "step": self.step, "total": self.steps_total,
+            "step_label": self.step_label,
             "events": events, "n_events": len(rows),
             "chat": chats, "board": self.board(),
         }

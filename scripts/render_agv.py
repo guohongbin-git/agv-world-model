@@ -453,7 +453,7 @@ def main() -> None:
             box(f"tie_{tag}_{sx}", (0.004, 2 * fy - 0.010, 0.008),
                 (sx * 0.048, 0, 0.055), mat_blue, bevel=0.0004, parent=grp)
         # 横梁: y 向双梁 x=±0.040 (顶面=层标高), 端部挂耳抱柱
-        for lz in (0.160, 0.280, 0.400):
+        for lz in (0.100, 0.250, 0.400):
             for sx in (-1, 1):
                 x = sx * 0.040
                 box(f"beam_{tag}_{sx}_{lz}", (0.012, 2 * fy - 0.004, 0.007),
@@ -646,10 +646,31 @@ def main() -> None:
             (0.004 + i * 0.0016, -0.0274, z0 + 0.014), mat_base, bevel=0,
             parent=pa)
 
-    # ── 背景货架 (虚化纵深, 无物理) ──
-    for tag, by in (("bg1", 0.62), ("bg2", 1.15)):
-        build_rack(tag, -0.15, by)
-    build_rack("bg3", -0.75, -0.75)
+    # ── 静态库存托盘 (P2 多货物: L1/L2 各一托, 视觉与 cell levels 对齐) ──
+    def static_pal(tag, z):
+        for i in range(5):
+            yy = -PAL_LY / 2 + PAL_LY / 4 * i
+            box(f"sdeck_{tag}_{i}", (PAL_LX, PAL_LY / 5 - 0.003, deck_t),
+                (0, yy, z + PAL_HZ - deck_t / 2), mat_wood, bevel=0.0002)
+        for y in (-0.027, 0.0, 0.027):
+            box(f"sstr_{tag}_{y}", (PAL_LX - 0.004, 0.010, 0.014),
+                (0, y, z + 0.011), mat_wood, bevel=0.0004)
+            box(f"srun_{tag}_{y}", (PAL_LX, 0.006, 0.004),
+                (0, y, z + 0.002), mat_wood, bevel=0.0003)
+        box(f"scar_{tag}", (0.072, 0.052, 0.030), (0, 0, z + PAL_HZ + 0.015),
+            mat_card, bevel=0.0018)
+        box(f"stape_{tag}", (0.073, 0.008, 0.0005), (0, 0, z + PAL_HZ + 0.0302),
+            mat_label, bevel=0)
+        box(f"slabel_{tag}", (0.018, 0.0004, 0.012),
+            (0.010, -0.0261, z + PAL_HZ + 0.016), mat_label, bevel=0)
+    static_pal("l1", 0.100)
+    static_pal("l2", 0.250)
+
+    # ── 背景货架 (虚化纵深, 无物理) —— 仅离线 hero 渲染; 孪生空间 = design cell ──
+    if not TWIN:
+        for tag, by in (("bg1", 0.62), ("bg2", 1.15)):
+            build_rack(tag, -0.15, by)
+        build_rack("bg3", -0.75, -0.75)
 
     # ── 位姿驱动 (与 photoreal 完全一致) ──
     poses = load_poses()

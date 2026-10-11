@@ -67,6 +67,8 @@ def _exec(cmd: str, svc, value=None) -> str:
         return json.dumps(svc.cmd("speed", value), ensure_ascii=False)
     if cmd == "inventory_query":
         return json.dumps(svc.board(), ensure_ascii=False)
+    if cmd == "task_dispatch":
+        return json.dumps(svc.cmd("dispatch", value), ensure_ascii=False)
     if cmd == "events_query":
         rows, ev = svc.events_since(max(0, len(rows0(svc)) - int(value or 5)))
         return json.dumps(ev, ensure_ascii=False)
@@ -93,10 +95,28 @@ def rules(text: str, svc) -> tuple[str, list]:
         tools.append(("task_reset", None))
         reply = ("已复位: 新 run_id, 库存账本重新播种, 与物理初态一致。"
                  "历史 run 的 SQLite 保留在 twin/runs/ 可审计。")
-    elif "倍" in t or "速度" in t or "快" in t or "慢" in t:
-        v = float(m.group(1)) if m else (4.0 if "快" in t else 0.5)
-        tools.append(("set_speed", v))
-        reply = f"播放倍率已设为 {v:g}× —— 物理仿真与判据不变, 只改墙钟配速。"
+    elif any(w in t for w in ("进度", "到哪", "在做什么", "怎么样")):
+        st = svc.state(0, 0)
+        reply = (f"任务状态 {svc.mode}, 第 {st['step']}/{st['total'] or '?'} 步: "
+                 f"{svc.step_label}; 仿真时间 {st['sim_t']:.1f}s。")
+    elif any(w in t for w in ("放回", "上架", "归位", "回架")):
+        tools.append(("task_dispatch", [("PAL-001", "G-001", "STAGE", "L3")]))
+        reply = ("已下发上架任务: PAL-001 从 H01 放回 A-L3-C1。"
+                 "回架走真实对位: ≤5mm/s 插入 → 缓降落梁 → 脱离叉孔上壁 → "
+                 "证据验真后事务提交 (生命周期回到 IN_WAREHOUSE)。")
+    elif any(w in t for w in ("完整", "两轮", "整理", "闭环", "跑一遍")):
+        tools.append(("task_dispatch", None))
+        reply = ("已下发完整闭环队列: ①PAL-001 下架 L3→H01 ②放回 H01→L3。"
+                 "两任务串行, 每步判据限速, 事务只在证据成立时提交。")
+    elif any(w in t for w in ("取", "下架", "搬", "放到", "开始", "启动",
+                              "执行", "跑一轮", "出库")):
+        if svc.mode == "running":
+            reply = "已有任务在执行中; 可先\u201c暂停\u201d或\u201c复位\u201d。"
+        else:
+            tools.append(("task_dispatch",
+                          [("PAL-001", "G-001", "L3", "STAGE")]))
+            reply = ("任务已下发: PAL-001 下架 A-L3-C1 → H01。执行走判据层,"
+                     " 库存只在物理证据成立后提交 —— 看右侧事件流。")
     elif any(w in t for w in ("库存", "多少货", "盘点", "几托", "状态")):
         tools.append(("inventory_query", None))
         b = svc.board()
@@ -112,18 +132,6 @@ def rules(text: str, svc) -> tuple[str, list]:
             f"[{e['t']}s] {e['type']} {e['payload'].get('label', '')}"
             f"{e['payload'].get('to_location', '')}" for e in ev) or "无") \
             + "。完整事件账本在 SQLite, 可回放。"
-    elif any(w in t for w in ("进度", "到哪", "在做什么", "怎么样")):
-        reply = (f"任务状态 {svc.mode}, 当前第 {svc.step + 1} 步: "
-                 f"{svc.step_label}; 仿真时间 {svc.state(0, 0)['sim_t']:.1f}s。")
-    elif any(w in t for w in ("取", "下架", "搬", "放到", "开始", "启动",
-                              "执行", "跑一轮", "出库")):
-        if svc.mode == "running":
-            reply = "已有任务在执行中; 可先\u201c暂停\u201d或\u201c复位\u201d。"
-        else:
-            tools.append(("task_start", None))
-            reply = ("任务已下发: 把 A-L3-C1 的 PAL-001 (可口可乐 24 箱) "
-                     "下架到 H01 暂存站。执行经判据层, 库存只在物理证据"
-                     "成立后提交 —— 看右侧事件流。")
     elif any(w in t for w in ("你好", "介绍", "能做什么", "help", "帮助")):
         reply = ("我能: ①\u201c把 A-L3-C1 那托下架到 H01\u201d下发任务 "
                  "②\u201c暂停/继续/复位\u201d控制执行 ③\u201c快 4 倍\u201d调播放倍率 "

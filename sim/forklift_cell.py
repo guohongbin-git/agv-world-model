@@ -128,13 +128,13 @@ class ForkliftCell:
             sfx = ("_b", "_c", "_d")[i]
             extra_sup += (
                 f'    <geom name="support_l{sfx}" type="box" pos="0 -0.027 '
-                f'{z - 0.0025}" size="0.20 0.003 0.0025" '
+                f'{z - 0.0025}" size="0.046 0.003 0.0025" '
                 f'rgba="0.80 0.42 0.10 1"/>\n'
                 f'    <geom name="support_c{sfx}" type="box" pos="0 0 '
-                f'{z - 0.0025}" size="0.20 0.006 0.0025" '
+                f'{z - 0.0025}" size="0.046 0.006 0.0025" '
                 f'rgba="0.80 0.42 0.10 1"/>\n'
                 f'    <geom name="support_r{sfx}" type="box" pos="0 0.027 '
-                f'{z - 0.0025}" size="0.20 0.003 0.0025" '
+                f'{z - 0.0025}" size="0.046 0.003 0.0025" '
                 f'rgba="0.80 0.42 0.10 1"/>\n')
             extra_pal += self._pal_block(f"pallet{sfx}", z + 0.001, sfx)
         nc = 200 + 150 * max(0, len(lv) - 1)
@@ -181,10 +181,13 @@ class ForkliftCell:
     <geom name="upright_br" type="box" pos="-0.20 0.033 {(k['support_z'] + 0.10)/2}"
           size="0.004 0.004 {(k['support_z'] + 0.10)/2}" rgba="0.25 0.30 0.45 1"
           contype="0" conaffinity="0"/>
-    <!-- 支撑面: 三条横梁 (y=±27,0), 与托盘底条同位; 高度随 support_z 参数化 -->
-    <geom name="support_l" type="box" pos="0 -0.027 {k['support_z'] - 0.0025}" size="0.20 0.003 0.0025" rgba="0.80 0.42 0.10 1"/>
-    <geom name="support_c" type="box" pos="0 0 {k['support_z'] - 0.0025}" size="0.20 0.006 0.0025" rgba="0.80 0.42 0.10 1"/>
-    <geom name="support_r" type="box" pos="0 0.027 {k['support_z'] - 0.0025}" size="0.20 0.003 0.0025" rgba="0.80 0.42 0.10 1"/>
+    <!-- 支撑面: 三条横梁 (y=±27,0), 与托盘底条同位; 高度随 support_z 参数化。
+     x 向只在 bay 宽度内 (±0.046): 真实 selective rack 的梁不横跨巷道,
+     AGV 载货抬升路径 (巷道上空) 必须无梁 (P2 实测 400mm 全跨时 T2
+     载货抬升撞 L1 梁, 10.9N 死锁 → 复现并修正)。 -->
+    <geom name="support_l" type="box" pos="0 -0.027 {k['support_z'] - 0.0025}" size="0.046 0.003 0.0025" rgba="0.80 0.42 0.10 1"/>
+    <geom name="support_c" type="box" pos="0 0 {k['support_z'] - 0.0025}" size="0.046 0.006 0.0025" rgba="0.80 0.42 0.10 1"/>
+    <geom name="support_r" type="box" pos="0 0.027 {k['support_z'] - 0.0025}" size="0.046 0.003 0.0025" rgba="0.80 0.42 0.10 1"/>
 {extra_sup}
     <!-- 暂存站 (T03 第二货位): 台面顶 z=45mm; 台下净空 z=0..44mm 供底盘(宽±75mm)通过,
          立柱 y=±85mm 在底盘宽度之外; 叉(±20mm)从台下中心贯通 -->

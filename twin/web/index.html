@@ -145,7 +145,7 @@ function apply(s){
   el('t').textContent = (s.sim_t||0).toFixed(1)+' s';
   const mb = el('mode'); mb.textContent = s.mode + (s.paused?' · 暂停':'');
   mb.className = 'badge m-' + s.mode;
-  el('step').textContent = `${s.step<0?'':(s.step+1>10?'':(s.step+1)+'/10 ')}${s.step_label}`;
+  el('step').textContent = `${s.step<0||!s.total?'':(s.step+'/'+s.total+' ')}${s.step_label}`;
   document.querySelectorAll('#sp button').forEach(b=>b.classList.toggle('on', parseFloat(b.dataset.v)===s.speed));
   board(s.board);
   for (const c of s.chat) if (c.seq > chatCur){ chatCur = c.seq; addMsg('agent', c.text); }
