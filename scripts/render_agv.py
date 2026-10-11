@@ -52,9 +52,47 @@ def arg(flag, default=None):
     return argv[argv.index(flag) + 1] if flag in argv else default
 
 
+# --twin: Web 数字孪生导出模式 → 程序化节点图全部退化为 glTF 可序列化的
+# 扁平 PBR 因子 (baseColor/rough/metal), 贴图与噪声链路留给离线渲染
+TWIN = bool(arg("--twin"))
+TWIN_FLATS = {
+    "rack_beam":      ((0.72, 0.18, 0.02, 1), 0.40, 0.1),
+    "rack_upright":   ((0.10, 0.22, 0.55, 1), 0.45, 0.1),
+    "fork_steel":     ((0.65, 0.66, 0.68, 1), 0.30, 1.0),
+    "machinery_dark": ((0.08, 0.08, 0.09, 1), 0.50, 0.8),
+    "pallet_wood":    ((0.62, 0.44, 0.25, 1), 0.80, 0.0),
+}
+
 # ── 材质 helpers (与 render_photoreal 同一套约定) ────────────────────
+def twin_tex_mat(name, tex_key, rough, metallic):
+    """glTF 可序列化材质: 预染色 Color + NormalGL 直连 Principled."""
+    m = bpy.data.materials.new(name)
+    m.use_nodes = True
+    nt = m.node_tree
+    b = nt.nodes["Principled BSDF"]
+
+    def load(fn, srgb):
+        im = bpy.data.images.load(f"{PBR}/twin/{tex_key}{fn}.jpg")
+        im.colorspace_settings.name = "sRGB" if srgb else "Non-Color"
+        t = nt.nodes.new("ShaderNodeTexImage"); t.image = im
+        return t
+
+    nt.links.new(load("", True).outputs["Color"], b.inputs["Base Color"])
+    nm = nt.nodes.new("ShaderNodeNormalMap")
+    nt.links.new(load("_nrm", False).outputs["Color"], nm.inputs["Color"])
+    nt.links.new(nm.outputs["Normal"], b.inputs["Normal"])
+    b.inputs["Roughness"].default_value = rough
+    b.inputs["Metallic"].default_value = metallic
+    return m
+
+
 def pbr_mat(name, subdir, *, tint=None, rough_mul=1.0,
             metallic=0.0, scale=1.0, wear=0.0, tint_mode="mix"):
+    if TWIN:
+        # 高保真 Web 导出: 预染色贴图直连 Principled (glTF 可序列化),
+        # 染色/噪声节点图烘焙在 scripts/make_twin_tex.py
+        c, r, mt = TWIN_FLATS.get(name, ((0.5, 0.5, 0.5, 1), rough_mul, metallic))
+        return twin_tex_mat(name, name, r, mt)
     m = bpy.data.materials.new(name)
     m.use_nodes = True
     nt = m.node_tree
@@ -137,6 +175,8 @@ def emit_mat(name, rgba, strength):
 
 def floor_mat():
     """抛光工业地坪: 大板混凝土 + 伸缩缝网格 + 光泽不均 + 缝内凹槽."""
+    if TWIN:
+        return twin_tex_mat("floor_polished", "floor", 0.35, 0.0)
     m = bpy.data.materials.new("floor_polished")
     m.use_nodes = True
     nt = m.node_tree
@@ -204,6 +244,8 @@ def floor_mat():
 
 def paint_line_mat(name, rgba, faded):
     """磨损地坪漆: 噪声斑驳 + 边缘粗化, 像滚涂在混凝土上的标线漆."""
+    if TWIN:
+        return flat_mat(name, rgba, rough=0.6)
     m = bpy.data.materials.new(name)
     m.use_nodes = True
     nt = m.node_tree
@@ -359,6 +401,11 @@ def main() -> None:
     fl.name = "floor"
     fl.data.materials.append(mat_conc)
     fl["sem_label"] = "floor"
+    if TWIN:
+        # 8m 平面 × 贴图内 4 格缝 → UV×6 ≈ 0.33m/格, 匹配 floor_mat 语义
+        uvl = fl.data.uv_layers.active
+        for lp in uvl.data:
+            lp.uv = (lp.uv[0] * 6.0, lp.uv[1] * 6.0)
     # 标线 (磨损漆, 微离地防 z-fighting) + 巷道虚线 + 暂存区斑马警示带
     box("line_lane", (0.90, 0.014, 0.0012), (-0.10, -0.16, 0.0006),
         mat_line, bevel=0)
@@ -680,6 +727,15 @@ def main() -> None:
 
     scene.frame_start = 1
     scene.frame_end = len(frames)
+
+    tw = arg("--twin")
+    if tw:
+        os.makedirs(os.path.dirname(os.path.abspath(tw)), exist_ok=True)
+        bpy.ops.export_scene.gltf(filepath=tw, export_format="GLB",
+                                  export_cameras=False, export_lights=False,
+                                  export_animations=False, export_extras=True)
+        print("TWIN GLB ->", tw)
+        return
 
     tf = arg("--frame")
     outdir = arg("--video")

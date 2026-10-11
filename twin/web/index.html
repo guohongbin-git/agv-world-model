@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>T04 无人叉车数字孪生 · 实时世界模型</title>
+<style>
+:root{--bg:#0d1117;--panel:#161b22cc;--acc:#f0883e;--txt:#e6edf3;--dim:#8b949e}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--txt);font:14px/1.5 -apple-system,"PingFang SC",sans-serif;overflow:hidden}
+#app{position:fixed;inset:0}
+canvas{display:block}
+.hud{position:fixed;top:16px;left:16px;background:var(--panel);backdrop-filter:blur(10px);border:1px solid #30363d;border-radius:12px;padding:14px 16px;min-width:250px}
+.hud h1{font-size:15px;letter-spacing:.5px}
+.hud .sub{color:var(--dim);font-size:11px;margin-bottom:8px}
+.row{display:flex;gap:8px;margin:6px 0;align-items:center}
+.k{color:var(--dim);width:72px;font-size:12px}
+.v{font-variant-numeric:tabular-nums;font-weight:600}
+.seg{color:var(--acc)}
+.badge{display:inline-block;padding:1px 8px;border-radius:99px;font-size:11px;font-weight:600}
+.live{background:#1a7f37;color:#fff}.replay{background:#1f6feb;color:#fff}.off{background:#6e40c9;color:#fff}
+.ctrl{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);display:flex;gap:10px;background:var(--panel);backdrop-filter:blur(10px);border:1px solid #30363d;border-radius:14px;padding:10px 12px}
+button{background:#21262d;color:var(--txt);border:1px solid #30363d;border-radius:9px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer}
+button:hover{border-color:var(--acc);color:var(--acc)}
+button.primary{background:var(--acc);color:#0d1117;border-color:var(--acc)}
+button.primary:hover{filter:brightness(1.1);color:#0d1117}
+#scrub{width:220px;accent-color:var(--acc)}
+.note{position:fixed;right:16px;bottom:16px;color:var(--dim);font-size:11px;text-align:right;max-width:300px}
+</style>
+<script type="importmap">
+{"imports":{"three":"./vendor/three.module.js","three/addons/":"./vendor/addons/"}}
+</script>
+</head>
+<body>
+<div id="app"></div>
+<div class="hud">
+  <h1>T04 · 三层取放闭环</h1>
+  <div class="sub">MuJoCo 1kHz 物理实时步进 · 位姿 60Hz 推送 · 非视频回放</div>
+  <div class="row"><span class="k">模式</span><span id="mode" class="badge off">连接中</span></div>
+  <div class="row"><span class="k">状态</span><span id="seg" class="v seg">—</span></div>
+  <div class="row"><span class="k">仿真时间</span><span id="t" class="v">0.0 s</span></div>
+  <div class="row"><span class="k">渲染</span><span id="fps" class="v">— fps</span></div>
+</div>
+<div class="ctrl">
+  <button id="bStart" class="primary">▶ 启动任务</button>
+  <button id="bPause">⏸ 暂停</button>
+  <button id="bReset">⟲ 复位</button>
+  <button id="bMode">切到回放</button>
+  <input id="scrub" type="range" min="0" max="100" value="0" hidden>
+</div>
+<div class="note">画面几何与离线照片级渲染同源 (glTF 导出)。<br>物理内核 = 交付测试同一 ForkliftCell + CellController。</div>
+<script type="module">
+import * as THREE from 'three';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
+
+const SEGS = ['待机','升至插叉高度','接近货架前沿','插入托盘叉孔','起升离梁',
+  '载货退叉至暂存站','降至放托高度','对位下放','松放落台','抽叉复位','叉架复位','任务完成'];
+const el = id => document.getElementById(id);
+
+// ── 渲染器/场景/灯光 ──
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+el('app').appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x14181d);
+scene.fog = new THREE.Fog(0x14181d, 4, 14);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+const sun = new THREE.DirectionalLight(0xfff2e0, 2.2);
+sun.position.set(4, 6, -3);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, {left:-2, right:2, top:2, bottom:-2, far:20});
+sun.shadow.bias = -0.0005;
+scene.add(sun);
+scene.add(new THREE.HemisphereLight(0x93a4bd, 0x30281e, 0.5));
+
+const cam = new THREE.PerspectiveCamera(42, innerWidth/innerHeight, 0.01, 60);
+cam.position.set(2.6, 1.9, -2.9);
+const ctl = new OrbitControls(cam, renderer.domElement);
+ctl.target.set(-0.15, 0.35, 0); ctl.enableDamping = true; ctl.maxPolarAngle = 1.52;
+
+// ── 模型 (Y-up: three=(x,z,-y); quat wxyz→(qx,qz,-qy,qw)) ──
+let nodes = {};
+new GLTFLoader().load('agv_twin.glb', g => {
+  scene.add(g.scene);
+  g.scene.traverse(o => { if (o.isMesh){o.castShadow=true;o.receiveShadow=true;} });
+  for (const n of ['agv','carriage','pallet']) nodes[n] = g.scene.getObjectByName(n);
+  nodes.carriage?.children; // noop
+  setStatus();
+});
+function applyPose(s){
+  const map = {agv:'chassis', carriage:'carriage', pallet:'pallet'};
+  for (const [node, key] of Object.entries(map)){
+    const p = s[key]; if (!p || !nodes[node]) continue;
+    nodes[node].position.set(p[0], p[2], -p[1]);
+    nodes[node].quaternion.set(p[4], p[6], -p[5], p[3]);
+  }
+  el('seg').textContent = SEGS[s.seg] ?? s.seg;
+  el('t').textContent = s.t.toFixed(1) + ' s';
+}
+function setStatus(mode){
+  const b = el('mode');
+  b.textContent = mode === 'live' ? 'LIVE 物理实时' : mode === 'replay' ? 'REPLAY 轨迹' : '离线';
+  b.className = 'badge ' + (mode ?? 'off');
+}
+
+// ── LIVE: WebSocket ──
+let ws, mode = 'live';
+function connect(){
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => setStatus('live');
+  ws.onmessage = e => { if (mode==='live') applyPose(JSON.parse(e.data)); };
+  ws.onclose = () => { setStatus(null); setTimeout(connect, 1500); };
+}
+connect();
+async function cmd(op){ const r = await fetch('/api/cmd', {method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({op})}); return r.json(); }
+el('bStart').onclick = () => { setMode('live'); cmd('start'); };
+el('bPause').onclick = () => cmd('pause');
+el('bReset').onclick = () => cmd('reset');
+
+// ── REPLAY: poses.json ──
+let rp = null, rpPlaying = false, rpIdx = 0, rpLast = 0;
+function setMode(m){
+  mode = m; setStatus(m);
+  el('bMode').textContent = m === 'live' ? '切到回放' : '切到实时';
+  el('scrub').hidden = m === 'live';
+  el('bStart').classList.toggle('primary', m === 'live');
+  if (m === 'replay' && !rp){
+    fetch('poses.json').then(r=>r.json()).then(d => { rp = d; el('scrub').max = d.frames.length-1; });
+  }
+}
+el('bMode').onclick = () => setMode(mode==='live' ? 'replay' : 'live');
+el('scrub').oninput = e => { rpIdx = +e.target.value; rpPlaying = false; if (rp) applyFrame(); };
+function applyFrame(){
+  if (!rp) return;
+  const f = rp.frames[rpIdx]; // [time,seg,x,y,z,qw.., ...]
+  applyPose({t:f[0], seg:f[1]|0,
+    chassis:[f[2],f[3],f[4],f[5],f[6],f[7],f[8]],
+    carriage:[f[9],f[10],f[11],f[12],f[13],f[14],f[15]],
+    pallet:[f[16],f[17],f[18],f[19],f[20],f[21],f[22]]});
+  el('scrub').value = rpIdx;
+}
+
+// ── 主循环 ──
+let n = 0, t0 = performance.now();
+renderer.setAnimationLoop(() => {
+  if (mode==='replay' && rp && rpPlaying){
+    const now = performance.now();
+    rpIdx += (now - rpLast)/1000 * rp.fps / rp.step; rpLast = now;
+    if (rpIdx >= rp.frames.length-1){ rpIdx = rp.frames.length-1; rpPlaying = false; }
+    applyFrame();
+  }
+  ctl.update(); renderer.render(scene, cam);
+  n++; const dt = performance.now()-t0;
+  if (dt > 500){ el('fps').textContent = (n*1000/dt).toFixed(0)+' fps'; n=0; t0=performance.now(); }
+});
+addEventListener('keydown', e => { if (e.code==='Space' && mode==='replay'){ e.preventDefault(); rpPlaying=!rpPlaying; rpLast=performance.now(); }});
+</script>
+</body>
+</html>
