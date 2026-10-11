@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>为什么具身智能解决的是信息问题 · 文献与联合评审</title>
+<style>
+:root{--bg:#0d1117;--card:#161b22;--line:#30363d;--txt:#e6edf3;--dim:#8b949e;--acc:#f0883e;--blue:#58a6ff;--ok:#3fb950}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--txt);font:15px/1.75 -apple-system,"PingFang SC",sans-serif}
+.wrap{max-width:880px;margin:0 auto;padding:48px 24px 96px}
+h1{font-size:26px;line-height:1.35;margin-bottom:6px}
+.lead{color:var(--dim);margin-bottom:28px}
+.verdict{background:linear-gradient(135deg,#1a7f3722,#1f6feb22);border:1px solid #238636;border-radius:14px;padding:18px 20px;margin:22px 0}
+.verdict b{color:var(--ok)}
+h2{font-size:19px;margin:36px 0 12px;color:var(--acc)}
+h3{font-size:16px;margin:20px 0 8px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin:12px 0}
+table{width:100%;border-collapse:collapse;font-size:13.5px;margin:10px 0}
+th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+th{background:#1c2128;color:var(--dim);font-weight:600}
+a{color:var(--blue);text-decoration:none}
+a:hover{text-decoration:underline}
+.q{border-left:3px solid var(--acc);padding:10px 16px;background:#161b22;border-radius:0 10px 10px 0;margin:14px 0;font-style:normal}
+.small{color:var(--dim);font-size:12.5px}
+ol li,ul li{margin:6px 0}
+.tag{display:inline-block;background:#1f6feb33;color:var(--blue);border-radius:99px;font-size:11.5px;padding:1px 9px;margin-right:6px;font-weight:600}
+.back{position:fixed;top:14px;left:16px;background:var(--card);border:1px solid var(--line);border-radius:9px;padding:6px 12px;font-size:13px}
+</style>
+</head>
+<body>
+<a class="back" href="/">← 返回数字空间</a>
+<div class="wrap">
+<h1>「具身智能解决的是信息问题」<br>—— 文献裁决与产品理论</h1>
+<div class="lead">本页由世界模型服务与 GPT 会话独立检索、联合评审生成（2026-10）。
+对应仓库文档：<code>docs/agentic_world_model_literature.md</code>、<code>docs/agentic_twin_design.md</code>。</div>
+
+<div class="verdict"><b>裁决：论点成立。</b> omp 与 ChatGPT 各自检索文献后独立得出同一结论——
+具身智能的深层价值在于把物理执行变成<b>持续可观测、可验证、可学习</b>的过程；
+但表述需精确化：不说"机器人第一次闭合反馈回路"（控制论早已建立反馈思想），
+说"<b>将物理执行证据系统性地纳入企业级决策学习回路</b>"。</div>
+
+<div class="q">原始论点：再好的 plan，人类执行时都有偏差，而偏差信息的收集是不完整的
+（忘了报、测不准、没有动机记录），导致 plan 无法充分优化、迭代。机器人把每次执行变成
+可测量、可归因、可审计的数据，第一次让 计划→执行→偏差→学习 的闭环真正闭合。</div>
+
+<h2>一、五条文献主线支持</h2>
+<table>
+<tr><th>主线</th><th>关键文献</th><th>支持论点的哪一步</th></tr>
+<tr><td>控制论</td><td>Åström & Murray《Feedback Systems》；Lee, <a href="https://www2.eecs.berkeley.edu/Pubs/TechRpts/2008/EECS-2008-8.html">CPS: Design Challenges (2008)</a></td>
+<td>没有反馈的执行是开环的。人执行 = 缺传感器的执行器，偏差物理性丢失</td></tr>
+<tr><td>数字孪生闭环</td><td><a href="https://doi.org/10.1007/s00170-017-0233-1">Tao et al. 2018</a>；<a href="https://doi.org/10.1016/j.ifacol.2018.08.474">Kritzinger et al. 2018</a>（数字模型≠数字影子数字孪生）</td>
+<td>孪生的定义性能力 = plan↔actual 双向回流；静态仿真不配称孪生</td></tr>
+<tr><td>机器人即测量系统</td><td><a href="https://nvlpubs.nist.gov/nistpubs/gcr/2024/NIST.GCR.24-054.pdf">NIST GCR 24-054 (2024)</a></td>
+<td>国家级研究计划把机器人执行当作可追溯测量系统研究</td></tr>
+<tr><td>数据飞轮</td><td><a href="https://arxiv.org/abs/2511.19647">Robot-Powered Data Flywheels (Stanford 2025)</a>；<a href="https://arxiv.org/abs/2606.05960">Logistics Data Flywheel (2026)</a></td>
+<td>定量实证：执行数据把 VLM 书目识别 32.0%→71.8%；"日常运营转化为可复用数据资产"</td></tr>
+<tr><td>Process Mining<br><span class="tag">GPT 补充</span></td><td><a href="https://doi.org/10.1002/widm.1045">Adriansyah/van der Aalst 2012</a></td>
+<td>事件日志×流程模型对齐，"计划究竟怎样被执行"第一次可重建</td></tr>
+</table>
+
+<h2>二、必须精确化的地方（两方合并）</h2>
+<div class="card">
+<ol>
+<li><b>所有物理执行都有不确定性</b>——偏差非人类独有（sim-to-real gap，<a href="https://doi.org/10.1109/IROS.2017.8202133">Tobin 2017</a>）。
+差别不在有无偏差，而在偏差<b>可测、可归因、可学习</b>：人的偏差是信息黑洞，机器人的偏差是数据资产。</li>
+<li><b>信息优势属于"感知+记录+可查询"的系统</b>，不属于泛自动化——盲目执行程序的工业机器人同样丢信息。
+本页这个演示里：观测→SQLite 事务→事件账本，缺一不可。</li>
+<li><b>记录偏差 ≠ 归因 ≠ 学习</b>（<a href="https://doi.org/10.1214/09-SS057">Pearl 2009</a>）：
+"晚到 20 秒"可证明，"因为锥桶"不能自动成立。闭环要拆六段：
+Plan→Act→Observe→<b>Compare→Explain→Learn</b>。</li>
+<li><b>人工记录并非全无价值</b>：人提供传感器拿不到的语义与情境——所以架构保留人作为知识来源、
+异常解释者与最终授权者（<a href="https://doi.org/10.1016/0005-1098(83)90046-8">Bainbridge 1983《Ironies of Automation》</a>的警示）。</li>
+<li><b>数据多 ≠ 计划好</b>：只有经质量治理、可验证、进入决策更新的数据才推动改善。</li>
+</ol>
+</div>
+
+<h2>三、产品理论：Execution Intelligence（执行智能）</h2>
+<table>
+<tr><th>层次</th><th>回答的问题</th><th>谁能做到</th></tr>
+<tr><td><b>L1 执行可观测性</b></td><td>实际发生了什么？观测多可信？</td><td>传统控制系统</td></tr>
+<tr><td><b>L2 决策可追溯性</b></td><td>当时基于什么信息与约束做了什么决定？</td><td>业务系统 / 事件溯源</td></tr>
+<tr><td><b>L3 跨任务决策学习</b></td><td><b>为什么产生偏差，下一次怎样做得更好？</b></td><td><b>差异化所在</b></td></tr>
+</table>
+<p>每次策略改进必须能回答六问：旧策略是什么 / 观察到哪些偏差 / 改了什么 /
+用什么测试验证 / 改善多少 / 引入什么新风险。学习链条：
+<b>Physical Execution → Execution Evidence → Decision Memory → Policy Improvement</b>。</p>
+<div class="q">最有价值的资产不是第 100 次成功搬运，而是"第 37 次为什么失败、
+改派是否真的比等待好"。</div>
+
+<h2>四、本演示即论点的可执行检验</h2>
+<ul>
+<li>这个页面所在的世界模型：<b>库存只在物理证据成立时提交</b>（离梁承托率、退叉脱离观测），
+事务与事件全部落 SQLite 账本——L1/L2 已在线运行。</li>
+<li>Agent 是唯一指令入口，但<b>不能触碰库存写入</b>——"agent 可以改变计划，
+不能改变未经物理验证的事实"。</li>
+<li>下一步（P3/P4）：锥桶 + 激光雷达点云（禁上帝视角）+ 重规划/改派 + 消融门禁——
+关感知必撞桶、关调度必停滞，用可预测失败证明智能是真的。</li>
+</ul>
+<p class="small">联合评审来源：ChatGPT 会话「AGV协作流程设计」(6acb00a1-bb90-83e8-9067-ff95df6b78ba)；
+omp 检索：arXiv / NIST / ACM CSUR / ScienceDirect（2026-10-11）。
+仓库文档：<code>docs/agentic_world_model_literature.md</code> · <code>docs/agentic_twin_design.md</code></p>
+</div>
+</body>
+</html>

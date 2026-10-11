@@ -126,7 +126,8 @@ class World:
     _seq: itertools.count = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
-        self._conn = sqlite3.connect(self.db_path)
+        # WAL 模式; 多线程访问由调用方串行化 (twin 服务用锁), 读侧短查询
+        self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._create_tables()
         self._events = {}

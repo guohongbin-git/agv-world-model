@@ -3,165 +3,196 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>T04 无人叉车数字孪生 · 实时世界模型</title>
+<title>T04 世界模型 · Agentic 仓储数字空间</title>
 <style>
-:root{--bg:#0d1117;--panel:#161b22cc;--acc:#f0883e;--txt:#e6edf3;--dim:#8b949e}
+:root{--bg:#0d1117;--panel:#161b22;--line:#30363d;--acc:#f0883e;--txt:#e6edf3;--dim:#8b949e;--ok:#3fb950;--warn:#d29922}
 *{box-sizing:border-box;margin:0}
-body{background:var(--bg);color:var(--txt);font:14px/1.5 -apple-system,"PingFang SC",sans-serif;overflow:hidden}
-#app{position:fixed;inset:0}
+body{background:var(--bg);color:var(--txt);font:13px/1.55 -apple-system,"PingFang SC",sans-serif;overflow:hidden}
+#app{display:flex;height:100vh}
+#stage{position:relative;flex:1}
 canvas{display:block}
-.hud{position:fixed;top:16px;left:16px;background:var(--panel);backdrop-filter:blur(10px);border:1px solid #30363d;border-radius:12px;padding:14px 16px;min-width:250px}
-.hud h1{font-size:15px;letter-spacing:.5px}
-.hud .sub{color:var(--dim);font-size:11px;margin-bottom:8px}
-.row{display:flex;gap:8px;margin:6px 0;align-items:center}
-.k{color:var(--dim);width:72px;font-size:12px}
+.hud{position:absolute;top:14px;left:14px;background:#161b22cc;backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-width:230px}
+.hud h1{font-size:14px}
+.hud .sub{color:var(--dim);font-size:10.5px;margin-bottom:6px}
+.row{display:flex;gap:8px;margin:4px 0;align-items:center}
+.k{color:var(--dim);width:64px;font-size:11.5px}
 .v{font-variant-numeric:tabular-nums;font-weight:600}
-.seg{color:var(--acc)}
-.badge{display:inline-block;padding:1px 8px;border-radius:99px;font-size:11px;font-weight:600}
-.live{background:#1a7f37;color:#fff}.replay{background:#1f6feb;color:#fff}.off{background:#6e40c9;color:#fff}
-.ctrl{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);display:flex;gap:10px;background:var(--panel);backdrop-filter:blur(10px);border:1px solid #30363d;border-radius:14px;padding:10px 12px}
-button{background:#21262d;color:var(--txt);border:1px solid #30363d;border-radius:9px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer}
-button:hover{border-color:var(--acc);color:var(--acc)}
-button.primary{background:var(--acc);color:#0d1117;border-color:var(--acc)}
-button.primary:hover{filter:brightness(1.1);color:#0d1117}
-#scrub{width:220px;accent-color:var(--acc)}
-.note{position:fixed;right:16px;bottom:16px;color:var(--dim);font-size:11px;text-align:right;max-width:300px}
+.badge{display:inline-block;padding:1px 8px;border-radius:99px;font-size:10.5px;font-weight:700}
+.m-idle{background:#30363d}.m-running{background:#1a7f37}.m-paused{background:#9e6a03}
+.m-done{background:#1f6feb}.m-failed{background:#da3633}
+.scale{position:absolute;right:14px;top:14px;background:#161b22cc;border:1px solid var(--line);border-radius:10px;padding:6px 10px;color:var(--dim);font-size:11px}
+.speedbar{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);display:flex;gap:6px;background:#161b22cc;backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:12px;padding:7px 9px}
+.speedbar button{background:#21262d;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:5px 11px;font-size:12px;cursor:pointer}
+.speedbar button.on{background:var(--acc);color:#0d1117;border-color:var(--acc);font-weight:700}
+#rail{width:380px;border-left:1px solid var(--line);display:flex;flex-direction:column;background:var(--panel)}
+.pane{border-bottom:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.pane h2{font-size:11.5px;color:var(--dim);letter-spacing:.5px;padding:9px 12px 6px;text-transform:uppercase}
+#chatPane{flex:5}
+#boardPane{flex:3}
+#evPane{flex:3}
+#msgs{flex:1;overflow-y:auto;padding:0 12px}
+.msg{margin:7px 0;padding:8px 10px;border-radius:10px;max-width:96%}
+.user{background:#1f6feb22;border:1px solid #1f6feb55;margin-left:auto}
+.agent{background:#21262d;border:1px solid var(--line)}
+.tool{font-size:10.5px;color:var(--acc);margin-top:3px;font-family:ui-monospace,monospace}
+#in{display:flex;gap:6px;padding:8px 10px}
+#in input{flex:1;background:#0d1117;border:1px solid var(--line);color:var(--txt);border-radius:9px;padding:8px 10px;font-size:13px;outline:none}
+#in input:focus{border-color:var(--acc)}
+#in button{background:var(--acc);color:#0d1117;border:0;border-radius:9px;padding:0 14px;font-weight:700;cursor:pointer}
+#board{overflow-y:auto;padding:0 12px 8px;font-size:12px}
+.b{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px dashed #21262d}
+.b .s{font-weight:700}.s.OCCUPIED{color:var(--warn)}.s.EMPTY{color:var(--ok)}
+.cnt{font-size:20px;font-weight:800;color:var(--acc)}
+#evs{flex:1;overflow-y:auto;padding:0 12px 8px;font-size:11px;font-family:ui-monospace,monospace}
+.ev{padding:3px 0;border-bottom:1px dashed #21262d}
+.ev b{color:#58a6ff}.ev .t{color:var(--dim)}
+.ev.commit b{color:var(--ok)}
 </style>
 <script type="importmap">
 {"imports":{"three":"./vendor/three.module.js","three/addons/":"./vendor/addons/"}}
 </script>
 </head>
 <body>
-<div id="app"></div>
-<div class="hud">
-  <h1>T04 · 三层取放闭环</h1>
-  <div class="sub">MuJoCo 1kHz 物理实时步进 · 位姿 60Hz 推送 · 非视频回放</div>
-  <div class="row"><span class="k">模式</span><span id="mode" class="badge off">连接中</span></div>
-  <div class="row"><span class="k">状态</span><span id="seg" class="v seg">—</span></div>
-  <div class="row"><span class="k">仿真时间</span><span id="t" class="v">0.0 s</span></div>
-  <div class="row"><span class="k">渲染</span><span id="fps" class="v">— fps</span></div>
+<div id="app">
+  <div id="stage">
+    <div class="hud">
+      <h1>T04 · 世界模型数字空间</h1>
+      <div class="sub">MuJoCo 2kHz 物理 · 判据层执行 · SQLite 事务 · 指令只经 Agent</div>
+      <div class="row"><span class="k">状态</span><span id="mode" class="badge m-idle">idle</span><span id="fps" class="v" style="color:var(--dim)"></span></div>
+      <div class="row"><span class="k">任务</span><span id="step" class="v" style="color:var(--acc)">待命</span></div>
+      <div class="row"><span class="k">仿真时间</span><span id="t" class="v">0.0 s</span></div>
+    </div>
+    <div class="scale">1:15 等比桌面仓库<br>速度为真实设备尺度值<br>倍率只改墙钟配速<br><a href="/theory.html" style="color:var(--acc);font-weight:700">📄 理论与文献 →</a></div>
+    <div class="speedbar" id="sp"></div>
+  </div>
+  <div id="rail">
+    <div class="pane" id="chatPane">
+      <h2>Agent 对话 · 唯一指令入口</h2>
+      <div id="msgs"></div>
+      <div id="in"><input id="txt" placeholder="例: 把 A-L3-C1 那托下架到 H01" autocomplete="off"><button id="send">发送</button></div>
+    </div>
+    <div class="pane" id="boardPane">
+      <h2>世界模型 · 库存板 (SQL 查询)</h2>
+      <div id="board"></div>
+    </div>
+    <div class="pane" id="evPane">
+      <h2>事件账本 (World.emit)</h2>
+      <div id="evs"></div>
+    </div>
+  </div>
 </div>
-<div class="ctrl">
-  <button id="bStart" class="primary">▶ 启动任务</button>
-  <button id="bPause">⏸ 暂停</button>
-  <button id="bReset">⟲ 复位</button>
-  <button id="bMode">切到回放</button>
-  <input id="scrub" type="range" min="0" max="100" value="0" hidden>
-</div>
-<div class="note">画面几何与离线照片级渲染同源 (glTF 导出)。<br>物理内核 = 交付测试同一 ForkliftCell + CellController。</div>
 <script type="module">
+window.addEventListener('error', e => { document.title = 'BOOTERR:' + e.message.slice(0,120); });
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+window.__b = [1];
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 
-const SEGS = ['待机','升至插叉高度','接近货架前沿','插入托盘叉孔','起升离梁',
-  '载货退叉至暂存站','降至放托高度','对位下放','松放落台','抽叉复位','叉架复位','任务完成'];
 const el = id => document.getElementById(id);
-
-// ── 渲染器/场景/灯光 ──
+window.__b.push(2);
+// ── 3D ──
 const renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setSize(innerWidth, innerHeight);
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.setSize(el('stage').clientWidth, el('stage').clientHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-el('app').appendChild(renderer.domElement);
+el('stage').appendChild(renderer.domElement);
+window.__b.push(3);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x14181d);
 scene.fog = new THREE.Fog(0x14181d, 4, 14);
-const pmrem = new THREE.PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-const sun = new THREE.DirectionalLight(0xfff2e0, 2.2);
-sun.position.set(4, 6, -3);
-sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
-Object.assign(sun.shadow.camera, {left:-2, right:2, top:2, bottom:-2, far:20});
-sun.shadow.bias = -0.0005;
-scene.add(sun);
-scene.add(new THREE.HemisphereLight(0x93a4bd, 0x30281e, 0.5));
-
-const cam = new THREE.PerspectiveCamera(42, innerWidth/innerHeight, 0.01, 60);
-cam.position.set(2.6, 1.9, -2.9);
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+window.__b.push(4);
+const sun = new THREE.DirectionalLight(0xfff2e0, 2.4);
+sun.position.set(4,6,-3); sun.castShadow = true; sun.shadow.mapSize.set(2048,2048);
+Object.assign(sun.shadow.camera,{left:-2,right:2,top:2,bottom:-2,far:20}); sun.shadow.bias=-0.0005;
+scene.add(sun); scene.add(new THREE.HemisphereLight(0x93a4bd,0x30281e,0.5));
+const cam = new THREE.PerspectiveCamera(40, el('stage').clientWidth/el('stage').clientHeight, 0.01, 60);
+cam.position.set(1.75,1.15,-2.0);
 const ctl = new OrbitControls(cam, renderer.domElement);
-ctl.target.set(-0.15, 0.35, 0); ctl.enableDamping = true; ctl.maxPolarAngle = 1.52;
-
-// ── 模型 (Y-up: three=(x,z,-y); quat wxyz→(qx,qz,-qy,qw)) ──
+ctl.target.set(-0.17,0.28,0); ctl.enableDamping=true; ctl.maxPolarAngle=1.53;
 let nodes = {};
+window.__dbg = {err: null, loaded: 0, found: []};
+window.__b.push(5);
 new GLTFLoader().load('agv_twin.glb', g => {
   scene.add(g.scene);
-  g.scene.traverse(o => { if (o.isMesh){o.castShadow=true;o.receiveShadow=true;} });
-  for (const n of ['agv','carriage','pallet']) nodes[n] = g.scene.getObjectByName(n);
-  nodes.carriage?.children; // noop
-  setStatus();
-});
-function applyPose(s){
-  const map = {agv:'chassis', carriage:'carriage', pallet:'pallet'};
-  for (const [node, key] of Object.entries(map)){
-    const p = s[key]; if (!p || !nodes[node]) continue;
-    nodes[node].position.set(p[0], p[2], -p[1]);
-    nodes[node].quaternion.set(p[4], p[6], -p[5], p[3]);
-  }
-  el('seg').textContent = SEGS[s.seg] ?? s.seg;
-  el('t').textContent = s.t.toFixed(1) + ' s';
-}
-function setStatus(mode){
-  const b = el('mode');
-  b.textContent = mode === 'live' ? 'LIVE 物理实时' : mode === 'replay' ? 'REPLAY 轨迹' : '离线';
-  b.className = 'badge ' + (mode ?? 'off');
-}
+  g.scene.traverse(o=>{ if(o.isMesh){o.castShadow=true;o.receiveShadow=true;} });
+  for (const n of ['agv','carriage','pallet']) nodes[n]=g.scene.getObjectByName(n);
+  window.__dbg.loaded = g.scene.children.length;
+  window.__dbg.found = Object.keys(nodes).filter(k=>nodes[k]);
+  document.documentElement.dataset.boot = JSON.stringify({b: window.__b, dbg: window.__dbg});
+}, undefined, e => { window.__dbg.err = String(e && e.message || e); });
+addEventListener('resize',()=>{cam.aspect=el('stage').clientWidth/el('stage').clientHeight;cam.updateProjectionMatrix();renderer.setSize(el('stage').clientWidth,el('stage').clientHeight);});
 
-// ── LIVE: WebSocket ──
-let ws, mode = 'live';
+// ── ws 状态流 ──
+let ws, chatCur = 0, evSeen = new Set();
 function connect(){
   ws = new WebSocket(`ws://${location.host}/ws`);
-  ws.onopen = () => setStatus('live');
-  ws.onmessage = e => { if (mode==='live') applyPose(JSON.parse(e.data)); };
-  ws.onclose = () => { setStatus(null); setTimeout(connect, 1500); };
+  ws.onmessage = e => apply(JSON.parse(e.data));
+  ws.onclose = () => setTimeout(connect, 1200);
 }
 connect();
-async function cmd(op){ const r = await fetch('/api/cmd', {method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({op})}); return r.json(); }
-el('bStart').onclick = () => { setMode('live'); cmd('start'); };
-el('bPause').onclick = () => cmd('pause');
-el('bReset').onclick = () => cmd('reset');
-
-// ── REPLAY: poses.json ──
-let rp = null, rpPlaying = false, rpIdx = 0, rpLast = 0;
-function setMode(m){
-  mode = m; setStatus(m);
-  el('bMode').textContent = m === 'live' ? '切到回放' : '切到实时';
-  el('scrub').hidden = m === 'live';
-  el('bStart').classList.toggle('primary', m === 'live');
-  if (m === 'replay' && !rp){
-    fetch('poses.json').then(r=>r.json()).then(d => { rp = d; el('scrub').max = d.frames.length-1; });
+function apply(s){
+  const p = s.poses;
+  const map = {agv:'chassis', carriage:'carriage', pallet:'pallet'};
+  for (const [n,k] of Object.entries(map)){
+    if (!nodes[n] || !p[k]) continue;
+    const q = p[k];
+    nodes[n].position.set(q[0], q[2], -q[1]);
+    nodes[n].quaternion.set(q[4], q[6], -q[5], q[3]);
+  }
+  el('t').textContent = (s.sim_t||0).toFixed(1)+' s';
+  const mb = el('mode'); mb.textContent = s.mode + (s.paused?' · 暂停':'');
+  mb.className = 'badge m-' + s.mode;
+  el('step').textContent = `${s.step<0?'':(s.step+1>10?'':(s.step+1)+'/10 ')}${s.step_label}`;
+  document.querySelectorAll('#sp button').forEach(b=>b.classList.toggle('on', parseFloat(b.dataset.v)===s.speed));
+  board(s.board);
+  for (const c of s.chat) if (c.seq > chatCur){ chatCur = c.seq; addMsg('agent', c.text); }
+  for (const ev of s.events) if (!evSeen.has(ev.eid)){
+    evSeen.add(ev.eid);
+    const d = document.createElement('div');
+    const commit = ev.type==='PalletMoved'||ev.type==='OutboundPending';
+    d.className = 'ev'+(commit?' commit':'');
+    d.innerHTML = `<span class="t">${ev.t.toFixed(1)}s</span> <b>${ev.type}</b> ${JSON.stringify(ev.payload).slice(0,90)}`;
+    el('evs').prepend(d);
   }
 }
-el('bMode').onclick = () => setMode(mode==='live' ? 'replay' : 'live');
-el('scrub').oninput = e => { rpIdx = +e.target.value; rpPlaying = false; if (rp) applyFrame(); };
-function applyFrame(){
-  if (!rp) return;
-  const f = rp.frames[rpIdx]; // [time,seg,x,y,z,qw.., ...]
-  applyPose({t:f[0], seg:f[1]|0,
-    chassis:[f[2],f[3],f[4],f[5],f[6],f[7],f[8]],
-    carriage:[f[9],f[10],f[11],f[12],f[13],f[14],f[15]],
-    pallet:[f[16],f[17],f[18],f[19],f[20],f[21],f[22]]});
-  el('scrub').value = rpIdx;
+function board(b){
+  if (!b) return;
+  let h = `<div class="b"><span>在库计数 (IN_WAREHOUSE+待出库)</span><span class="cnt">${b.count}</span></div>`;
+  for (const s of b.slots) h += `<div class="b"><span>货位 ${s[0]}</span><span class="s ${s[1]}">${s[1]}</span></div>`;
+  for (const p of b.pallets) h += `<div class="b"><span>托盘 ${p[0]}</span><span>${p[1]} · ${p[2]}</span></div>`;
+  for (const g of b.goods) h += `<div class="b"><span>${g[0]} ${g[1]}</span><span>${g[2]} · ${g[3]}</span></div>`;
+  el('board').innerHTML = h;
 }
-
-// ── 主循环 ──
-let n = 0, t0 = performance.now();
-renderer.setAnimationLoop(() => {
-  if (mode==='replay' && rp && rpPlaying){
-    const now = performance.now();
-    rpIdx += (now - rpLast)/1000 * rp.fps / rp.step; rpLast = now;
-    if (rpIdx >= rp.frames.length-1){ rpIdx = rp.frames.length-1; rpPlaying = false; }
-    applyFrame();
-  }
-  ctl.update(); renderer.render(scene, cam);
-  n++; const dt = performance.now()-t0;
-  if (dt > 500){ el('fps').textContent = (n*1000/dt).toFixed(0)+' fps'; n=0; t0=performance.now(); }
-});
-addEventListener('keydown', e => { if (e.code==='Space' && mode==='replay'){ e.preventDefault(); rpPlaying=!rpPlaying; rpLast=performance.now(); }});
+// ── 聊天 ──
+function addMsg(who, text, tools){
+  const d = document.createElement('div');
+  d.className = 'msg ' + who;
+  d.textContent = text;
+  if (tools && tools.length) d.innerHTML += '<div class="tool">⚙ ' + tools.map(t=>t.tool+(t.arg!=null?'('+t.arg+')':'')).join(' · ') + '</div>';
+  el('msgs').appendChild(d);
+  el('msgs').scrollTop = 1e9;
+}
+async function send(){
+  const t = el('txt').value.trim(); if (!t) return;
+  el('txt').value = '';
+  addMsg('user', t);
+  const r = await fetch('/api/chat', {method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({text:t})});
+  const j = await r.json();
+  addMsg('agent', j.reply, j.tools);
+}
+el('send').onclick = send;
+el('txt').addEventListener('keydown', e=>{ if(e.key==='Enter') send(); });
+// ── 倍率条 ──
+const speeds = [0.5,1,2,4,8];
+el('sp').innerHTML = speeds.map(v=>`<button data-v="${v}">${v}×</button>`).join('');
+el('sp').onclick = async e => {
+  const b = e.target.closest('button'); if (!b) return;
+  await fetch('/api/chat', {method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({text:`快 ${b.dataset.v} 倍`})});
+};
+addMsg('agent','你好，我是本仓的调度 Agent。说\u201c把 A-L3-C1 那托下架到 H01\u201d开始，或先问我\u201c库存\u201d\u201c进度\u201d\u201c事件\u201d。所有指令都走同一条判据→物理→事务链，没有旁路。');
 </script>
 </body>
 </html>
