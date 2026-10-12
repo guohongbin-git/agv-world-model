@@ -60,13 +60,33 @@ LAYOUT = {
     "berth_depth_y": 0.32,                  # 南北泊位带深度
     "stand_top_z": 0.095,                   # 交接台条带顶面 (托盘落位面)
     "seed_pallets": 48,                     # 播种托盘数 (384 的 ~12.5%)
-    "handoff_ids": ["H01", "H02", "H03", "H04"],
-    # 交接台 x: 西边缘通道/三条组间列通道中心 (保证叉车/AGV 沿通道直线交接)
-    "handoff_x": [-2.22, -1.10, 0.0, 1.10],
-    # 停车点 (与地面白框联动): F01 在南泊位带最西端 (H 台作业带之外, 不挡
-    # AGV 车道); F02 在组间行通道; A 在南泊位带外侧
-    "park": {"F01": (-2.60, -2.42, 0.0), "F02": (0.0, 1.08, math.pi),
-             "A01": (-2.22, -2.85, 0.0), "A02": (0.0, -2.85, 0.0)},
+    "handoff_ids": ["H01", "H02", "H03", "H04", "H05"],
+    # 交接台 x: 五条列通道中心 (西/东边缘 + 三条组间), 保证叉车/AGV 沿通道直线交接
+    "handoff_x": [-2.22, -1.10, 0.0, 1.10, 2.22],
+    # 停车点 (与地面白框联动): F01 在横移带最西端 (西端死区, 无过境交通;
+    # W1 链式计划的回程腿 y=-2.42 语义不变); F02 在南带外排东端 (y=-2.85
+    # 行上 x∈(-2.22,-1.10) 是 W1 plan_agv_dock_lift(A01,H02) 的盲走走廊,
+    # 不可停车 —— 东端 2.60 为死区); F03/F04 居中间隙; AGV 对齐列通道。
+    # 各车静态间距 ≥0.33 (包络不重叠)。
+    "park": {"F01": (-2.60, -2.42, 0.0), "F02": (2.60, -2.85, 0.0),
+             "F03": (0.50, -2.85, 0.0), "F04": (1.60, -2.85, 0.0),
+             "A01": (-2.22, -2.85, 0.0), "A02": (0.0, -2.85, 0.0),
+             "A03": (1.10, -2.85, 0.0), "A04": (2.22, -2.85, 0.0)},
+    # 异构等级: L1 轻 (快/举升快/载重小) → L3 重 (慢/载重大)
+    "vehicle_class": {"F01": "L1", "F02": "L2", "F03": "L3", "F04": "L3",
+                      "A01": "L1", "A02": "L1", "A03": "L2", "A04": "L3"},
+}
+
+# 车辆等级参数 (W2 规格): 载重上限 = 托盘+货 (kg); 行车速度/加速度 (m/s, m/s²);
+# 举升/顶升速度 (m/s); 原地转向 (rad/s, rad/s²); 横移 (strafe, m/s, 仅导航微调用)。
+# 精度段速度 (插叉/对中/落托) 仍取 K 常数, 不随等级缩放。
+VEHICLE_CLASSES = {
+    "L1": dict(load_max_kg=0.08, cruise=0.35, accel=0.50, lift=0.015,
+               yaw_speed=0.6, yaw_accel=1.0, strafe=0.12),
+    "L2": dict(load_max_kg=0.15, cruise=0.25, accel=0.35, lift=0.010,
+               yaw_speed=0.45, yaw_accel=0.8, strafe=0.10),
+    "L3": dict(load_max_kg=0.30, cruise=0.15, accel=0.25, lift=0.007,
+               yaw_speed=0.30, yaw_accel=0.5, strafe=0.08),
 }
 
 # 车辆包络 (通道净宽校核用): 叉车全长 0.33 (配重后缘→叉尖) / 宽 0.15; AGV 直径 0.24
@@ -292,8 +312,8 @@ class WarehouseCell:
 
     def __init__(self, timestep_s: float = 0.001, seed: int = 0,
                  layout: MatrixLayout | None = None,
-                 forklifts: tuple[str, ...] = ("F01", "F02"),
-                 agvs: tuple[str, ...] = ("A01", "A02"),
+                 forklifts: tuple[str, ...] = ("F01", "F02", "F03", "F04"),
+                 agvs: tuple[str, ...] = ("A01", "A02", "A03", "A04"),
                  seed_slots: list[str] | None = None,
                  preload_stands: tuple[str, ...] = ("H01",)):
         self.layout = layout or MatrixLayout()
@@ -434,17 +454,26 @@ class WarehouseCell:
                    heading: float, top: float) -> str:
         """交接/交付台: 4 条带 (托盘条支撑面, 中开孔) + 两侧导向墙。
         局部 +x = 交接轴 (车行方向); 墙在局部 y=±0.140, 叉车宽 0.15 /
-        AGV 直径 0.24 均可穿行, 台下净空 0.091 > AGV 高 0.062。"""
+        AGV 直径 0.24 均可穿行, 台下净空 0.091 > AGV 高 0.062。
+        H 台 (南带) 墙实体碰撞; D 台 (行通道线上, 邻内圈槽位走廊) 墙为
+        视觉导向 (contype=0): 行通道线 x 轴已被槽位走廊 (±0.075) 与列
+        走廊饱和, 实体墙使内圈槽位 (组心 ±0.08) 不可达 —— 防撞职能由
+        锁矩阵承担 (M2W2: dock 节点互斥 + 内圈 stub 追加邻 dock 节点)。
+        """
         q = f"{math.cos(heading / 2):.7f} 0 0 {math.sin(heading / 2):.7f}"
         g = f"stand_{sid}"
+        solid = "" if sid.startswith("H") else ' contype="0" conaffinity="0"'
+        # 条带垫块 x 内移 (±[0.022,0.044], 座面 18mm > W1 的 10mm): 让出
+        # 组心 ±0.08 内圈槽位的叉车 carriage 抬升走廊 (板达面位 ±0.022,
+        # 原 ±0.090 会顶死垫块) —— pin 孔 y 向 48mm 不变, x 向 44mm。
         return f"""
     <body name="{g}" pos="{x:.6f} {y:.6f} 0" quat="{q}">
-      <geom name="{g}_strip_pp" type="box" pos="0.060 0.047 {top - 0.002:.4f}" size="0.030 0.023 0.002" rgba="0.32 0.46 0.52 1"/>
-      <geom name="{g}_strip_pn" type="box" pos="0.060 -0.047 {top - 0.002:.4f}" size="0.030 0.023 0.002" rgba="0.32 0.46 0.52 1"/>
-      <geom name="{g}_strip_np" type="box" pos="-0.060 0.047 {top - 0.002:.4f}" size="0.030 0.023 0.002" rgba="0.32 0.46 0.52 1"/>
-      <geom name="{g}_strip_nn" type="box" pos="-0.060 -0.047 {top - 0.002:.4f}" size="0.030 0.023 0.002" rgba="0.32 0.46 0.52 1"/>
-      <geom name="{g}_wall_p" type="box" pos="0 0.140 {top / 2:.4f}" size="0.090 0.008 {top / 2:.4f}" rgba="0.22 0.32 0.38 1"/>
-      <geom name="{g}_wall_n" type="box" pos="0 -0.140 {top / 2:.4f}" size="0.090 0.008 {top / 2:.4f}" rgba="0.22 0.32 0.38 1"/>
+      <geom name="{g}_strip_pp" type="box" pos="0.033 0.047 {top - 0.002:.4f}" size="0.011 0.023 0.002" rgba="0.32 0.46 0.52 1"/>
+      <geom name="{g}_strip_pn" type="box" pos="0.033 -0.047 {top - 0.002:.4f}" size="0.011 0.023 0.002" rgba="0.32 0.46 0.52 1"/>
+      <geom name="{g}_strip_np" type="box" pos="-0.033 0.047 {top - 0.002:.4f}" size="0.011 0.023 0.002" rgba="0.32 0.46 0.52 1"/>
+      <geom name="{g}_strip_nn" type="box" pos="-0.033 -0.047 {top - 0.002:.4f}" size="0.011 0.023 0.002" rgba="0.32 0.46 0.52 1"/>
+      <geom name="{g}_wall_p" type="box" pos="0 0.140 {top / 2:.4f}" size="0.090 0.008 {top / 2:.4f}" rgba="0.22 0.32 0.38 1"{solid}/>
+      <geom name="{g}_wall_n" type="box" pos="0 -0.140 {top / 2:.4f}" size="0.090 0.008 {top / 2:.4f}" rgba="0.22 0.32 0.38 1"{solid}/>
     </body>"""
 
     def _forklift_xml(self, vid: str) -> str:
@@ -698,6 +727,10 @@ class WarehouseCell:
 
     def agv(self, vid: str) -> AgvView:
         return self.agvs[vid]
+
+    def vclass(self, vid: str) -> dict:
+        """车辆等级参数 (速度/加速度/举升/载重上限), 见 VEHICLE_CLASSES。"""
+        return VEHICLE_CLASSES[self.layout.p["vehicle_class"][vid]]
 
     # ---------- 计划 (交接物理链) ----------
     def plan_forklift_rack_to_stand(self, vid: str, slot_id: str,

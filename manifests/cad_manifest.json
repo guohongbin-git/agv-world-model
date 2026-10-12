@@ -1,7 +1,7 @@
 {
   "manifest_version": "1",
   "stage": "W02",
-  "design_version": "2.2.0",
+  "design_version": "2.3.0",
   "generated_at_utc": "2026-10-11T12:04:16+00:00",
   "units": {
     "length": "m",

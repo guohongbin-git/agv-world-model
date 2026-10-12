@@ -25,13 +25,14 @@
 from __future__ import annotations
 
 import asyncio
+import itertools
 import json
 import numpy as np
 import threading
 import time
+import uuid
 from collections import deque
 from pathlib import Path
-
 import mujoco
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
@@ -39,17 +40,20 @@ from fastapi.staticfiles import StaticFiles
 from sim.forklift_cell import ForkliftCell
 from services.adapters.base import ActionResult
 from services.adapters.forklift import ForkliftAdapter
+from services.world.evidence import (FRAME_INTERVAL_S, EvidenceFrame,
+                                     EvidenceVerdict, build_verdict,
+                                     collect_frames)
 from services.world.ontology import (GoodsLifecycle, GoodsUnit, Loc, LocKind,
                                      Pallet, PalletCargo, Slot, SlotOcc,
-                                     World)
+                                     TransferOutcome, World, WorldError)
 
 WEB = Path(__file__).parent / "web"
 RUNS = Path(__file__).parent / "runs"
 PUB_HZ = 60
 FORK_CAPS = frozenset({"drive", "fork_lift", "fork_insert",
                        "fork_withdraw", "stop"})
-RUN_ID = time.strftime("DEMO-%Y%m%d-%H%M%S")
-TASK_ID = RUN_ID + "-T01"
+# run 身份 (GPT 评审 P1-7): 不再是模块加载时一次性常量 —— 每次
+# build()/reset() 重新生成全局唯一 uuid, 见 WorldService._new_identity。
 
 # 巷道作业区: 货架 (x≈0) 与暂存台/交接台 (x=-0.340) 所在区段。两车同在
 # y=0 单巷道 (底盘只有 x 向自由度), 同一时刻只允许一车在此区作业。
@@ -156,24 +160,49 @@ class PacedForkliftAdapter(ForkliftAdapter):
                 time.sleep(min(lead, 0.05))
 
 
+class ReconciliationRequired(RuntimeError):
+    """物理已成功而账本提交失败 —— 任务挂起, 等待核对后恢复。
+
+    设计 §4 失败矩阵「提交失败但物理已交接」: 保留事实进"待核对",
+    禁止依赖该状态的后续动作 (任务线程立即返回); 恢复走同幂等键
+    重放 (WorldService.reconcile), 不重复记账。
+    """
+
+
 class WorldService:
     """世界模型 + 物理 + 任务编排; 业务写入只经 World 事务。"""
 
     def __init__(self) -> None:
         self.gate = Gate()
         self.aisle = AisleLock()
-        self.mode = "idle"          # idle|running|paused|done|failed
+        self.mode = "idle"  # idle|running|paused|blocked|done|failed|reconciliation_required
         self.step = -1
         self.step_label = "待命"
         self.chat: deque = deque(maxlen=200)
         self.chat_seq = 0
         self.db_lock = threading.RLock()   # 串行化 World 跨线程访问
         self._board_cache: tuple | None = None
+        self.reconciliation: dict[str, dict] = {}   # 挂起提交 (待核对)
+        self.run_id = ""
+        self.task_id = ""
+        self._verdict_seq = itertools.count(1)
         self.tasks: list | None = None
         self.steps_total = 0
         self.build()
 
     # ---------- 构建/复位 ----------
+    def _new_identity(self) -> None:
+        """run 身份重建 (GPT 评审 P1-7): 每次构造/reset 生成全局唯一身份。
+
+        旧实现 RUN_ID 是模块加载时常量, reset() 重建了数据库文件但身份
+        不变 —— 「新 run」不是全局唯一的新逻辑运行。现在 DEMO-<时间>-
+        <uuid8> 保证同秒多次 reset 也互不相同的身份; 事件流
+        (event_id 前缀)、叙述与 SQLite 文件名全部引用当前身份。
+        """
+        self.run_id = (f"DEMO-{time.strftime('%Y%m%d-%H%M%S')}-"
+                       f"{uuid.uuid4().hex[:8]}")
+        self.task_id = f"{self.run_id}-T01"
+
     def build(self) -> None:
         cell = ForkliftCell(timestep_s=0.0005, levels=[0.100, 0.250, 0.400],
                             vehicles=["F01", "F02"])
@@ -201,9 +230,12 @@ class WorldService:
         self._blocked_retries = 0
         self.blocked_reason: str | None = None
         self.cones: list[list[float]] = []
-        self.world = World(run_id=RUN_ID,
+        self._new_identity()
+        self._verdict_seq = itertools.count(1)
+        self.reconciliation = {}
+        self.world = World(run_id=self.run_id,
                            db_path=str(RUNS /
-                                       f"{RUN_ID}-{time.time_ns()}.sqlite"))
+                                       f"{self.run_id}-{time.time_ns()}.sqlite"))
         self._seed_ledger()
         with self.gate.lock:
             self.gate.sim0 = float(d.time)
@@ -344,20 +376,45 @@ class WorldService:
                 up(tz, 0.010, False, "待命位叉架复位运输高度")]
         return steps
 
-    # 提交点: 只在物理证据成立时写 World (P3 Wave2: 参数化车辆)
+    # 提交点: 只在物理证据成立时写 World (P3 Wave2: 参数化车辆)。
+    # B1: 证据从「接触+高度」单帧读数升级为 EvidenceVerdict 多帧联合
+    # 判定 (设计 §4 H_valid), 提交从多次写收敛为单次原子 commit_transfer
+    # (GPT 评审 P0-1/P1-4)。
     def _commit_pick(self, src: str, pid: str, vid: str = "F01") -> bool:
         c = self.cell
         if not c.pallet_fork_contact(vid) or \
                 c.pallet_bottom_z < self.LOC[src] + 0.003:
             return False
+        verdict = self._sample_verdict("PICK", pid, vid)
+        if not verdict.passed:
+            self.narrate(f"[{pid}] 取托证据未过门禁: "
+                         f"{'；'.join(verdict.failures)} — 拒绝提交。")
+            return False
         t = float(c.data.time)
-        self.world.move_pallet(pid, Loc(LocKind.ROBOT, vid), TASK_ID, t)
+        to = Loc(LocKind.ROBOT, vid)
+        mutations = [
+            ("UPDATE pallets SET location=?, entity_version=entity_version+1 "
+             "WHERE pallet_id=?", (str(to), pid))]
         if src in self.SLOT_OF:               # S1 是 STATION, 无 slot 行
-            self.world._conn.execute(
-                "UPDATE slots SET occupancy='EMPTY' WHERE slot_id=?",
-                (self.SLOT_OF[src],))
-        self.world._conn.commit()
-        self.narrate(f"物理证据确认: {pid} 已离面、由 {vid} 叉臂承托。"
+            mutations.append(
+                ("UPDATE slots SET occupancy=? WHERE slot_id=?",
+                 (SlotOcc.EMPTY.value, self.SLOT_OF[src])))
+        out = self._transfer(
+            f"{self.task_id}:pick:{pid}:{self.SLOT_OF.get(src, src)}",
+            verdict=verdict,
+            expected={"pallets:" + pid:
+                      self.world.entity_version_of("pallets:" + pid)},
+            mutations=mutations,
+            events=[("PalletMoved", {"pallet_id": pid, "to_location": str(to),
+                                     "evidence_id": verdict.verdict_id})],
+            sim_time_s=t)
+        if out is None:
+            return False
+        self.narrate(f"物理证据确认: {pid} 已离面、由 {vid} 叉臂承托 "
+                     f"(承托率 {verdict.support:.0%}, 旧支撑卸载 "
+                     f"{verdict.old_support:.0%}, 稳定窗 "
+                     f"{verdict.stable_window_s:.2f}s, 证据 "
+                     f"{verdict.verdict_id})。"
                      f"事务提交 {pid}→ROBOT:{vid}"
                      + (f", 货位 {self.SLOT_OF[src]} 释放" if src in self.SLOT_OF
                         else "") + "。在库计数不变。")
@@ -370,34 +427,156 @@ class WorldService:
         if c.pallet_fork_contact(vid) or not (z - 0.002 <= c.pallet_bottom_z
                                               <= z + 0.005):
             return False
+        verdict = self._sample_verdict("PLACE", pid, vid)
+        if not verdict.passed:
+            self.narrate(f"[{pid}] 放托证据未过门禁: "
+                         f"{'；'.join(verdict.failures)} — 拒绝提交。")
+            return False
         t = float(c.data.time)
+        expected = {"pallets:" + pid:
+                    self.world.entity_version_of("pallets:" + pid)}
         if dst == "S1":      # 交接台过户: 只转移 pallet 所有权到 STATION
-            self.world.move_pallet(pid, Loc(LocKind.STATION, "S1"),
-                                   TASK_ID, t)
-            self.world._conn.commit()
+            to = Loc(LocKind.STATION, "S1")
+            out = self._transfer(
+                f"{self.task_id}:place:{pid}:S1", verdict=verdict,
+                expected=expected,
+                mutations=[("UPDATE pallets SET location=?, "
+                            "entity_version=entity_version+1 WHERE pallet_id=?",
+                            (str(to), pid))],
+                events=[("PalletMoved", {"pallet_id": pid,
+                                         "to_location": str(to),
+                                         "evidence_id": verdict.verdict_id})],
+                sim_time_s=t)
+            if out is None:
+                return False
             self.narrate(f"交接验真: 叉臂脱离、{pid} 底面落在交接台 S1 支撑面 "
-                         f"{z*1000:.0f}mm。事务提交 {pid}→STATION:S1 "
+                         f"{z*1000:.0f}mm (承托率 {verdict.support:.0%}, "
+                         f"稳定窗 {verdict.stable_window_s:.2f}s)。"
+                         f"事务提交 {pid}→STATION:S1 "
                          f"(ROBOT:{vid} → 交接台), 待 F02 接力。在库计数不变。")
             return True
         kind = LocKind.STATION if dst == "STAGE" else LocKind.SLOT
-        self.world.move_pallet(pid, Loc(kind, self.SLOT_OF[dst]), TASK_ID, t)
+        slot = self.SLOT_OF[dst]
+        to = Loc(kind, slot)
+        mutations = [
+            ("UPDATE pallets SET location=?, entity_version=entity_version+1 "
+             "WHERE pallet_id=?", (str(to), pid))]
         if dst in ("STAGE", "H01"):     # 到出库位: G→OUTBOUND_PENDING 仍计在库
-            self.world.mark_outbound_pending(gid, TASK_ID, t)
+            mutations.append(
+                ("UPDATE goods SET lifecycle=?, entity_version=entity_version+1 "
+                 "WHERE goods_id=?",
+                 (GoodsLifecycle.OUTBOUND_PENDING.value, gid)))
+            ev_type, ev_extra = "OutboundPending", {"goods_id": gid}
         else:  # 回架: 出库待命 → 在库 (同一事务)
-            self.world._conn.execute(
-                "UPDATE goods SET lifecycle='IN_WAREHOUSE', "
-                "entity_version=entity_version+1 WHERE goods_id=?", (gid,))
-            self.world._conn.commit()
-            self.world.emit(TASK_ID, "InboundConfirmed",
-                            {"goods_id": gid, "slot": self.SLOT_OF[dst]}, t)
-        self.world._conn.execute(
-            "UPDATE slots SET occupancy='OCCUPIED' WHERE slot_id=?",
-            (self.SLOT_OF[dst],))
-        self.world._conn.commit()
+            mutations.append(
+                ("UPDATE goods SET lifecycle=?, entity_version=entity_version+1 "
+                 "WHERE goods_id=?",
+                 (GoodsLifecycle.IN_WAREHOUSE.value, gid)))
+            ev_type, ev_extra = "InboundConfirmed", {"goods_id": gid,
+                                                      "slot": slot}
+        expected["goods:" + gid] = self.world.entity_version_of("goods:" + gid)
+        mutations.append(("UPDATE slots SET occupancy=? WHERE slot_id=?",
+                          (SlotOcc.OCCUPIED.value, slot)))
+        out = self._transfer(
+            f"{self.task_id}:place:{pid}:{dst}", verdict=verdict,
+            expected=expected, mutations=mutations,
+            events=[("PalletMoved", {"pallet_id": pid, "to_location": str(to),
+                                     "evidence_id": verdict.verdict_id}),
+                    (ev_type, dict(ev_extra, evidence_id=verdict.verdict_id))],
+            sim_time_s=t)
+        if out is None:
+            return False
         self.narrate(f"放托验真 ({vid}): 叉臂脱离、{pid} 底面落在 "
-                     f"{self.SLOT_OF[dst]} 支撑面 {z*1000:.0f}mm。"
-                     f"事务提交 {pid}→{self.SLOT_OF[dst]}。")
+                     f"{slot} 支撑面 {z*1000:.0f}mm (承托率 "
+                     f"{verdict.support:.0%}, 旧支撑卸载 "
+                     f"{verdict.old_support:.0%}, 证据 {verdict.verdict_id})。"
+                     f"事务提交 {pid}→{slot}。")
         return True
+
+    def _sample_verdict(self, kind: str, pid: str,
+                        vid: str) -> EvidenceVerdict:
+        """多帧证据采样 (设计 §4 稳定 0.5s): 稳定窗内每 0.05s 一帧。
+
+        采样期间的物理步进仍走 adapter._tick —— 暂停门/墙钟配速/位姿
+        快照语义与正常执行完全一致。稳定判据作用于**转移对象** (托盘):
+        速度 = 帧间位姿差分 —— 放托后车辆自身仍在整定不应否决托盘
+        已稳落的证据; 反之托盘被拖动/滑移会被立即捕获。租约 = 巷道
+        互斥当前持有者 (任务步骤在锁内)。
+        """
+        c = self.cell
+        ad = self.adapters[vid]
+        per_frame = max(1, int(round(FRAME_INTERVAL_S / c.model.opt.timestep)))
+        lease = f"aisle:{self.aisle.owner}" if self.aisle.owner == vid else None
+        new_surface = "fork" if kind == "PICK" else "beam"
+        old_surface = "beam" if kind == "PICK" else "fork"
+        prev: dict = {"pos": None, "t": None}
+
+        def probe() -> EvidenceFrame:
+            pos, _ = c.pallet_pose
+            t = float(c.data.time)
+            if prev["pos"] is None:
+                speed = 0.0                # 初帧无前帧, 差分从第 2 帧起
+            else:
+                dt = max(t - prev["t"], 1e-9)
+                speed = float(np.linalg.norm(np.asarray(pos) - prev["pos"]) / dt)
+            prev.update(pos=np.asarray(pos), t=t)
+            return EvidenceFrame(
+                t=t,
+                new_support=float(c.support_load_ratio(new_surface, vid)),
+                old_support=float(c.support_load_ratio(old_surface, vid)),
+                pallet_x=float(pos[0]), pallet_y=float(pos[1]),
+                pallet_z=float(pos[2]),
+                speed=speed)
+
+        def step() -> None:
+            for _ in range(per_frame):
+                ad._tick()
+
+        frames = collect_frames(step=step, probe=probe)
+        return build_verdict(
+            verdict_id=f"{self.run_id}-EVD-{next(self._verdict_seq):04d}",
+            kind=kind, task_id=self.task_id, pallet_id=pid, vehicle_id=vid,
+            lease_id=lease, frames=tuple(frames))
+
+    def _transfer(self, key: str, *, verdict: EvidenceVerdict,
+                  expected: dict[str, int],
+                  mutations: list[tuple[str, tuple]],
+                  events: list[tuple[str, dict]],
+                  sim_time_s: float) -> TransferOutcome | None:
+        """单点原子提交 + 故障语义 (GPT 评审 P0-1)。
+
+        - 逻辑层拒绝 (版本冲突/证据过期/约束不符): 返回 None —— 上层按
+          「证据不足」失败, 不改事实;
+        - 提交通道故障 (sqlite 异常 —— 物理已成功而账本未动): 登记挂起
+          提交并抛 :class:`ReconciliationRequired`。任务挂起, 禁止依赖
+          该状态的后续动作; 叙述+事件上报, 等待 reconcile 同键重放。
+        """
+        try:
+            out = self.world.commit_transfer(
+                verdict.verdict_id, expected, mutations, events, key,
+                task_id=self.task_id, sim_time_s=sim_time_s,
+                evidence_json=verdict.to_json())
+            self._board_cache = None       # 账本已变, 库存板缓存失效
+            return out
+        except WorldError as e:
+            self.narrate(f"提交被拒 ({key}): {e} — 不改事实。")
+            return None
+        except Exception as e:      # 提交通道故障: 回滚已保证零残留
+            self.reconciliation[key] = {
+                "key": key, "evidence_id": verdict.verdict_id,
+                "evidence_json": verdict.to_json(),
+                "expected": expected, "mutations": mutations,
+                "events": events, "sim_time_s": sim_time_s,
+                "error": repr(e)}
+            self.world.emit(self.task_id, "ReconciliationRequired",
+                            {"idempotency_key": key, "error": repr(e),
+                             "evidence_id": verdict.verdict_id},
+                            float(self.cell.data.time))
+            self.narrate(f"提交通道故障 ({key}): {e!r} — 事务已整体回滚, "
+                         "库存零残留; 但物理已完成而账本未更新, 任务挂起"
+                         "进入待核对 (RECONCILIATION_REQUIRED)。请核对后"
+                         "执行 reconcile 恢复 (同幂等键重放, 不重复记账)。")
+            raise ReconciliationRequired(key) from e
 
     # ---------- mission 线程 ----------
     def run_mission(self) -> None:
@@ -459,7 +638,7 @@ class WorldService:
         i = 0
         for n, (vid, pid, gid, src, dst, steps) in enumerate(plans, 1):
             with self.db_lock:
-                self.world.emit(TASK_ID, "TaskStarted",
+                self.world.emit(self.task_id, "TaskStarted",
                                 {"task": n, "vehicle": vid, "pallet": pid,
                                  "from": self.SLOT_OF.get(src, src),
                                  "to": self.SLOT_OF.get(dst, dst)},
@@ -493,7 +672,7 @@ class WorldService:
                                 break                       # 真失败
                             # 避障停车: PATH_INFEASIBLE (巷道无法绕行)
                             with self.db_lock:
-                                self.world.emit(TASK_ID, "ObstacleDetected",
+                                self.world.emit(self.task_id, "ObstacleDetected",
                                                 {"step": i, "label": label,
                                                  "reason": br},
                                                 float(d.time))
@@ -530,11 +709,19 @@ class WorldService:
                             self._blocked_sig = None
                         break
                     if commit is not None:
-                        with self.db_lock:
-                            ok = commit()
+                        try:
+                            with self.db_lock:
+                                ok = commit()
+                        except ReconciliationRequired:
+                            # 物理已成功、账本提交失败: 任务挂起, 后续
+                            # 动作全部禁止 (叙述/事件已在 _transfer 上报)
+                            with self.gate.lock:
+                                self.step_label = f"待核对: {label}"
+                            self.mode = "reconciliation_required"
+                            return
                         if not ok:
                             with self.db_lock:
-                                self.world.emit(TASK_ID,
+                                self.world.emit(self.task_id,
                                                 "CommitEvidenceMissing",
                                                 {"step": i, "label": label},
                                                 float(d.time))
@@ -545,11 +732,11 @@ class WorldService:
                                          "计划, 不能改事实)。")
                             return
                     with self.db_lock:
-                        self.world.emit(TASK_ID, "StepCompleted",
+                        self.world.emit(self.task_id, "StepCompleted",
                                         {"step": i, "label": label},
                                         float(d.time))
                 with self.db_lock:
-                    self.world.emit(TASK_ID, "TaskCompleted",
+                    self.world.emit(self.task_id, "TaskCompleted",
                                     {"task": n, "vehicle": vid,
                                      "pallet": pid}, float(d.time))
             finally:
@@ -611,6 +798,11 @@ class WorldService:
             self.remove_cones()
             self.narrate("锥桶已移出场景。等待 LiDAR 连续确认通道恢复后"
                          "才会恢复运动 —— 不会因为一句话就盲目开动。")
+        elif op == "reconcile":
+            # 待核对恢复 (B1): value = 挂起提交的 idempotency_key
+            return {**self.reconcile(str(value or "")),
+                    "mode": self.mode, "step": self.step,
+                    "label": self.step_label, "speed": self.gate.speed}
         elif op == "reset":
             self.tasks = None
             self.mode = "idle"
@@ -618,6 +810,45 @@ class WorldService:
             self.narrate("已复位: 新 run、账本重播种、与物理初态一致。")
         return {"mode": self.mode, "step": self.step,
                 "label": self.step_label, "speed": self.gate.speed}
+
+    def reconcile(self, key: str) -> dict:
+        """人工核对后重放挂起提交 (RECONCILIATION_REQUIRED 恢复路径)。
+
+        用同一 idempotency_key 重放: 首次若实际已提交 (应答丢失) 返回
+        首次结果不重复记账; 首次若已回滚未提交则现在真正落账。恢复后
+        mode 回 idle, 任务可重新 start 继续队列 (已完成步骤的提交幂等
+        跳过)。重放仍失败则保持待核对, 不掩盖故障。
+        """
+        rec = self.reconciliation.get(key)
+        if rec is None:
+            return {"ok": False,
+                    "error": f"无挂起提交: {key!r} (可核对 reconciliation 键集)"}
+        with self.db_lock:
+            try:
+                out = self.world.commit_transfer(
+                    rec["evidence_id"], rec["expected"], rec["mutations"],
+                    rec["events"], key, task_id=self.task_id,
+                    sim_time_s=rec["sim_time_s"],
+                    evidence_json=rec["evidence_json"])
+            except Exception as e:
+                self.narrate(f"核对重放仍失败 ({key}): {e!r} — 保持待核对。")
+                return {"ok": False, "error": repr(e), "key": key}
+        del self.reconciliation[key]
+        self._board_cache = None           # 账本已变, 库存板缓存失效
+        with self.db_lock:
+            self.world.emit(self.task_id, "ReconciliationApplied",
+                            {"idempotency_key": key, "replayed": out.replayed,
+                             "event_ids": list(out.event_ids)},
+                            float(self.cell.data.time))
+        if self.mode == "reconciliation_required":
+            self.mode = "idle"
+        self.narrate(("核对完成: 挂起提交已幂等落账"
+                      + (" (重放首次结果, 无重复记账)" if out.replayed
+                         else " (首次落账)")
+                      + f", 事件 {len(out.event_ids)} 条 — "
+                        "可重新 start 继续队列。"))
+        return {"ok": True, "key": key, "replayed": out.replayed,
+                "event_ids": list(out.event_ids)}
 
     # ---------- 锥桶注入/移除 (mocap) ----------
     def place_cone(self, x: float) -> None:
@@ -631,7 +862,7 @@ class WorldService:
             d.mocap_pos[mid] = [x, 0.0, 0.045]
             self.cones.append([x, 0.0])
             with self.db_lock:
-                self.world.emit(TASK_ID, "ConeInjected",
+                self.world.emit(self.task_id, "ConeInjected",
                                 {"x_m": x}, float(d.time))
             return
 
@@ -658,7 +889,7 @@ class WorldService:
         with self.db_lock:
             c = self.world._conn
             out = {
-                "run_id": RUN_ID,
+                "run_id": self.run_id,
                 "count": self.world.in_warehouse_count(),
                 "slots": [list(r) for r in c.execute(
                     "SELECT slot_id, occupancy FROM slots")],

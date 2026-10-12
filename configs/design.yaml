@@ -1,5 +1,13 @@
 # 单一工程参数源 — 桌面AGV与机器人仓储Demo
-# design_version 2.2.0 · 所有数值单位后缀强制 · 修改须同步 design_version
+# design_version 2.3.0 · 所有数值单位后缀强制 · 修改须同步 design_version
+# 2.3.0 (2026-10-11): M2W2 矩阵仓库车队扩编 4+4=8 (F01-F04 叉车 /
+#   A01-A04 AGV, 等级 L1/L2/L3 异构: 速度/加速度/举升/载重上限见
+#   sim.warehouse_cell.VEHICLE_CLASSES), 交接台扩为 5 (H01-H05, 全列
+#   通道中心), 停车点重排 (F01 横移带西端死区 / F02 南带外排东端死区,
+#   避开 W1 盲走走廊 y=-2.85 的 x∈(-2.22,-1.10) 段; 其余居间隙,
+#   静态间距 ≥0.33); LAYOUT 为单一来源。CAD/BOM 零改动 (单车几何不变),
+#   仅 manifest 版本联动。网格导航/锁矩阵见 sim/navigation.py +
+#   sim/traffic.py, 验收 tests/test_fleet_navigation.py。
 # 2.2.0 (2026-10-11): ForkliftCell 多车参数化 (vehicles, 一个 MJCF N 车 +
 #   共享环境, 可动件 <vid>_ 前缀命名空间)、F02 行程 range 按插叉位放宽、
 #   AisleLock 巷道互斥、mocap 锥桶 + LiDAR 观测通道 (P4a)、Decision
@@ -9,7 +17,7 @@
 # 2.1.0 (2026-10-10): 叉架背板分两片置横梁 y 空隙且高于叉顶、叉孔摩擦 1.4、
 #   插深 65mm 明确为叉尖语义、ESTOP 改减速度受限斜坡 (12 m/s²)。
 #   理由与实测见 reports/t06_relay_limit.md 与 v2.1.0 验收报告 §6.2。
-design_version: "2.2.0"
+design_version: "2.3.0"
 schema_version: "2.0"
 units: {length: m, mass: kg, angle: rad, time: s}
 

@@ -18,17 +18,23 @@ KNOWN_STATIC_PREFIX = ("floor", "stage_", "upright_", "support_",
                        "back_", "hose_", "mast_cross")
 # AGV 自体 (滤除): 车体/门架装饰/货叉/托盘(被搬运时紧贴)
 SELF_PREFIX = ("chassis", "counterweight", "mast_l", "mast_r", "mast_top",
-               "fork_", "carriage_", "pal_", "ceil_", "top_side", "top_mid")
+               "fork_", "carriage_", "pal_", "ceil_", "top_side", "top_mid",
+               "hubcap", "wheel")
+
+
+def _is_self_or_known(name: str, vid_prefixes: tuple = ()) -> bool:
+    """vid_prefixes: 车队命名空间前缀 (如 'F01_'), 剥离后再匹配 ——
+    P3 Wave1 多车参数化后可动件名带 <vid>_ 前缀, 裸名表会漏滤
+    (实测残留 F01_mast_l/r 污染占据栅格)。"""
+    for p in vid_prefixes:
+        if name.startswith(p):
+            name = name[len(p):]
+            break
+    return name.startswith(KNOWN_STATIC_PREFIX) or name.startswith(SELF_PREFIX)
 
 GRID_X0, GRID_Y0 = -1.0, -0.5
 GRID_RES = 0.05
 GRID_NX, GRID_NY = 40, 20
-
-
-def _is_self_or_known(name: str) -> bool:
-    return name.startswith(KNOWN_STATIC_PREFIX) or name.startswith(SELF_PREFIX)
-
-
 class Lidar:
     """单线水平激光扫描器 (挂在车顶, 随 chassis 移动)。"""
 
@@ -36,6 +42,8 @@ class Lidar:
                  fov_deg: float = 270.0, max_range: float = 1.5,
                  sigma: float = 0.003, drop: float = 0.02, seed: int = 7):
         self.cell = cell
+        vids = getattr(cell, "vehicles", None) or ["F01"]
+        self.vid_prefixes = tuple(v + "_" for v in vids)
         self.z = z
         self.n = n_rays
         self.fov = np.deg2rad(fov_deg)
@@ -73,19 +81,19 @@ class Lidar:
             exclude, dist_i, gid_i = -1, self.max_range, -1
             found = False
             for _ in range(6):                              # 滤自体重射
-                # 注意: 本 binding 的 mj_ray 返回值是 geomid (非距离),
-                # 命中距离用 geom_xpos 到射线垂足自算
-                gid_i = int(mujoco.mj_ray(m, d, pnt, v, None, 1,
-                                          exclude, geomid))
-                if gid_i < 0:
-                    break
-                gpos = d.geom_xpos[gid_i]
-                tpar = float(np.dot(gpos - pnt, v))
-                dist_i = float(np.linalg.norm(gpos - pnt - tpar * v))
+                # binding 语义 (2026-10-11 实测定论): mj_ray 返回值 = 命中
+                # 距离 (无命中 -1), geomid 输出数组 [0] = 命中 geom id。
+                # 此前把返回值当 gid、距离用几何中心垂足自算 —— 全错
+                # (GPT 评审 P0-2 与 10-09 调试独立发现同一 bug)。
+                dist_i = float(mujoco.mj_ray(m, d, pnt, v, None, 1,
+                                             exclude, geomid))
+                gid_i = int(geomid[0])
+                if dist_i < 0:
+                    break                                   # 无命中
                 bid = int(m.geom_bodyid[gid_i])
                 nm = mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_GEOM,
                                        gid_i) or "?"
-                if _is_self_or_known(nm):
+                if _is_self_or_known(nm, self.vid_prefixes):
                     exclude = bid
                     continue
                 found = True
@@ -102,7 +110,6 @@ class Lidar:
                     bid = int(m.geom_bodyid[gid_i])
                     if bid in self.cone_bids:
                         cone_hits.append((hx, hy))
-        print(f"[scan] internal hits={len(hits)} cones={len(cone_hits)} found_any")
         self.scan_count += 1
         for hx, hy in cone_hits:                            # 占据栅格更新
             ix = int((hx - GRID_X0) / GRID_RES)

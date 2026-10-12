@@ -10,8 +10,8 @@
 from __future__ import annotations
 
 import itertools
+import json
 import sqlite3
-import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
@@ -116,6 +116,20 @@ class Event:
     sim_time_s: float
 
 
+# 乐观版本检查支持的实体 (表名 → 主键列)
+_VERSIONED_COLUMNS = {"pallets": "pallet_id", "goods": "goods_id"}
+
+
+@dataclass(frozen=True)
+class TransferOutcome:
+    """commit_transfer 的返回 (幂等重放与首次提交同构)。"""
+    key: str
+    committed: bool
+    replayed: bool                     # True = 同 key 重放, 返回首次结果
+    event_ids: tuple[str, ...]
+    new_versions: dict[str, int]       # 实体 → 提交后版本
+
+
 @dataclass
 class World:
     """单进程世界模型 + SQLite 持久化。所有业务写入只经此事务边界。"""
@@ -151,6 +165,11 @@ class World:
               payload TEXT, sim_time_s REAL);
             CREATE TABLE command_log(run_id TEXT, robot_id TEXT, command_id TEXT,
               status TEXT, PRIMARY KEY(run_id, robot_id, command_id));
+            CREATE TABLE execution_evidence(evidence_id TEXT PRIMARY KEY,
+              schema_version INTEGER, kind TEXT, pallet_id TEXT, vehicle_id TEXT,
+              task_id TEXT, payload TEXT, valid_until REAL, sim_time_s REAL);
+            CREATE TABLE transfers(idempotency_key TEXT PRIMARY KEY,
+              evidence_id TEXT, result_json TEXT, sim_time_s REAL);
             """
         )
         c.commit()
@@ -180,7 +199,6 @@ class World:
         event_id = f"{self.run_id}-EVT-{next(self._seq):06d}"
         if event_id in self._events:
             raise ConstraintViolation(f"event_id 重复: {event_id}")
-        import json
         self._conn.execute("INSERT INTO events VALUES(?,?,?,?,?)",
                            (event_id, task_id, type_, json.dumps(payload), sim_time_s))
         self._conn.commit()
@@ -378,3 +396,103 @@ class World:
                 "SELECT status FROM command_log WHERE run_id=? AND robot_id=? AND command_id=?",
                 (self.run_id, robot_id, command_id)).fetchone()[0]
             return prev
+
+    # ---------- 原子转移 (GPT 评审 P0-1/P1-4) ----------
+    def entity_version_of(self, entity: str) -> int:
+        """读取实体当前版本 (乐观并发检查用)。entity 形如 'pallets:PAL-001'。"""
+        table, _, eid = entity.partition(":")
+        col = _VERSIONED_COLUMNS.get(table)
+        if col is None:
+            raise ConstraintViolation(f"不支持版本化实体: {entity}")
+        row = self._conn.execute(
+            f"SELECT entity_version FROM {table} WHERE {col}=?", (eid,)).fetchone()
+        if row is None:
+            raise ConstraintViolation(f"实体不存在: {entity}")
+        return row[0]
+
+    def commit_transfer(self, evidence_id: str, expected_versions: dict[str, int],
+                        mutations: list[tuple[str, tuple]],
+                        events: list[tuple[str, dict]],
+                        idempotency_key: str, *, task_id: str = "",
+                        sim_time_s: float = 0.0,
+                        evidence_json: str = "") -> TransferOutcome:
+        """原子提交一次物理转移: 单一 SQLite 事务内完成
+        乐观版本检查 → 状态变更 → 事件写入 → 证据快照登记 → 幂等登记。
+
+        - 任何一步失败整体回滚, 库存/事件/登记**零残留**; 调用方在物理
+          已成功而提交失败时应进入 RECONCILIATION_REQUIRED (twin/server)。
+        - 期望版本不符 → :class:`VersionConflict`, 拒绝且零残留。
+        - 同 ``idempotency_key`` 重放直接返回首次结果 (不重复记账、
+          不重复发事件) —— 应答丢失/重试安全。
+        - ``evidence_json`` 为 :class:`services.world.evidence.EvidenceVerdict`
+          序列化; 过期 (sim_time_s > valid_until) → ConstraintViolation。
+        """
+        prev = self._conn.execute(
+            "SELECT result_json FROM transfers WHERE idempotency_key=?",
+            (idempotency_key,)).fetchone()
+        if prev is not None:
+            r = json.loads(prev[0])
+            return TransferOutcome(key=idempotency_key, committed=True,
+                                   replayed=True,
+                                   event_ids=tuple(r["event_ids"]),
+                                   new_versions=dict(r["new_versions"]))
+        if evidence_json:
+            try:
+                ev = json.loads(evidence_json)
+                valid_until = float(ev["valid_until"])
+            except (json.JSONDecodeError, KeyError, ValueError) as e:
+                raise ConstraintViolation(f"证据不可解析: {e}") from e
+            if sim_time_s > valid_until + 1e-9:
+                raise ConstraintViolation(
+                    f"证据过期: sim_time {sim_time_s:.3f}s > "
+                    f"valid_until {valid_until:.3f}s ({evidence_id})")
+        expected_versions = expected_versions or {}
+        event_ids: list[str] = []
+        with self._conn:                       # 原子边界: 异常整体回滚
+            for entity, expected in expected_versions.items():
+                current = self.entity_version_of(entity)
+                if current != expected:
+                    raise VersionConflict(
+                        f"{entity} 期望 v{expected}, 实际 v{current}")
+            for sql, params in mutations:
+                self._conn.execute(sql, params)
+            for type_, payload in events:
+                event_id = f"{self.run_id}-EVT-{next(self._seq):06d}"
+                self._conn.execute(
+                    "INSERT INTO events VALUES(?,?,?,?,?)",
+                    (event_id, task_id, type_, json.dumps(payload), sim_time_s))
+                event_ids.append(event_id)
+            if evidence_id and evidence_json:
+                ev = json.loads(evidence_json)
+                self._conn.execute(
+                    "INSERT INTO execution_evidence VALUES(?,?,?,?,?,?,?,?,?)",
+                    (evidence_id, int(ev.get("schema_version", 0)),
+                     str(ev.get("kind", "")), str(ev.get("pallet_id", "")),
+                     str(ev.get("vehicle_id", "")), str(ev.get("task_id", "")),
+                     evidence_json, float(ev.get("valid_until", 0.0)),
+                     sim_time_s))
+            new_versions = {entity: self.entity_version_of(entity)
+                            for entity in expected_versions}
+            self._conn.execute(
+                "INSERT INTO transfers VALUES(?,?,?,?)",
+                (idempotency_key, evidence_id,
+                 json.dumps({"event_ids": event_ids,
+                             "new_versions": new_versions}), sim_time_s))
+        for eid, (type_, payload) in zip(event_ids, events):
+            self._events[eid] = Event(eid, task_id, type_, payload, sim_time_s)
+        return TransferOutcome(key=idempotency_key, committed=True,
+                               replayed=False, event_ids=tuple(event_ids),
+                               new_versions=new_versions)
+
+    def evidence(self, evidence_id: str) -> Optional[dict]:
+        """取回持久化证据快照 (事件 payload 的 evidence_id 可追溯)。"""
+        row = self._conn.execute(
+            "SELECT payload FROM execution_evidence WHERE evidence_id=?",
+            (evidence_id,)).fetchone()
+        return json.loads(row[0]) if row else None
+
+    def transfer_recorded(self, idempotency_key: str) -> bool:
+        """该幂等键是否已有已提交登记 (恢复路径判定用)。"""
+        return self._conn.execute(
+            "SELECT 1 FROM transfers WHERE idempotency_key=?",
+            (idempotency_key,)).fetchone() is not None
