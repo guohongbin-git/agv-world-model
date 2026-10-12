@@ -1,0 +1,42 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0 -- /Users/guohongbin/1-Projects/desktop-agv-demo/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/guohongbin/1-Projects/desktop-agv-demo
+plugins: platformdirs-4.12.4, anyio-4.15.1
+collecting ... collected 1 item
+
+tests/test_fleet_navigation.py::test_two_agv_head_on_wait_and_complete FAILED [100%]
+
+=================================== FAILURES ===================================
+____________________ test_two_agv_head_on_wait_and_complete ____________________
+tests/test_fleet_navigation.py:409: in test_two_agv_head_on_wait_and_complete
+    assert res["op_errors"] == []
+E   AssertionError: assert ['F01: pick 物理校验失败 pallet_R11_S0_L1 dxy=0.045 dz=-0.062', 'F03: pick 物理校验失败 pallet_R12_S6_L1 dxy=0.133 dz=-0.075', 'A02: haul 物理校验失败 pallet_R11_S0_L1 dxy=2.825 dz=-0.055', 'A03: haul 物理校验失败 pallet_R12_S6_L1 dxy=1.196 dz=0.155'] == []
+E     
+E     Left contains 4 more items, first extra item: 'F01: pick 物理校验失败 pallet_R11_S0_L1 dxy=0.045 dz=-0.062'
+E     
+E     Full diff:
+E     - []
+E     + [
+E     +     'F01: pick 物理校验失败 pallet_R11_S0_L1 dxy=0.045 dz=-0.062',
+E     +     'F03: pick 物理校验失败 pallet_R12_S6_L1 dxy=0.133 dz=-0.075',
+E     +     'A02: haul 物理校验失败 pallet_R11_S0_L1 dxy=2.825 dz=-0.055',
+E     +     'A03: haul 物理校验失败 pallet_R12_S6_L1 dxy=1.196 dz=0.155',
+E     + ]
+----------------------------- Captured stderr call -----------------------------
+WARNING: Nan, Inf or huge value in QACC at DOF 12. The simulation is unstable. Time = 403.3520.
+
+=========================== short test summary info ============================
+FAILED tests/test_fleet_navigation.py::test_two_agv_head_on_wait_and_complete - AssertionError: assert ['F01: pick 物理校验失败 pallet_R11_S0_L1 dxy=0.045 dz=-0.062', 'F03: pick 物理校验失败 pallet_R12_S6_L1 dxy=0.133 dz=-0.075', 'A02: haul 物理校验失败 pallet_R11_S0_L1 dxy=2.825 dz=-0.055', 'A03: haul 物理校验失败 pallet_R12_S6_L1 dxy=1.196 dz=0.155'] == []
+  
+  Left contains 4 more items, first extra item: 'F01: pick 物理校验失败 pallet_R11_S0_L1 dxy=0.045 dz=-0.062'
+  
+  Full diff:
+  - []
+  + [
+  +     'F01: pick 物理校验失败 pallet_R11_S0_L1 dxy=0.045 dz=-0.062',
+  +     'F03: pick 物理校验失败 pallet_R12_S6_L1 dxy=0.133 dz=-0.075',
+  +     'A02: haul 物理校验失败 pallet_R11_S0_L1 dxy=2.825 dz=-0.055',
+  +     'A03: haul 物理校验失败 pallet_R12_S6_L1 dxy=1.196 dz=0.155',
+  + ]
+======================== 1 failed in 831.64s (0:13:51) =========================

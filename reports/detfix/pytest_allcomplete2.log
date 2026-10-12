@@ -1,0 +1,13 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+E   AssertionError: assert ['A02: haul 物...24 dz=-0.075'] == []
+      
+      Left contains one more item: 'A02: haul 物理校验失败 pallet_R11_S0_L1 dxy=2.224 dz=-0.075'
+      Use -v to get more diff
+/Users/guohongbin/1-Projects/desktop-agv-demo/tests/test_fleet_navigation.py:302: AssertionError: assert ['A02: haul 物...24 dz=-0.075'] == []
+E   assert 0.005780146257199612 < 0.0005
+/Users/guohongbin/1-Projects/desktop-agv-demo/tests/test_fleet_navigation.py:324: assert 0.005780146257199612 < 0.0005
+=========================== short test summary info ============================
+FAILED tests/test_fleet_navigation.py::test_8task_all_complete - AssertionErr...
+FAILED tests/test_fleet_navigation.py::test_8task_zero_collision_no_deadlock
+2 failed in 977.57s (0:16:17)

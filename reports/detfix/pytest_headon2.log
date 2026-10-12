@@ -1,0 +1,10 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+E   AssertionError: assert ['A02: haul 物...89 dz=-0.003'] == []
+      
+      Left contains 3 more items, first extra item: 'A02: haul 物理校验失败 pallet_R11_S0_L1 dxy=0.028 dz=-0.000'
+      Use -v to get more diff
+/Users/guohongbin/1-Projects/desktop-agv-demo/tests/test_fleet_navigation.py:409: AssertionError: assert ['A02: haul 物...89 dz=-0.003'] == []
+=========================== short test summary info ============================
+FAILED tests/test_fleet_navigation.py::test_two_agv_head_on_wait_and_complete
+1 failed in 525.13s (0:08:45)

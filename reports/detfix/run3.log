@@ -1,0 +1,39 @@
+tasks: [{"kind": "pick", "slot": "R11-S0", "level": 1, "stand": "H02"}, {"kind": "pick", "slot": "R11-S6", "level": 2, "stand": "H03"}, {"kind": "pick", "slot": "R12-S6", "level": 1, "stand": "H04"}, {"kind": "pick", "slot": "R12-S7", "level": 2, "stand": "H05"}, {"kind": "haul", "stand": "H02", "dock": "D_G11", "after": [0]}, {"kind": "haul", "stand": "H03", "dock": "D_G22", "after": [1]}, {"kind": "haul", "stand": "H04", "dock": "D_G33", "after": [2]}, {"kind": "haul", "stand": "H05", "dock": "D_G44", "after": [3]}]
+
+=== TRIGGER pallet_R12_S7_L2_fall at t=162.484 (wall 189s) ===
+  t=162.285 S6=(-0.470,-1.360,0.2500) S7=(-0.321,-1.238,0.0570) fmax=21.3 fpair=('F02_chassis_body', 'F03_chassis_body') F02=[-0.3375, -1.1327, 0.0079]
+      pallet_R12_S7_L2_top_mid <-> F02_fork_r F=0.88N pen=-0.0mm
+  t=162.305 S6=(-0.470,-1.360,0.2500) S7=(-0.321,-1.238,0.0568) fmax=21.1 fpair=('F02_chassis_body', 'F03_chassis_body') F02=[-0.3376, -1.1327, 0.0077]
+  t=162.325 S6=(-0.470,-1.360,0.2500) S7=(-0.321,-1.238,0.0566) fmax=21.4 fpair=('F02_chassis_body', 'F03_chassis_body') F02=[-0.3377, -1.1326, 0.0075]
+      pallet_R12_S7_L2_top_mid <-> F02_fork_r F=0.88N pen=-0.0mm
+  t=162.345 S6=(-0.470,-1.360,0.2500) S7=(-0.321,-1.237,0.0564) fmax=21.2 fpair=('F02_chassis_body', 'F03_chassis_body') F02=[-0.3378, -1.1326, 0.0073]
+  t=162.365 S6=(-0.470,-1.360,0.2500) S7=(-0.321,-1.237,0.0562) fmax=21.4 fpair=('F02_chassis_body', 'F03_chassis_body') F02=[-0.338, -1.1326, 0.0071]
+      pallet_R12_S7_L2_top_mid <-> F02_fork_r F=0.88N pen=-0.0mm
+  t=162.385 S6=(-0.470,-1.360,0.2500) S7=(-0.321,-1.237,0.0560) fmax=21.5 fpair=('F02_chassis_body', 'F03_chassis_body') F02=[-0.3381, -1.1325, 0.0069]
+      pallet_R12_S7_L2_top_mid <-> F02_fork_r F=0.88N pen=-0.0mm
+  t=162.405 S6=(-0.470,-1.360,0.2500) S7=(-0.321,-1.237,0.0558) fmax=21.5 fpair=('F02_chassis_body', 'F03_chassis_body') F02=[-0.3382, -1.1325, 0.0067]
+      pallet_R12_S7_L2_top_mid <-> F02_fork_r F=0.88N pen=-0.0mm
+  t=162.425 S6=(-0.470,-1.360,0.2500) S7=(-0.321,-1.237,0.0556) fmax=21.5 fpair=('F02_chassis_body', 'F03_chassis_body') F02=[-0.3384, -1.1324, 0.0065]
+      pallet_R12_S7_L2_top_mid <-> F02_fork_r F=0.88N pen=-0.0mm
+  t=162.445 S6=(-0.470,-1.360,0.2500) S7=(-0.321,-1.237,0.0554) fmax=21.6 fpair=('F02_chassis_body', 'F03_chassis_body') F02=[-0.3385, -1.1324, 0.0063]
+      pallet_R12_S7_L2_top_mid <-> F02_fork_r F=0.88N pen=-0.0mm
+  t=162.465 S6=(-0.470,-1.360,0.2500) S7=(-0.322,-1.237,0.0552) fmax=21.6 fpair=('F02_chassis_body', 'F03_chassis_body') F02=[-0.3387, -1.1323, 0.0061]
+      pallet_R12_S7_L2_top_mid <-> F02_fork_r F=0.88N pen=-0.0mm
+  [wall    234s] sim t=  200.50s
+  [wall    465s] sim t=  400.50s
+
+=== TRIGGER pallet_R12_S6_L1_fall at t=416.743 (wall 484s) ===
+  t=416.545 S6=(-0.482,-1.251,0.0564) S7=(+2.606,-2.925,0.0922) fmax=15 fpair=('A04_pin_plate', 'stand_H05_strip_pn') F02=[2.6, -2.85, 0.0392]
+  t=416.565 S6=(-0.482,-1.251,0.0562) S7=(+2.606,-2.925,0.0922) fmax=15 fpair=('A04_pin_plate', 'stand_H05_strip_pn') F02=[2.6, -2.85, 0.0392]
+  t=416.585 S6=(-0.482,-1.251,0.0561) S7=(+2.606,-2.925,0.0922) fmax=15 fpair=('A04_pin_plate', 'stand_H05_strip_pn') F02=[2.6, -2.85, 0.0392]
+  t=416.605 S6=(-0.482,-1.251,0.0560) S7=(+2.606,-2.925,0.0922) fmax=15 fpair=('A04_pin_plate', 'stand_H05_strip_pn') F02=[2.6, -2.85, 0.0392]
+  t=416.625 S6=(-0.482,-1.251,0.0558) S7=(+2.606,-2.925,0.0922) fmax=15 fpair=('A04_pin_plate', 'stand_H05_strip_pn') F02=[2.6, -2.85, 0.0392]
+  t=416.645 S6=(-0.482,-1.251,0.0557) S7=(+2.606,-2.925,0.0922) fmax=15 fpair=('A04_pin_plate', 'stand_H05_strip_pn') F02=[2.6, -2.85, 0.0392]
+  t=416.665 S6=(-0.482,-1.251,0.0555) S7=(+2.606,-2.925,0.0922) fmax=15 fpair=('A04_pin_plate', 'stand_H05_strip_pn') F02=[2.6, -2.85, 0.0392]
+  t=416.685 S6=(-0.482,-1.251,0.0554) S7=(+2.606,-2.925,0.0922) fmax=15 fpair=('A04_pin_plate', 'stand_H05_strip_pn') F02=[2.6, -2.85, 0.0392]
+  t=416.705 S6=(-0.482,-1.251,0.0553) S7=(+2.606,-2.925,0.0922) fmax=15 fpair=('A04_pin_plate', 'stand_H05_strip_pn') F02=[2.6, -2.85, 0.0392]
+  t=416.725 S6=(-0.482,-1.251,0.0551) S7=(+2.606,-2.925,0.0922) fmax=15 fpair=('A04_pin_plate', 'stand_H05_strip_pn') F02=[2.6, -2.85, 0.0392]
+  [wall    701s] sim t=  600.50s
+mission done; op_errors: ['A02: haul 物理校验失败 pallet_R11_S0_L1 dxy=0.039 dz=-0.000', 'F02: pick 物理校验失败 pallet_R12_S7_L2 dxy=0.245 dz=-0.003', 'F03: pick 物理校验失败 pallet_R11_S6_L2 dxy=0.244 dz=-0.003', 'F04: pick 物理校验失败 pallet_R12_S6_L1 dxy=0.250 dz=-0.015', 'A04: haul 物理校验失败 pallet_R12_S7_L2 dxy=5.115 dz=-0.003', 'A02: haul 物理校验失败 pallet_R11_S6_L2 dxy=3.031 dz=-0.003', 'A03: haul 物理校验失败 pallet_R12_S6_L1 dxy=4.052 dz=-0.015']
+audit max_pen: 0.06200000000000003 violations: ['穿透 0.60mm @ t=167.93s', '穿透 0.53mm @ t=167.98s', '穿透 0.70mm @ t=171.88s', '穿透 0.68mm @ t=172.00s', '穿透 0.76mm @ t=172.03s']
+saved reports/detfix/run3_fixed.json wall=831s

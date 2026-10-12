@@ -1,0 +1,72 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0 -- /Users/guohongbin/1-Projects/desktop-agv-demo/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/guohongbin/1-Projects/desktop-agv-demo
+plugins: platformdirs-4.12.4, anyio-4.15.1
+collecting ... collected 15 items
+
+tests/test_fleet_navigation.py::test_graph_derives_from_layout PASSED    [  6%]
+tests/test_fleet_navigation.py::test_vehicles_match_layout_classes PASSED [ 13%]
+tests/test_fleet_navigation.py::test_astar_matches_dijkstra PASSED       [ 20%]
+tests/test_fleet_navigation.py::test_turn_penalty_visible PASSED         [ 26%]
+tests/test_fleet_navigation.py::test_lock_penalty_detour_route_change PASSED [ 33%]
+tests/test_fleet_navigation.py::test_turn_envelope_constraints PASSED    [ 40%]
+tests/test_fleet_navigation.py::test_claim_atomicity_and_wait_event PASSED [ 46%]
+tests/test_fleet_navigation.py::test_retention_release_chain PASSED      [ 53%]
+tests/test_fleet_navigation.py::test_randomized_no_deadlock PASSED       [ 60%]
+tests/test_fleet_navigation.py::test_8task_all_complete FAILED           [ 66%]
+tests/test_fleet_navigation.py::test_8task_zero_collision_no_deadlock PASSED [ 73%]
+tests/test_fleet_navigation.py::test_8task_determinism PASSED            [ 80%]
+tests/test_fleet_navigation.py::test_two_agv_head_on_wait_and_complete FAILED [ 86%]
+tests/test_fleet_navigation.py::test_detour_when_column_held PASSED      [ 93%]
+tests/test_fleet_navigation.py::test_class_speeds_reflected_in_mission PASSED [100%]
+
+=================================== FAILURES ===================================
+___________________________ test_8task_all_complete ____________________________
+tests/test_fleet_navigation.py:302: in test_8task_all_complete
+    assert res["op_errors"] == []
+E   AssertionError: assert ['A02: haul 物理校验失败 pallet_R11_S0_L1 dxy=0.196 dz=-0.075'] == []
+E     
+E     Left contains one more item: 'A02: haul 物理校验失败 pallet_R11_S0_L1 dxy=0.196 dz=-0.075'
+E     
+E     Full diff:
+E     - []
+E     + [
+E     +     'A02: haul 物理校验失败 pallet_R11_S0_L1 dxy=0.196 dz=-0.075',
+E     + ]
+____________________ test_two_agv_head_on_wait_and_complete ____________________
+tests/test_fleet_navigation.py:409: in test_two_agv_head_on_wait_and_complete
+    assert res["op_errors"] == []
+E   AssertionError: assert ['A02: haul 物理校验失败 pallet_R11_S0_L1 dxy=1.114 dz=-0.075', 'F03: pick 物理校验失败 pallet_R12_S6_L1 dxy=0.961 dz=0.001', 'A03: haul 物理校验失败 pallet_R12_S6_L1 dxy=2.749 dz=0.014'] == []
+E     
+E     Left contains 3 more items, first extra item: 'A02: haul 物理校验失败 pallet_R11_S0_L1 dxy=1.114 dz=-0.075'
+E     
+E     Full diff:
+E     - []
+E     + [
+E     +     'A02: haul 物理校验失败 pallet_R11_S0_L1 dxy=1.114 dz=-0.075',
+E     +     'F03: pick 物理校验失败 pallet_R12_S6_L1 dxy=0.961 dz=0.001',
+E     +     'A03: haul 物理校验失败 pallet_R12_S6_L1 dxy=2.749 dz=0.014',
+E     + ]
+=========================== short test summary info ============================
+FAILED tests/test_fleet_navigation.py::test_8task_all_complete - AssertionError: assert ['A02: haul 物理校验失败 pallet_R11_S0_L1 dxy=0.196 dz=-0.075'] == []
+  
+  Left contains one more item: 'A02: haul 物理校验失败 pallet_R11_S0_L1 dxy=0.196 dz=-0.075'
+  
+  Full diff:
+  - []
+  + [
+  +     'A02: haul 物理校验失败 pallet_R11_S0_L1 dxy=0.196 dz=-0.075',
+  + ]
+FAILED tests/test_fleet_navigation.py::test_two_agv_head_on_wait_and_complete - AssertionError: assert ['A02: haul 物理校验失败 pallet_R11_S0_L1 dxy=1.114 dz=-0.075', 'F03: pick 物理校验失败 pallet_R12_S6_L1 dxy=0.961 dz=0.001', 'A03: haul 物理校验失败 pallet_R12_S6_L1 dxy=2.749 dz=0.014'] == []
+  
+  Left contains 3 more items, first extra item: 'A02: haul 物理校验失败 pallet_R11_S0_L1 dxy=1.114 dz=-0.075'
+  
+  Full diff:
+  - []
+  + [
+  +     'A02: haul 物理校验失败 pallet_R11_S0_L1 dxy=1.114 dz=-0.075',
+  +     'F03: pick 物理校验失败 pallet_R12_S6_L1 dxy=0.961 dz=0.001',
+  +     'A03: haul 物理校验失败 pallet_R12_S6_L1 dxy=2.749 dz=0.014',
+  + ]
+================== 2 failed, 13 passed in 3681.04s (1:01:21) ===================
