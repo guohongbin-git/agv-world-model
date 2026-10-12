@@ -87,10 +87,10 @@ class Lidar:
             exclude, dist_i, gid_i = -1, self.max_range, -1
             found = False
             for _ in range(6):                              # 滤自体重射
-                # binding 语义 (2026-10-11 实测定论): mj_ray 返回值 = 命中
-                # 距离 (无命中 -1), geomid 输出数组 [0] = 命中 geom id。
-                # 此前把返回值当 gid、距离用几何中心垂足自算 —— 全错
-                # (GPT 评审 P0-2 与 10-09 调试独立发现同一 bug)。
+                # mj_ray 语义 (2026-10-11 实测定论, C API 本身约定): 返回值
+                # = 命中距离 (无命中 -1), geomid 输出数组 [0] = 命中 geom id。
+                # 此前是对返回值语义的误用 (把距离当 gid、距离用几何中心
+                # 垂足自算) —— GPT 评审 P0-2 与 10-09 调试独立发现。
                 dist_i = float(mujoco.mj_ray(m, d, pnt, v, None, 1,
                                              exclude, geomid))
                 gid_i = int(geomid[0])
