@@ -86,9 +86,12 @@ def cell():
 
 def test_matrix_scene_build(cell):
     m, L = cell.model, cell.layout
-    # 128 架 × (3 层 × 2 梁 + 2 立柱) + 台 20×6 + 车 (叉 9×2 + AGV 4×2)
-    # + 48 托盘 × 9 + 地面 + 标志线
-    assert m.ngeom == (128 * 8 + 20 * 6 + 2 * 9 + 2 * 4 + 48 * 9 + 1
+    # 128 架 × (3 层 × 2 梁 + 2 立柱) + 台 (交接+交付) × 6
+    # + 车 (叉 9/台 + AGV 4/台) + 48 托盘 × 9 + 地面 + 标志线
+    n_stands = (len(cell.layout.p["handoff_ids"])
+                + cell.layout.p["group_rows"] * cell.layout.p["group_cols"])
+    assert m.ngeom == (128 * 8 + n_stands * 6 + len(cell.forklifts) * 9
+                       + len(cell.agvs) * 4 + 48 * 9 + 1
                        + len(cell.mark_names))
     # MJCF 编译零错已隐含; 每架每层双梁落位 (梁局部 x=-0.027, 架体世界位姿):
     for slot in ("R11-S0-L2", "R44-S7-L0"):
@@ -328,24 +331,27 @@ def test_chain_final_state(chain_result):
     assert max(a["max_pen"] for a in (a_fk, a1, a2, a3)) < PEN_LIMIT
 
 
-# ---------------------------------------------------------------- 4 车共存
+# ---------------------------------------------------------------- 8 车共存
 def test_fleet_coexistence(chain_result):
-    """同一 MJCF 内 4 车各自指令独立响应, 无名冲突 (编译已保证), 无串扰。"""
+    """同一 MJCF 内 8 车各自指令独立响应, 无名冲突 (编译已保证), 无串扰。
+
+    W2 规格升级: 车队 4+4=8 (F01-F04 / A01-A04, 等级 L1-L3 异构)。
+    """
     cell = chain_result["cell"]
-    assert set(cell.forklifts) == {"F01", "F02"}
-    assert set(cell.agvs) == {"A01", "A02"}
-    assert len(cell.veh) == 4 and cell.model.nu == 16
-    axes = {"F01": ("x", "y", "yaw", "lift"),
-            "F02": ("x", "y", "yaw", "lift"),
-            "A01": ("x", "y", "yaw", "pin"),
-            "A02": ("x", "y", "yaw", "pin")}
+    assert set(cell.forklifts) == {"F01", "F02", "F03", "F04"}
+    assert set(cell.agvs) == {"A01", "A02", "A03", "A04"}
+    assert len(cell.veh) == 8 and cell.model.nu == 32
+    axes = {**{f"F0{i}": ("x", "y", "yaw", "lift") for i in range(1, 5)},
+            **{f"A0{i}": ("x", "y", "yaw", "pin") for i in range(1, 5)}}
     ctrl = FleetController(cell)
     # 交接链收尾后先静置 2s: 排干各车位置伺服的收尾残速 (否则残速滑行
     # 会被误判为脉冲串扰)
     cell.step(2000)
     # 每车一根指令通道, 逐一脉冲; 其余全部关节零串扰
     pulses = [("F01", "x", +0.15), ("F02", "y", -0.15),
-              ("A01", "yaw", +0.5), ("A02", "pin", +0.020)]
+              ("F03", "x", +0.10), ("F04", "y", +0.10),
+              ("A01", "yaw", +0.5), ("A02", "pin", +0.020),
+              ("A03", "yaw", -0.5), ("A04", "pin", +0.015)]
     for vid, ax, delta in pulses:
         before = {v: [cell.veh[v].q(a) for a in axes[v]]
                   for v in cell.veh}

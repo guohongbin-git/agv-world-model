@@ -320,7 +320,13 @@ class MissionRunner:
             self._slift(vid, z + 0.030, cp["lift"]),
             self._move_seg(vid, "y", fy + sgn * 0.120, K["fk_insert"]),
             *nudge,
-            self._slift(vid, z + 0.0115, K["place"]),
+            # detfix: 落架释放高度 z+0.010 (原 +0.0115): 托盘吊挂原点 =
+            # 叉顶−0.013, +0.0115 时原点 = z−0.0015 → 托盘被叉顶与
+            # 架梁双向楔住 1.5mm, 退出时摩擦随机胜出把整托拖走
+            # (实测 L01 场景 pallet_H05 上架未释放, 随车拖回 park)。
+            # +0.010 → 叉体落回窗心 (板顶 +5.4mm / 天花 −2.5mm),
+            # 托盘纯由架梁承载, 退叉零干涉 (W1 插叉窗心高度同源)。
+            self._slift(vid, z + 0.010, K["place"]),
             self._move_seg(vid, "y", fy, K["fk_approach"]),
             self._slift(vid, K["transport_z"], cp["lift"]),
         ]
@@ -416,11 +422,24 @@ class MissionRunner:
             self.traffic.prune_exclusions(vid)
             lanes, nodes = self.traffic.occupancy(exclude=vid)
             blk = self.traffic.last_blocked.get(vid, {})
+            # detfix: 载运 AGV 的路由必须绕开「有托 stand/dock」节点
+            # —— 列通道图在 stand 节点链式穿行, 空车钻台下是设计
+            # 行为 (凸台↔底盘 3mm), 但车顶载着的托盘 (凸台下探
+            # 0.092) 会与台上托盘 (顶板 0.1115) 在台位区互撞 (实测
+            # seed7 fixture: A02 载 R11-S0-L2 绕行西线穿 H01, 凸台
+            # ×H01 预载托盘叠压 → t=607.6 QACC NaN)。终点自身除外
+            # (haul/fetch 的目的台就是取/放托位)。
+            hard = set(blk.get("nodes", ()))
+            if ph[2] and vid in self.cell.agv_ids:
+                held = {v for v in self.ledger.loc.values()
+                        if v.startswith(("stand:", "dock:"))}
+                held.discard(goal)
+                hard |= held
             plan = self.graph.plan(
                 self.node_of[vid], goal, kind, self.quad_of[vid],
                 frozenset(lanes), frozenset(nodes),
                 hard_lanes=frozenset(blk.get("lanes", ())),
-                hard_nodes=frozenset(blk.get("nodes", ())))
+                hard_nodes=frozenset(hard))
             if plan is None:
                 return False
             path, edges = plan
@@ -474,7 +493,12 @@ class MissionRunner:
                     vid, [], [], extra_lanes=(f"row:{j}",),
                     extra_nodes=(fid,)):
                 return False
-            job.extras = (f"row:{j}", fid)
+            # detfix: 不入 extras —— op 结束即释放 row:j 会重开「无锁
+            # 驻巷」窗口 (实测: F04 取 R11-S6 完毕待退, A01 沿 row:2
+            # 西行穿其面位, 两车底盘对磨 10-12N, 台上托盘被拍飞)。
+            # row:j 由 sf 到位 keep 保留, 持续到退场路由首次
+            # notify_progress 释放; claim 仅作入口串行化 (自持幂等)。
+            job.extras = ()
             self.runner.submit(vid, self._op_pick_segs(
                 vid, t["slot"], t.get("level", 0)))
         elif ph[0] == "op_put":
@@ -485,7 +509,7 @@ class MissionRunner:
                     vid, [], [], extra_lanes=(f"row:{j}",),
                     extra_nodes=(fid,)):
                 return False
-            job.extras = (f"row:{j}", fid)
+            job.extras = ()          # 同 op_pick: row:j 保留至退场 (detfix)
             self.runner.submit(vid, self._op_put_segs(
                 vid, t["slot"], t.get("level", 0),
                 self.ledger.at(f"stand:{t['stand']}")))
