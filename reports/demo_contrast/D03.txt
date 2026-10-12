@@ -1,0 +1,32 @@
+========================================================================
+故障对照演示 · D03 [B SQLite 事务与持久化故障] · seed=0
+场景: 物理完成、BEGIN 前进程退出
+========================================================================
+
+--- B0 普通系统 (无门控/无原子事务/无对账) ---
+  t=  0.00s  账本=SLOT:A-L3-C1      真值=SLOT:A-L3-C1      一致  [seeded]
+  t=  1.06s  账本=SLOT:A-L3-C1      真值=ROBOT:F01         **分歧**  [pick_settled]
+  t=  1.06s  账本=SLOT:A-L3-C1      真值=ROBOT:F01         **分歧**  [attempt:PICK:crashed]
+  t=  3.22s  账本=SLOT:A-L3-C1      真值=ROBOT:F01         **分歧**  [restart_hung]
+  t=  3.22s  账本=SLOT:A-L3-C1      真值=ROBOT:F01         **分歧**  [final]
+  · 故障事件 D03: 未恢复
+  终局: 任务完成=否 | 不安全提交 0/0 | 原子性违规 0/0 | 恢复 0.0 | 账实分歧 2.1565s
+  裁决: 存在错误完成/未闭合
+
+--- B3 证据系统 (PREPARED→证据→原子提交→对账) ---
+  t=  0.00s  账本=SLOT:A-L3-C1      真值=SLOT:A-L3-C1      一致  [seeded]
+  t=  0.99s  账本=SLOT:A-L3-C1      真值=ROBOT:F01         **分歧**  [pick_settled]
+  t=  0.99s  账本=SLOT:A-L3-C1      真值=ROBOT:F01         **分歧**  [attempt:PICK:crashed]
+  t=  2.93s  账本=SLOT:A-L3-C1      真值=ROBOT:F01         **分歧**  [crash]
+  t=  3.43s  账本=ROBOT:F01         真值=ROBOT:F01         一致  [recovered]
+  t=  4.46s  账本=ROBOT:F01         真值=SLOT:H01          **分歧**  [place_settled]
+  t=  4.96s  账本=SLOT:H01          真值=SLOT:H01          一致  [attempt:PLACE:committed]
+  t=  4.96s  账本=SLOT:H01          真值=SLOT:H01          一致  [final]
+  · 故障事件 D03: 已恢复 (恢复 0.50s 仿真秒)
+  终局: 任务完成=是 | 不安全提交 0/1 | 原子性违规 0/0 | 恢复 1.0 | 账实分歧 2.4385s
+  裁决: 安全闭合
+
+=== 对照结论 ===
+  B0: 完成=False 不安全提交=0 账实一致=False
+  B3: 完成=True 不安全提交=0 账实一致=True
+  差异: B0 停在**账实分歧且未闭合** (无恢复机制), B3 重观测对账后闭合 —— 可恢复性的可验证价值。

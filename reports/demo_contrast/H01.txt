@@ -1,0 +1,31 @@
+========================================================================
+故障对照演示 · H01 [C 部分交接与物理异常] · seed=0
+场景: 抬升但叉臂承托比不足阈值
+========================================================================
+
+--- B0 普通系统 (无门控/无原子事务/无对账) ---
+  t=  0.00s  账本=SLOT:A-L3-C1      真值=SLOT:A-L3-C1      一致  [seeded]
+  t=  1.05s  账本=SLOT:A-L3-C1      真值=SLOT:A-L3-C1      一致  [pick_partial]
+  t=  1.05s  账本=ROBOT:F01         真值=SLOT:A-L3-C1      **分歧**  [attempt:PICK:committed]
+  t=  2.72s  账本=ROBOT:F01         真值=SLOT:H01          **分歧**  [place_settled]
+  t=  2.72s  账本=SLOT:H01          真值=SLOT:H01          一致  [attempt:PLACE:committed]
+  t=  2.72s  账本=SLOT:H01          真值=SLOT:H01          一致  [final]
+  终局: 任务完成=是 | 不安全提交 1/2 | 原子性违规 0/0 | 恢复 None | 账实分歧 1.668s
+  裁决: 存在错误完成/未闭合
+
+--- B3 证据系统 (PREPARED→证据→原子提交→对账) ---
+  t=  0.00s  账本=SLOT:A-L3-C1      真值=SLOT:A-L3-C1      一致  [seeded]
+  t=  1.05s  账本=SLOT:A-L3-C1      真值=SLOT:A-L3-C1      一致  [pick_partial]
+  t=  1.55s  账本=SLOT:A-L3-C1      真值=SLOT:A-L3-C1      一致  [attempt:PICK:rejected]
+  t=  2.66s  账本=SLOT:A-L3-C1      真值=ROBOT:F01         **分歧**  [pick_settled]
+  t=  3.16s  账本=ROBOT:F01         真值=ROBOT:F01         一致  [attempt:PICK:committed]
+  t=  4.18s  账本=ROBOT:F01         真值=SLOT:H01          **分歧**  [place_settled]
+  t=  4.68s  账本=SLOT:H01          真值=SLOT:H01          一致  [attempt:PLACE:committed]
+  t=  4.68s  账本=SLOT:H01          真值=SLOT:H01          一致  [final]
+  终局: 任务完成=是 | 不安全提交 0/2 | 原子性违规 0/0 | 恢复 None | 账实分歧 0.0s
+  裁决: 安全闭合
+
+=== 对照结论 ===
+  B0: 完成=True 不安全提交=1 账实一致=True
+  B3: 完成=True 不安全提交=0 账实一致=True
+  差异: 同一故障下 B0 提交出**未经物理证实的状态/错误完成**, B3 拒绝→隔离→对账后闭合 —— 证据系统的可验证价值。

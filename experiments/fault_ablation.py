@@ -1603,6 +1603,67 @@ MODELING_NOTES = [
 ]
 
 
+def demo_contrast(fault_id: str, seed: int) -> int:
+    """故障对照演示: 同一故障下 B0 (普通系统) vs B3 (证据系统) 并排叙事。
+
+    用途: 汇报/视频的实证脚本 —— 证明"产品价值差异"不是话术:
+    普通系统在故障下报出**错误完成态**, 证据系统拒绝、隔离、对账后闭合。
+    """
+    if fault_id not in SCRIPTS:
+        print(f"未知场景 {fault_id}; 可用: {', '.join(SCRIPTS)}")
+        return 2
+    cat, desc = SCENARIO_META[fault_id]
+    print("=" * 72)
+    print(f"故障对照演示 · {fault_id} [{cat}] · seed={seed}")
+    print(f"场景: {desc}")
+    print("=" * 72)
+    verdicts = {}
+    for g, title in (("B0", "B0 普通系统 (无门控/无原子事务/无对账)"),
+                     ("B3", "B3 证据系统 (PREPARED→证据→原子提交→对账)")):
+        r = run_one(g, fault_id, seed)
+        m = r["metrics"]
+        print(f"\n--- {title} ---")
+        for cp in r["timeline_checkpoints"]:
+            same = "一致" if cp["ledger"] == cp["truth"] else "**分歧**"
+            extra = f"  [{cp['note']}]" if cp.get("note") else ""
+            print(f"  t={cp['t']:>6.2f}s  账本={cp['ledger'] or '—':<18}"
+                  f"真值={cp['truth'] or '—':<18}{same}{extra}")
+        for inc in r["incidents"]:
+            print(f"  · 故障事件 {inc.get('fault_id', '')}: "
+                  f"{'已恢复' if inc.get('recovered') else '未恢复'}"
+                  + (f" (恢复 {inc['recovery_time_s']:.2f}s 仿真秒)"
+                     if inc.get("recovered") else ""))
+        unsafe = m["unsafe"] or 0
+        print(f"  终局: 任务完成={'是' if m['task_completion'] else '否'} | "
+              f"不安全提交 {unsafe}/{m['commits']} | 原子性违规 "
+              f"{m['atomicity_violations']}/{m['atomic_fault_attempts']} | "
+              f"恢复 {m['recovery_success_rate']} | 账实分歧 "
+              f"{m['divergence_duration_s']}s")
+        # 严格判定: 完成必须建立在"账实一致"上
+        final = r["timeline_checkpoints"][-1] if r["timeline_checkpoints"] else None
+        consistent = bool(final and final["ledger"] == final["truth"])
+        verdicts[g] = {"completed": bool(m["task_completion"]),
+                       "unsafe": unsafe, "consistent": consistent}
+        print(f"  裁决: {'安全闭合' if (consistent and not unsafe) else '存在错误完成/未闭合'}")
+    print("\n=== 对照结论 ===")
+    b0, b3 = verdicts["B0"], verdicts["B3"]
+    print(f"  B0: 完成={b0['completed']} 不安全提交={b0['unsafe']} "
+          f"账实一致={b0['consistent']}")
+    print(f"  B3: 完成={b3['completed']} 不安全提交={b3['unsafe']} "
+          f"账实一致={b3['consistent']}")
+    wrong_done = b0["completed"] and not b0["consistent"]
+    hung = (not b0["completed"]) and not b0["consistent"]
+    if wrong_done or b0["unsafe"] > 0:
+        print("  差异: 同一故障下 B0 提交出**未经物理证实的状态/错误完成**, "
+              "B3 拒绝→隔离→对账后闭合 —— 证据系统的可验证价值。")
+    elif hung and b3["completed"] and b3["consistent"]:
+        print("  差异: B0 停在**账实分歧且未闭合** (无恢复机制), B3 重观测"
+              "对账后闭合 —— 可恢复性的可验证价值。")
+    else:
+        print("  该场景下 B0/B3 表现接近 (换 S01/D02/D03/H01 类场景对比度更高)。")
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--scenarios", default=",".join(SCRIPTS.keys()))
@@ -1611,7 +1672,12 @@ def main(argv=None) -> int:
                     help="基础种子 (seed = base..base+n-1)")
     ap.add_argument("--n-seeds", type=int, default=3)
     ap.add_argument("--out", default="")
+    ap.add_argument("--demo", default="", help="故障对照演示: 场景 id "
+                    "(如 D03) → B0 vs B3 并排时间线 (视频/汇报脚本)")
     args = ap.parse_args(argv)
+
+    if args.demo:
+        return demo_contrast(args.demo, args.seed)
 
     scenarios = [s.strip() for s in args.scenarios.split(",") if s.strip()]
     groups = [g.strip() for g in args.groups.split(",") if g.strip()]

@@ -1,0 +1,28 @@
+========================================================================
+故障对照演示 · S01 [A 感知与证据故障] · seed=0
+场景: 取托核对时刻: 接触/高度信号虚报已抬起
+========================================================================
+
+--- B0 普通系统 (无门控/无原子事务/无对账) ---
+  t=  0.00s  账本=SLOT:A-L3-C1      真值=SLOT:A-L3-C1      一致  [seeded]
+  t=  0.60s  账本=ROBOT:F01         真值=SLOT:A-L3-C1      **分歧**  [attempt:PICK:committed]
+  t=  1.10s  账本=ROBOT:F01         真值=SLOT:A-L3-C1      **分歧**  [attempt:PLACE:rejected]
+  t=  1.10s  账本=ROBOT:F01         真值=SLOT:A-L3-C1      **分歧**  [final]
+  终局: 任务完成=否 | 不安全提交 1/1 | 原子性违规 0/0 | 恢复 None | 账实分歧 0.5s
+  裁决: 存在错误完成/未闭合
+
+--- B3 证据系统 (PREPARED→证据→原子提交→对账) ---
+  t=  0.00s  账本=SLOT:A-L3-C1      真值=SLOT:A-L3-C1      一致  [seeded]
+  t=  1.10s  账本=SLOT:A-L3-C1      真值=SLOT:A-L3-C1      一致  [attempt:PICK:rejected]
+  t=  2.11s  账本=SLOT:A-L3-C1      真值=ROBOT:F01         **分歧**  [pick_settled]
+  t=  2.61s  账本=ROBOT:F01         真值=ROBOT:F01         一致  [attempt:PICK:committed]
+  t=  3.66s  账本=ROBOT:F01         真值=SLOT:H01          **分歧**  [place_settled]
+  t=  4.16s  账本=SLOT:H01          真值=SLOT:H01          一致  [attempt:PLACE:committed]
+  t=  4.16s  账本=SLOT:H01          真值=SLOT:H01          一致  [final]
+  终局: 任务完成=是 | 不安全提交 0/2 | 原子性违规 0/0 | 恢复 None | 账实分歧 0.0s
+  裁决: 安全闭合
+
+=== 对照结论 ===
+  B0: 完成=False 不安全提交=1 账实一致=False
+  B3: 完成=True 不安全提交=0 账实一致=True
+  差异: 同一故障下 B0 提交出**未经物理证实的状态/错误完成**, B3 拒绝→隔离→对账后闭合 —— 证据系统的可验证价值。
