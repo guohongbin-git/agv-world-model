@@ -27,6 +27,8 @@ import itertools
 import json
 import math
 import os
+
+import numpy as np
 import re
 import threading
 import time
@@ -838,6 +840,35 @@ class MatrixService:
                 return p
         return None
 
+    # ------------------------------------------------- 数值发散看门狗
+    def _guard_divergence(self) -> bool:
+        """24h continuous 自恢复: qacc 非有限 → 隔离现场并重建世界。
+
+        多体接触在极端并发下仍可能数值发散 (实测 t=1023 一例, DOF 属某
+        托盘自由体)。发散后所有运动控制失效, 拖下去只会累积废账 ——
+        故: 留痕 (事件+叙述) → 退役本线程 → 重建 (身份/账本/物理全新,
+        物理修复到位后此类事件应趋于零)。"""
+        d = self.cell.data
+        try:
+            bad = not bool(np.isfinite(d.qacc).all())
+        except Exception:                          # noqa: BLE001
+            return False
+        if not bad:
+            return False
+        t = float(d.time)
+        self._feed("SYS", "divergence",
+                   f"QACC 非有限 @ t={t:.2f}s — 隔离并重建 (自恢复)")
+        self.narrate(f"检测到数值发散 (t={t:.1f}s): 按 24h continuous "
+                     "自恢复策略隔离现场并重建世界 (账本重置, 事件留痕)。")
+        threading.Thread(target=self._recover_after_divergence,
+                         daemon=True).start()
+        return True
+
+    def _recover_after_divergence(self) -> None:
+        time.sleep(0.5)
+        self.mode = "failed"                       # start() 见 failed → 重建
+        self.start()
+
     # ------------------------------------------------------------ 主循环
     def _mission_loop(self, gen: int = 0) -> None:
         mr, d = self.mr, self.cell.data
@@ -864,6 +895,8 @@ class MatrixService:
                 self._collect_specs()
                 self._acc_util()
                 self._sample_util()
+                if self._guard_divergence():
+                    return                         # 线程退役, 守护线程重建
                 moving = mr.runner.busy()
                 waiting = [v for v, j in dict(mr.jobs).items()
                            if j is not None and j.mode == "wait"]
