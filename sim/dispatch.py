@@ -62,6 +62,12 @@ HANDOFF_DWELL_TICKS = 2            # 交接链最小交接间隔 (落托→可�
 #: 求解预算 (§19.4 初值 1s; 本层单批规模小, 默认 0.5s 保 24h 连续模式)
 SOLVE_TIMEOUT_S = 0.5
 _MAKESPAN_WEIGHT = 1000            # 字典序: makespan 优先, Σstart 次级 tie-break
+#: 负载均衡权重 (利用率专项): 目标追加 W·max_v(load_v), load_v = 批前累计
+#: 偏置 + 本批该车腿时长和 (tick)。取 2 的依据: makespan 权重 1000 ⇒ 1 tick
+#: makespan ≈ 500 tick 峰值负载, 而单批内换车的峰值摆幅典型 ≪500 tick ——
+#: 均衡只在 makespan/Σstart 平局带内起作用, 不撼动主目标; 同时足够压过
+#: 个别腿 start 的微小差异, 让低累计负载的合格车 (L1 快车) 稳定分到轻货。
+_BALANCE_WEIGHT = 2
 
 
 @enum.unique
@@ -239,7 +245,11 @@ class Dispatcher:
         event_sink: Callable[[dict], None] | None = None,
         navigator=None,
         lockboard=None,
+        load_offset_provider: Callable[[], dict[str, int]] | None = None,
     ):
+        #: 批前累计负载 {vid: busy tick} —— CP-SAT 均衡项的跨批记忆
+        #: (集成层注入; None = 纯批内均衡)。
+        self.load_offset_provider = load_offset_provider
         self.fleet = tuple(fleet)
         self.catalog = load_catalog(catalog_path)
         self.solve_timeout_s = float(solve_timeout_s)
@@ -321,7 +331,9 @@ class Dispatcher:
                 plan, status = _solve_cpsat(
                     assignable, elig, self.node_xy, self.fleet,
                     timeout_s=self.solve_timeout_s, seed=self.random_seed,
-                    workers=self.num_workers)
+                    workers=self.num_workers,
+                    load_offset=(self.load_offset_provider()
+                                 if self.load_offset_provider else None))
                 solve_ms = (time.perf_counter() - t0) * 1000.0
             else:
                 plan, status = None, "SKIP"
@@ -489,14 +501,17 @@ def _dur_ticks(leg: Leg, v: Vehicle) -> int:
 
 
 # ---------------------------------------------------------------- CP-SAT
-def _solve_cpsat(tasks, elig, node_xy, fleet, *, timeout_s, seed, workers):
+def _solve_cpsat(tasks, elig, node_xy, fleet, *, timeout_s, seed, workers,
+                 load_offset=None):
     """CP-SAT: 逐腿指派 + 开始时间 + 车辆互斥 + 交接链先后 + 交接台时间窗。
 
     决策变量: 每腿 × 合格车 指派 bool + 腿开始 tick;
     约束: 每腿恰一车 | 车辆同腿区间不重叠 (NoOverlap) | 同任务交接链
     (干线开始 ≥ 货位端结束 + dwell) | 释放期 (start ≥ release) |
     交接台占用窗 [落托, 接管] 同台不重叠 (离散资源时间窗);
-    目标: 字典序 makespan ≫ Σ start (makespan 优先, Σstart 消平局)。
+    目标: makespan ≫ Σstart + w·max_v(load_v) —— makespan 主导,
+    Σstart 消平局, 小权重均衡项把腿摊给低累计负载的合格车
+    (load_offset = 批前累计 busy tick, 集成层注入; 纯批内为 0)。
 
     返回 plan = {task_id: {"veh": leg→vid, "sched": leg→(start,dur)}};
     UNKNOWN(超时) → (None, "UNKNOWN") 由上层回退贪心; INFEASIBLE /
@@ -558,7 +573,26 @@ def _solve_cpsat(tasks, elig, node_xy, fleet, *, timeout_s, seed, workers):
                 end[f.leg_id], occ, start[k.leg_id], f"occ_{t.task_id}_{h}"))
         m.AddNoOverlap(ivs)
 
-    m.Minimize(_MAKESPAN_WEIGHT * makespan + sum(start[l.leg_id] for l in legs))
+    # 负载均衡 (利用率专项): load_v = 批前累计偏置 + 本批指派给 v 的腿
+    # 时长和; 峰值 max_v load_v 以小权重进目标 —— 同等 makespan/Σstart 下
+    # 把腿摊给低累计负载的合格车 (如 L1 快车多接轻货), 而非堆在少数车。
+    off = {v.vid: int(load_offset.get(v.vid, 0))
+           for v in fleet} if load_offset else {v.vid: 0 for v in fleet}
+    work_ub = horizon + max(off.values(), default=0)
+    work: dict[str, object] = {}
+    for v in fleet:
+        terms = [_dur_ticks(l, v) * b[l.leg_id, v.vid] for l in legs
+                 if (l.leg_id, v.vid) in b]
+        wv = m.NewIntVar(off[v.vid], work_ub, f"work_{v.vid}")
+        m.Add(wv == off[v.vid] + sum(terms))
+        work[v.vid] = wv
+    max_load = m.NewIntVar(0, work_ub, "max_load")
+    for v in fleet:
+        m.Add(max_load >= work[v.vid])
+
+    m.Minimize(_MAKESPAN_WEIGHT * makespan
+               + sum(start[l.leg_id] for l in legs)
+               + _BALANCE_WEIGHT * max_load)
 
     # 暖启动: 贪心解作初始 hint (部分/可行即可, CP-SAT 自行修复)
     for tid, p in g.items():
@@ -569,6 +603,11 @@ def _solve_cpsat(tasks, elig, node_xy, fleet, *, timeout_s, seed, workers):
                 m.AddHint(b[lid, v.vid],
                           1 if p["veh"][lid] == v.vid else 0)
     m.AddHint(makespan, g_mk)
+    g_load = dict(off)
+    for tid, p in g.items():
+        for lid, (_s0, d0) in p["sched"].items():
+            g_load[p["veh"][lid]] = g_load.get(p["veh"][lid], 0) + d0
+    m.AddHint(max_load, max(g_load.values(), default=0))
 
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = max(timeout_s, 1e-6)

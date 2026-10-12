@@ -42,7 +42,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from sim.demand import DemandEngine, DemandOrder, OrderKind
-from sim.dispatch import Dispatcher, InfeasibleAssignment, Vehicle
+from sim.dispatch import (TICK_S, Dispatcher, InfeasibleAssignment, Vehicle)
 from sim.mission import Job, MissionRunner
 from sim.warehouse_cell import K, LAYOUT, WarehouseCell, pallet_name_for
 
@@ -55,6 +55,12 @@ MAX_CHAINS = 24                  # 在飞订单链上限 (倍率高时队列不�
 BACKLOG_CAP = 24                 # 未提交订单背压上限 (超限暂缓生成)
 UTIL_SAMPLE_S = 60.0             # 利用率滑动窗采样周期 (仿真秒)
 UTIL_WIN = 5                     # 滑动窗样本数 (~5min 仿真)
+# ---- 闲置车预置 (利用率专项: 空驶调度是真实仓库利用率手段) ----
+REPOS_UTIL_TH = 0.40             # 滑动窗利用率低于此且空闲 → 触发预置
+REPOS_MIN_GAP_S = 60.0           # 同车两次预置最小间隔 (仿真秒, 跟随热点漂移)
+REPOS_TICK_S = 12.0              # 预置重试节拍 (仿真秒; 与 60s 采样解耦)
+REPOS_MAX_ACTIVE = 4             # 同时在途预置车上限 (限场内扰动)
+REPOS_NEAR_M = 0.55              # 距目标小于此值不巡游 (过近挪动无意义)
 
 
 class _TapDeque(deque):
@@ -141,7 +147,11 @@ class MatrixService:
                                   preload_stands=())
         self.cell.warmup(0.5)
         self.mr = MissionRunner(self.cell)
-        self.dispatcher = Dispatcher(fleet=_fleet8(), event_sink=self._on_dec)
+        self.dispatcher = Dispatcher(
+            fleet=_fleet8(), event_sink=self._on_dec,
+            load_offset_provider=lambda: {
+                vid: int(round(self._real_busy_s(vid) / TICK_S))
+                for vid in self.busy_s})
         # 托盘 → SKU (决策/展示用; 物理由 mission 台账跟踪)
         self.sku_of: dict[str, str] = {}
         for slot_full, sku in inv.items():
@@ -163,6 +173,14 @@ class MatrixService:
         self._unsubmitted_age0: float | None = None  # 队首到达仿真时刻
         self._svc_lock = threading.Lock()  # 调度/需求跨线程互斥
         self._dock_loaded: dict[str, float] = {}    # dock → sim_t (FIFO 取托)
+
+        self._repos: dict[str, dict] = {}       # vid → {job, goal, t0, cancel?}
+        self._repos_last: dict[str, float] = {}  # vid → 上次预置发起仿真时刻
+        self._repos_tick_t = 0.0                 # 上次预置重试节拍仿真时刻
+        self._repos_parked: dict[str, str] = {}  # vid → 驻位节点 (看门狗让位簿记)
+        self._repos_started = 0
+        self._repos_busy_s: dict[str, float] = {v: 0.0 for v in self.cell.veh}
+        self._repos_done = 0
 
         # traffic 事件分流 (assign/reroute/claim_wait/op_done 全走这里)
         self.mr.traffic.events = _TapDeque(4096, self._on_traffic)
@@ -334,7 +352,260 @@ class MatrixService:
         return [list(self._lane_anchor(r)) for r, v in held.items()
                 if v == "CONE"]
 
-    # ------------------------------------------------------------ 调度泵
+    # ------------------------------------------------------------ 闲置车预置
+    def _maybe_reposition(self, t: float) -> None:
+        """滑动窗利用率低 (<40%) 且无在飞任务的车 → 预置到任务密集列。
+
+        空驶调度是真实仓库利用率手段: 预置 = 普通 nav 移动 (不占订单链,
+        无账本变更), 沿锁矩阵开往热点 stand 列的 staging 节点; 真任务
+        gate 时立刻让位 (见 _repos_yield), 等待者被占时看门狗强制让位。
+        """
+        if not self._demand_on or len(self._repos) >= REPOS_MAX_ACTIVE:
+            return
+        per = self._util_win[-1]["per"] if self._util_win else {}
+        if not per:
+            return
+        cands = [v for v, u in per.items()
+                 if u < REPOS_UTIL_TH and self.mr.jobs.get(v) is None
+                 and v not in self._repos
+                 and t - self._repos_last.get(v, -1e9) >= REPOS_MIN_GAP_S]
+        for vid in sorted(cands, key=lambda v: (per[v], v)):
+            if len(self._repos) >= REPOS_MAX_ACTIVE:
+                break
+            for goal in self._repos_goals(vid):
+                if self._start_reposition(vid, goal, per[vid], t):
+                    break
+
+    def _repos_goals(self, vid: str) -> list[str]:
+        """预置目标序列 (按优先序逐一尝试 claim, 全败则本拍放弃)。
+
+        - 驻位车 (安全 transit 节点): [自身泊位, 其他热点列] —— 巡回
+          pk↔热点 或热点列互移, 避开被真任务独占的热点列通道;
+        - 泊位/他处车: [热点列 x:i:2 ...] (最近的高占用 stand 列优先)。
+
+        x:i:2 是纯 transit 节点 (行列交点, 非 stand/dock/货位/standstrip
+        类作业目标): 驻位其上不卡真任务目标节点, 穿越争用由锁矩阵 +
+        A* 硬排除绕行消化 (驻位挡路时看门狗令其回泊)。
+        """
+        g = self.mr.graph
+        cur = self.mr.node_of.get(vid)
+        staged = bool(cur and cur.startswith("x:")
+                      and not cur.endswith(":0"))
+        w: dict[str, int] = {}
+        for c in self.chains[-20:]:
+            st = c.specs[0].task.get("stand") if c.specs else None
+            if st:
+                w[st] = w.get(st, 0) + (2 if c.state in ("pending", "active")
+                                        else 1)
+        goals: list[str] = [g.park_node(vid)] if staged else []
+        if not w:
+            return goals
+        vx, vy = self.cell.veh[vid].xy()
+
+        def dist(stand: str) -> float:
+            p = g.pos[f"stand:{stand}"]
+            return abs(p.x - vx) + abs(p.y - vy)
+
+        ranked = sorted(w.items(), key=lambda kv: (-kv[1], dist(kv[0]), kv[0]))
+        taken = {st["goal"] for st in self._repos.values()}
+        for _rank, (stand, _n) in enumerate(ranked[:3]):
+            node = g.xnode(g.col_index_of_stand(stand), 2)
+            p = g.pos[node]
+            if node == cur:
+                continue
+            if abs(p.x - vx) + abs(p.y - vy) < REPOS_NEAR_M:
+                continue                        # 过近挪动无意义
+            if node in taken or self.mr.traffic.node_holder.get(node) \
+                    not in (None, vid):
+                continue                        # 目标被他车/他预置占用
+            goals.append(node)
+        return goals
+
+    def _start_reposition(self, vid: str, goal: str, util: float | None,
+                          t: float, *, why: str = "stage") -> bool:
+        """预置 = nav 移动: A* 整路由原子 claim → 逐边 submit (mission 同款)。
+
+        why="stage" (利用率预置) / "yield" (看门狗令驻位车回泊让路)。
+        """
+        mr = self.mr
+        kind = "agv" if vid in self.cell.agv_ids else "forklift"
+        mr.traffic.prune_exclusions(vid)
+        lanes, nodes = mr.traffic.occupancy(exclude=vid)
+        blk = mr.traffic.last_blocked.get(vid, {})
+        plan = mr.graph.plan(mr.node_of[vid], goal, kind, mr.quad_of[vid],
+                             frozenset(lanes), frozenset(nodes),
+                             hard_lanes=frozenset(blk.get("lanes", ())),
+                             hard_nodes=frozenset(blk.get("nodes", ())))
+        if plan is None:
+            return False
+        path, edges = plan
+        if not edges or not mr.traffic.claim_route(vid, edges, path[1:]):
+            return False
+        frm = mr.node_of[vid]
+        job = Job(vid=vid, task={"kind": "reposition", "goal": goal})
+        job.path, job.edges, job.idx = path, edges, 0
+        job.mode = "nav"
+        self._repos[vid] = {"job": job, "goal": goal, "t0": t,
+                            "step_due": False}
+        self._repos_last[vid] = t
+        self._repos_started += 1
+        self._repos_parked.pop(vid, None)
+        mr._submit_edge(vid, job, 0)
+        reason = (f"滑动窗利用率 {util:.0%} < {REPOS_UTIL_TH:.0%} 且无在飞任务 "
+                  f"→ 预置到热点列 staging 节点 (真任务即刻抢占)"
+                  if why == "stage" else
+                  "驻位挡住等待中的真任务 → 回泊让路 (锁矩阵护卫)")
+        self._on_dec({"type": "Reposition", "vid": vid, "ts_s": round(t, 2),
+                      "from": frm, "to": goal, "reason": reason,
+                      "solver_status": "PLANNING", "solve_ms": 0.0,
+                      "makespan_ticks": None})
+        self._feed(vid, "reposition", f"预置 {frm} → {goal}")
+        return True
+
+    def _advance_repos(self, idle: list[str]) -> None:
+        """预置车队列耗尽回调 → 标记待推进并推进 (与 mission nav 同款)。"""
+        for vid in idle:
+            st = self._repos.get(vid)
+            if st is not None:
+                st["step_due"] = True
+            self._repos_progress(vid)
+
+    def _repos_pump(self) -> None:
+        """每拍推进驻留中的预置车 (重定向/续走 claim 失败时重试)。"""
+        for vid in list(self._repos):
+            self._repos_progress(vid)
+
+    def _repos_progress(self, vid: str) -> None:
+        """到节点边界的推进: 滞后释放 → 抢占判定 (安全节点才可驻) → 下一边。"""
+        mr = self.mr
+        st = self._repos.get(vid)
+        if st is None or mr.runner.busy(vid) or not st.get("step_due"):
+            return
+        st["step_due"] = False
+        job = st["job"]
+        job.idx += 1
+        mr.traffic.notify_progress(vid, job.path, job.edges, job.idx)
+        mr.node_of[vid] = job.path[job.idx]
+        if job.idx >= len(job.edges):           # 到达: 预置终点必为安全节点
+            self._teardown_repos(vid, "staged")
+            return
+        if st.pop("cancel", False):
+            if self._safe_park(vid, mr.node_of[vid]):
+                self._teardown_repos(vid, "preempted")
+                return
+            if self._repos_redirect(vid, st):   # 改向最近安全节点再驻
+                return
+            if not mr.traffic.claim_route(      # 续走原路由剩余段
+                    vid, job.edges[job.idx:], job.path[job.idx + 1:]):
+                st["cancel"] = True             # 驻留重试 (泵驱动)
+                st["step_due"] = True
+                mr.traffic.claim_route(vid, [], [mr.node_of[vid]])
+                return
+        mr._submit_edge(vid, job, job.idx)
+
+    def _safe_park(self, vid: str, node: str) -> bool:
+        """可驻位节点: 自身 pk (仅 owner 的回泊目标) 或列通道 x:i:2..5
+        (纯 transit 交点)。stand/dock/sf/sm/stg/x:i:0(standstrip 目标)/
+        他人 pk 都是某真任务的目标节点 —— 驻其上 = 永久卡住该任务。
+        """
+        return node == self.mr.graph.park_node(vid) or (
+            node.startswith("x:") and not node.endswith(":0"))
+
+    def _repos_redirect(self, vid: str, st: dict) -> bool:
+        """改向最近安全驻位节点 (x:i:2..5 / 自身 pk), 供抢占收尾。"""
+        mr = self.mr
+        g = mr.graph
+        kind = "agv" if vid in self.cell.agv_ids else "forklift"
+        vx, vy = self.cell.veh[vid].xy()
+
+        def d(n: str) -> float:
+            p = g.pos[n]
+            return abs(p.x - vx) + abs(p.y - vy)
+
+        cands = sorted([g.xnode(i, j)
+                        for i in range(len(g.col_xs)) for j in (2, 3, 4, 5)]
+                       + [g.park_node(vid)], key=d)
+        mr.traffic.release_all(vid)
+        mr.traffic.prune_exclusions(vid)
+        for goal in cands[:6]:
+            if goal == mr.node_of[vid]:
+                continue
+            lanes, nodes = mr.traffic.occupancy(exclude=vid)
+            blk = mr.traffic.last_blocked.get(vid, {})
+            plan = g.plan(mr.node_of[vid], goal, kind, mr.quad_of[vid],
+                          frozenset(lanes), frozenset(nodes),
+                          hard_lanes=frozenset(blk.get("lanes", ())),
+                          hard_nodes=frozenset(blk.get("nodes", ())))
+            if plan is None:
+                continue
+            path, edges = plan
+            if not edges or not mr.traffic.claim_route(vid, edges, path[1:]):
+                continue
+            job = st["job"]
+            job.path, job.edges, job.idx = path, edges, 0
+            st["goal"] = goal
+            st["step_due"] = False
+            mr._submit_edge(vid, job, 0)
+            self._feed(vid, "reposition_preempt", f"改向安全驻位 → {goal}")
+            return True
+        mr.traffic.claim_route(vid, [], [mr.node_of[vid]])
+        return False
+
+    def _repos_yield(self, vid: str) -> bool:
+        """真任务抢占: 标记让位; 驻留态立即尝试安全收尾/改向, 在途续走。"""
+        st = self._repos.get(vid)
+        if st is None:
+            return True
+        if "cancel" not in st:
+            st["cancel"] = True
+            self._feed(vid, "reposition_preempt", "真任务抢占, 让位")
+        if not self.mr.runner.busy(vid):
+            self._repos_progress(vid)      # 驻留态: 立即安全收尾或改向
+        return vid not in self._repos
+
+    def _teardown_repos(self, vid: str, outcome: str) -> None:
+        """收尾: 释放整条路由, 仅驻位节点保持持有 (物理占用事实)。"""
+        if self._repos.pop(vid, None) is None:
+            return
+        mr = self.mr
+        mr.traffic.release_all(vid)
+        mr.traffic.claim_route(vid, [], [mr.node_of[vid]])
+        self._repos_done += 1
+        self._repos_parked[vid] = mr.node_of[vid]   # 驻位簿记 (看门狗可令让位)
+        zh = {"staged": "已驻位热点列", "preempted": "预置中止 (让位)"}[outcome]
+        self._feed(vid, f"reposition_{outcome}", f"{zh} @ {mr.node_of[vid]}")
+
+    def _repos_watchdog(self) -> None:
+        """锁矩阵护卫: 等待中的真任务被预置路由/驻位车挡住 → 令其让位。"""
+        mr = self.mr
+        for vid, job in list(mr.jobs.items()):
+            if job is None or job.mode != "wait":
+                continue
+            blk = mr.traffic.last_blocked.get(vid)
+            if not blk:
+                continue
+            for r in list(blk.get("lanes", ())) + list(blk.get("nodes", ())):
+                holder = mr.traffic.holder_of(r)
+                if not holder:
+                    continue
+                st = self._repos.get(holder)
+                if st is not None:
+                    if "cancel" not in st:
+                        st["cancel"] = True
+                        self._feed(holder, "reposition_preempt",
+                                   f"让位: {vid} 等待资源 {r}")
+                    continue
+                if (holder in self._repos_parked
+                        and mr.jobs.get(holder) is None
+                        and holder not in self._repos):
+                    # 驻位车挡住等待者 → 令其回自身 pk (repos 机制, 目标安全)
+                    t = float(self.cell.data.time)
+                    if self._start_reposition(holder, mr.graph.park_node(holder),
+                                              None, t, why="yield"):
+                        self._repos_parked.pop(holder, None)
+                        self._feed(holder, "reposition_preempt",
+                                   f"让位: {vid} 等待资源 {r} → 回泊")
+
     def _pump_demand(self) -> None:
         if not self._demand_on:
             # 收尾 drain: 排队订单全部直送调度 (不再攒批), 让系统可清空
@@ -467,8 +738,9 @@ class MatrixService:
         """选定车忙而同类合格车空闲 → 运行时改派 (决策事件可审计)。"""
         if self.mr.jobs.get(spec.vid) is None or len(spec.elig) < 2:
             return
-        busy = {v: self.busy_s.get(v, 0.0) for v in spec.elig
-                if v != spec.vid and self.mr.jobs.get(v) is None}
+        busy = {v: self._real_busy_s(v) for v in spec.elig
+                if v != spec.vid and self.mr.jobs.get(v) is None
+                and v not in self._repos}   # 预置在途车不可即时接管
         if not busy:
             return
         alt = min(busy, key=lambda v: (busy[v], v))
@@ -582,6 +854,13 @@ class MatrixService:
                 idle = mr.runner.run_until_any_idle(d.time + 2400.0)
                 for vid in idle:
                     mr._on_queue_empty(vid)
+                self._advance_repos(idle)
+                self._repos_pump()
+                self._repos_watchdog()
+                t_now = float(d.time)
+                if t_now - self._repos_tick_t >= REPOS_TICK_S:
+                    self._repos_tick_t = t_now
+                    self._maybe_reposition(t_now)
                 self._collect_specs()
                 self._acc_util()
                 self._sample_util()
@@ -627,10 +906,13 @@ class MatrixService:
                     continue
                 if not all(done.get(u) for u in s.deps):
                     continue
+                if s.vid in self._repos and not self._repos_yield(s.vid):
+                    continue    # 预置在途: 已标记让位, 当前边走完再 gate
                 if self._gate(s, c, loc):
                     s.state = "active"
                     s.t_start = float(self.cell.data.time)
                     s.err_base = len(self.mr.op_errors)
+                    self._repos_parked.pop(s.vid, None)   # 驻位车接真任务
                     self.mr.jobs[s.vid] = Job(vid=s.vid, task=s.task)
                     self._feed(s.vid, "dispatch",
                                f"{c.task_id} {s.label} → {s.vid}")
@@ -727,9 +1009,20 @@ class MatrixService:
         self._util_t = float(d.time)
         if dt <= 0:
             return
-        for vid, job in dict(self.mr.jobs).items():
-            if job is not None:
+        for vid in self.cell.veh:
+            if self.mr.jobs.get(vid) is not None or vid in self._repos:
+                # 预置移动计入 busy (被派发的生产性移动); 同时单列预置
+                # 时长 —— 派遣侧 (CP-SAT 均衡偏置/运行时改派) 只看真实
+                # 作业负载, 预置不与真任务抢"低负载"资格。
                 self.busy_s[vid] = self.busy_s.get(vid, 0.0) + dt
+                if vid in self._repos:
+                    self._repos_busy_s[vid] = \
+                        self._repos_busy_s.get(vid, 0.0) + dt
+
+    def _real_busy_s(self, vid: str) -> float:
+        """真实作业 busy (总 busy − 预置空驶): 派遣侧负载口径。"""
+        return max(0.0, self.busy_s.get(vid, 0.0)
+                   - self._repos_busy_s.get(vid, 0.0))
 
     def _sample_util(self) -> None:
         """每 60s 仿真采样利用率 → 5 样本滑动窗; 驱动需求倍率反馈。"""
@@ -745,6 +1038,7 @@ class MatrixService:
                                "fleet": round(sum(per.values())
                                               / max(len(per), 1), 3)})
         self._tune_demand(t)
+        self._maybe_reposition(t)
 
     def _tune_demand(self, t: float) -> None:
         """利用率反馈: <60% 加压 ×1.3 (≤64×); >85% 减压 ×0.85 (≥1×)。"""
@@ -829,6 +1123,14 @@ class MatrixService:
             "stall_s": round(self.stall_s, 1),
             "util_window": util_window,
             "jobs_active": sum(1 for j in jobs.values() if j is not None),
+            # 预置/背压观测 (利用率专项: 判据口径数据, 不改语义)
+            "reposition_moves": self._repos_started,
+            "repositions_active": len(self._repos),
+            "repositions_parked": len(self._repos_parked),
+            "stands_held_out": self._stand_holders()[1],
+            "max_out_stands": MAX_OUT_STANDS,
+            "chains_cap": MAX_CHAINS,
+            "backlog_cap": BACKLOG_CAP,
         }
 
     # ------------------------------------------------------------ 状态快照
@@ -876,14 +1178,19 @@ class MatrixService:
         for vid, view in self.cell.veh.items():
             x, y = view.xy()
             job = jobs.get(vid)
+            repos = self._repos.get(vid)
+            parked = vid in self._repos_parked
             v = {"vid": vid, "x": round(x, 4), "y": round(y, 4),
                  "yaw": round(view.q("yaw"), 4),
                  "level": self.cell.layout.p["vehicle_class"][vid],
                  "type": "forklift" if vid in self.cell.forklift_ids
                          else "agv",
-                 "busy": job is not None,
-                 "task": (job.task["kind"] if job else ""),
-                 "arg": _arg_of(job) if job else ""}
+                 "busy": job is not None or repos is not None,
+                 "task": (job.task["kind"] if job
+                          else ("reposition" if repos
+                                else ("staged" if parked else ""))),
+                 "arg": (_arg_of(job) if job
+                         else (f"→{repos['goal']}" if repos else ""))}
             if vid in self.cell.forklifts:
                 v["lift"] = round(view.q("lift"), 4)
             else:

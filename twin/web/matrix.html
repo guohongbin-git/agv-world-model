@@ -498,6 +498,11 @@ function addDecision(d){
     div.innerHTML = `<div class="hd"><span class="t">${(+d.ts_s||0).toFixed(1)}s</span>
       <b>需求倍率自适应</b><span class="st st-RUNTIME_BALANCE">FEEDBACK</span></div>
       <div>${(d.old_multiplier||1)}× → <b style="color:var(--acc)">${(d.new_multiplier||1)}×</b></div>
+  } else if (d.type === 'Reposition'){
+    div.className = 'card';
+    div.innerHTML = `<div class="hd"><span class="t">${(+d.ts_s||0).toFixed(1)}s</span>
+      <b>${d.vid} 预置</b><span class="st st-FEASIBLE">PLANNING 预置</span></div>
+      <div>${d.from} → <b style="color:var(--acc)">${d.to}</b></div>
       <div class="reason">${d.reason||''}</div>`;
   } else if (d.type === 'TaskUnassigned'){
     div.className = 'card fail';
@@ -530,7 +535,9 @@ const KIND_ZH = {claim_wait:'锁等待', claim_ok:'锁获取', arrival:'到达',
   release_all:'全释放', reroute:'绕行', assign:'指派', dispatch:'任务下发',
   op_phase:'作业相位', op_done:'作业完成', order_committed:'订单提交✓',
   task_failed:'任务失败', chain_failed:'链失败', cone_injected:'锥桶注入',
-  cone_cleared:'锥桶移除', stall:'停滞告警', fatal:'致命异常'};
+  cone_cleared:'锥桶移除', stall:'停滞告警', fatal:'致命异常',
+  reposition:'预置出发', reposition_staged:'预置驻位',
+  reposition_preempt:'预置让位'};
 function addEvent(e){
   const d = document.createElement('div');
   d.className = 'ev k-' + e.kind;
