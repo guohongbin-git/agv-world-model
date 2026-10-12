@@ -1317,6 +1317,13 @@ def chat_handle(text: str, svc: MatrixService) -> dict:
                  f"{inv['free_slots']} (384 总货位)。"
                  "台账以物理校验后的提交为准。")
         tool("inventory")
+    elif re.search(r"技能|skill|能力", low):
+        from sim import robot_skills as _rs
+        cat = _rs.catalog()
+        reply = ("可用预验证技能 (agent 只选技能+传参, 物理序列由技能库"
+                 "展开): " + "; ".join(
+                     f"{s['name']} — {s['doc']}" for s in cat))
+        tool("skills")
     elif re.search(r"状态|指标|metric|进度", low):
         m = svc.metrics()
         reply = (f"mode={svc.mode} sim_t={m['sim_t']}s | "
