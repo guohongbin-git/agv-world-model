@@ -129,6 +129,12 @@ class MatrixService:
 
     # ------------------------------------------------------------ 构建
     def _build(self) -> None:
+        """重建世界 (首次构造 / 停后重启 / 发散自恢复)。
+
+        身份纪律 (对齐 B3/P1-7): 重建即新 run —— run_id 必须重生成,
+        否则'新 run'只是旧身份下的静默重置, 审计与事件归属全乱。
+        """
+        prev = getattr(self, "run_id", None)
         self.demand = DemandEngine(seed=self.seed,
                                    global_multiplier=self.multiplier,
                                    replenish_threshold=self.replenish_threshold)
@@ -205,6 +211,9 @@ class MatrixService:
         self._thread: threading.Thread | None = None
         self.run_id = (f"MX-{time.strftime('%Y%m%d-%H%M%S')}-"
                        f"{uuid.uuid4().hex[:8]}")
+        if prev:
+            self._feed("SYS", "run_rebuilt",
+                       f"世界重建: {prev} → {self.run_id} (账本重置)")
 
     # ------------------------------------------------------------ 事件流
     def _on_dec(self, ev: dict) -> None:
