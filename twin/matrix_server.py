@@ -1415,4 +1415,6 @@ if __name__ == "__main__":
     a = ap.parse_args()
     SVC = MatrixService(seed=a.seed, multiplier=a.multiplier,
                         speed=a.speed)
+    SVC.start()          # 开机即跑 (此前 start 只挂在聊天指令上,
+                         # 服务重启后 mission 线程不创建 → sim 冻结)
     uvicorn.run(app, host="127.0.0.1", port=a.port, log_level="warning")
