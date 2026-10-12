@@ -9,56 +9,98 @@ and inventory facts commit to a transactional ledger **only when sensor evidence
 > 可学习的过程。* Agent 可以改变计划，但不能改变未经物理验证的事实。
 > 全文论证见 [docs/agentic_world_model_literature.md](docs/agentic_world_model_literature.md)。
 
-## 架构
+## 界面一览（:8400 矩阵仓库）
+
+| 全景（4×4 矩阵 · 8 车 · 384 货位） | 决策面板（CP-SAT 分配可观察） |
+|---|---|
+| ![overview](reports/w3b_evidence/w3b_overview.png) | ![decisions](reports/w3b_evidence/w3b_decisions.png) |
+
+| 监控面板（利用率/倍率/吞吐） | 锥桶注入（通道锁绕行） |
+|---|---|
+| ![monitor](reports/w3b_evidence/w3b_monitor.png) | ![cone](reports/w3b_evidence/w3b_cone.png) |
+
+## M2：128 架矩阵仓库（当前主线）
+
+4×4 货架组矩阵 × 每组 8 架 × 3 层 = **384 货位**；**8 辆异构车队**
+（F01-F04 叉车 + A01-A04 潜伏顶升 AGV，承重 L1/L2/L3 三级、能力强速度慢）；
+需求驱动 24h continuous 运行。
 
 ```
-自然语言 ⇄ WarehouseAgent (工具调用 + 规则兜底)
-   │ task.submit / pause / speed / query      ← 唯一指令入口
+自然语言 ⇄ WarehouseAgent (本地 omlx LLM 工具循环 + 规则兜底)
+   │ 订单/查询/锥桶注入/持续运行                 ← 唯一指令入口
    ▼
-判据层 ForkliftAdapter (插叉≤5mm/s、退叉高度门禁、承托率观测)
+调度层 Dispatcher (OR-Tools CP-SAT: 能力约束·时间窗·100ms tick)
+   │ 决策事件流: 候选→选择→solver_status→solve_ms    ← 决策面板可观察
    ▼
-MuJoCo 2kHz 接触物理 (ForkliftCell: 车/叉/托盘/货架/暂存站)
+导航层 NavGraph (330 节点 A* + 巷道/交叉口锁矩阵, Space-Time A* 软化)
    ▼
-World (SQLite 事务: 托盘位置·货位占用·绑定·计数 + Event 账本)
+物理层 MuJoCo (WarehouseCell: 8 车/384 货位/地面标志线/锥桶避障)
    ▼
-展示层 three.js/WebSocket 实时投影 + 库存板 + 事件流 (只读)
+观测层 ObservationChannel (LiDAR 扫描估计, 决策侧零真值引用)
+   ▼
+事务层 World.commit_transfer (原子: 乐观版本→变更→事件→证据→幂等)
+   ▼
+展示层 :8400 矩阵前端 (决策面板/监控面板/事件流/库存板)
 ```
 
-- **单一工程参数源**：全部几何/速度/判据来自 `configs/design.yaml`（版本化，含 manifest）
-- **事务边界**：库存写入只发生在物理证据成立处（`CommitEvidenceMissing` 会拒绝提交）
-- **禁上帝视角**：规划器读感知估计，MuJoCo 真值仅用于独立验收（设计文档 §19.2）
+**六大红线架构**（经 GPT 深度评审三轮迭代）：
+
+1. **单一指令入口**——agent 只能提交意图，物理执行走判据层
+2. **物理证据门控**——`EvidenceVerdict` 五门联合判据（承托率≥95% ∧ 卸载≤5% ∧ 0.5s 稳定 ∧ 静止 ∧ 位姿≤10mm），11 帧采样版本化
+3. **原子事务**——`commit_transfer` 单 SQLite 事务；物理成功而提交失败 → `RECONCILIATION_REQUIRED` 挂起，reconcile 同键幂等恢复
+4. **观测隔离**——决策侧（agent/调度/记忆）零真值引用（AST 强制）；估计偏差 bias≈0（无泄漏）且 std>0（有噪声）
+5. **需求真实性**——40 SKU 目录与需求曲线由 Kaggle 456 万行真实零售数据标定（周内/月度因子 + 噪声）
+6. **利用率运营闭环**——滑动窗 <60% 自动升需求倍率（DemandTuned 决策事件），24h continuous
 
 ## 在线演示（本地）
 
 ```bash
-PYTHONPATH=. python twin/server.py     # http://127.0.0.1:8300
+# M2 矩阵仓库 (推荐): 8 车 · 384 货位 · 决策面板 · 需求驱动
+PYTHONPATH=. python twin/matrix_server.py    # http://127.0.0.1:8400
+
+# 旧双车演示 (P3 时代, 保留)
+PYTHONPATH=. python twin/server.py           # http://127.0.0.1:8300
 ```
 
-页面内对 Agent 说：`把 A-L3-C1 那托下架到 H01` · `F01 取货放交接台, F02 接力送 H01`（双车交接）· `快 4 倍` · `库存` · `事件`。
-理论页 `/theory.html`；照片级影片在 `deliverables/`。
+对 Agent 说：`开始持续运行`（24h 需求驱动）· `下 10 个订单` · `前方放个锥桶挡住`（通道锁绕行）· `库存` · `利用率`。
+
+决策面板实时显示每次任务分配：候选车 → 选择理由 → CP-SAT 求解状态（OPTIMAL/FEASIBLE/FALLBACK_GREEDY）→ solve_ms → COMMITTED；监控面板显示车队利用率、吞吐、锁等待、碰撞计数与需求倍率。
+
+## 分层模块
+
+| 层 | 模块 | 要点 |
+|---|---|---|
+| 物理 | `sim/warehouse_cell.py` | 128 架矩阵程序化生成 + 地面标志线（LAYOUT 单一来源，改参数线跟动）；混合车队模板（叉车 2-DOF+门架 / AGV 圆盘+顶销） |
+| 需求 | `sim/demand.py` | 泊松订单流（周内/月度因子），同 seed 逐单可复现；出库/补货双流 |
+| 调度 | `sim/dispatch.py` | CP-SAT 逐腿指派（能力/NoOverlap/交接链/占用窗），贪心暖启动 0.5s 封顶，失败回退贪心；实测 makespan 严格优于贪心 |
+| 导航 | `sim/navigation.py` | 330 节点图全 LAYOUT 派生；状态 A*（距离+转弯+锁惩罚）；作业前 x 向闭环对中 |
+| 锁 | `sim/traffic.py` | lane+节点锁矩阵，原子整路由（等待图无环防死锁定理），滞后释放 |
+| 任务 | `sim/mission.py` | 4 类任务相位机 + 台账 + 作业后物理校验 |
+| 观测 | `twin/observation.py` | `front_obstacle`/`cone_estimate`/`clear_confirmed`（连续 N 次扫描才恢复） |
+| 事务 | `services/world/ontology.py` | `commit_transfer` + `execution_evidence` 表 + 幂等登记 |
+| 证据 | `services/world/evidence.py` | `EvidenceVerdict` 版本化五门判据 |
+| 记忆 | `twin/memory.py` | 情境签名（观测估计）→ 处置 → 结局，只提示不自动重放 |
+| 前端 | `twin/web/matrix.html` | 决策面板/监控面板/事件流/矩阵渲染 |
+
+## 验证体系
+
+- **300+ pytest 用例**全绿（物理往返/交接链/避障/原子性/观测隔离/调度）
+- **故障注入**：事务内 5 断点参数化注入零残留；恢复后账本与无故障 E2E 逐位一致
+- **30 分钟 continuous 压测**（`scripts/press.py`）：内存 <10% 增长、零碰撞、零死锁、各车利用率 ≥60% 五判据
+- **数值收敛**（论文 II 素材）：dt 16 倍扫描全 PASS；求解器矩阵标定失效边界（Newton 4 倍迭代冗余，CG<200 崩溃）
+
+## 学术定位
+
+- **Paper I**: Evidence-Grounded Transactional Execution（感知错误/数据库失败/事件重放/部分交接下的状态正确性）
+- **Paper II**: Evidence-Conditioned Decision Adaptation（Decision Memory 因果影响）
+- 相关工作对照（MAPF/openTCS/Voyager/两阶段调度）见 [docs/knowledge/related_work.md](docs/knowledge/related_work.md)
+- 与 openTCS 等工业标准的差异：`COMMITTED` 只在物理证据成立后提交——工业框架没有"事务-物理"一致性层
+
+## 历史（M1 双车时代）
+
+单巷道双车交接/避障/Decision Memory 的完整证据链保留在 `:8300` 演示与
+`tests/test_p3_wave2_handoff.py`、`tests/test_r2_compound.py`；照片级影片在 `deliverables/`。
 
 ## 目录
 
-| 路径 | 内容 |
-|---|---|
-| `sim/` | MuJoCo 物理单元（叉车 cell、机械臂 cell、安全、控制器） |
-| `services/` | 世界模型本体/事务、判据适配器、任务调度、预约、感知、T12 场景 |
-| `twin/` | 实时世界模型服务（FastAPI+WS）、WarehouseAgent、three.js 前端 |
-| `scene/` | 全场景装配（18 货位 4 设备） |
-| `cad/` | design.yaml → STEP/MJCF/网格 参数化生成 |
-| `tests/` | 210 项回归（物理判据、事务恒等式、安全、场景） |
-| `docs/` | 详细设计 v2.0.0、文献裁决、Agentic 目标设计、验收报告 |
-| `deliverables/` | 三段同源位姿驱动的视频（白模 / 照片级 / 投资人版） |
-
-## 进行中
-
-- **P2 完成** 多货物多货位 + 任务 DAG（物理多层 cell 已落地，210 测试全绿）
-- **P3 Wave2 完成** 双车（F01+F02）同巷道交接：F02 行程放宽、AisleLock 巷道互斥、S1 交接台所有权转移链（`tests/test_p3_wave2_handoff.py` 实测零碰撞）；R01 机械臂车与三段交接属后续
-- **P4** 锥桶 + `mj_multiRay` 激光雷达 + 占据栅格重规划 + E0–E6 消融
-- **Learning loop** 自课程 + Decision Memory + 成长曲线
-
-## 论文
-
-实验协议（预注册草案，与 GPT 方法学审稿联合制定）：[paper/EXPERIMENT_DESIGN.md](paper/EXPERIMENT_DESIGN.md)。
-暂定标题 *Evidence-Grounded Embodied Agents*；贡献定义为物理与事务双重约束下、
-基于可验证执行证据的决策学习；路线 = 两篇（H1+H2 事务可靠性 / H3 持续决策学习）。
+见 `docs/桌面AGV与机器人仓储Demo_阶段一仿真详细设计_v2.0.0.md`（规格基线，design_version 现行 2.3.0，验收报告 `reports/v2.*.md`）。
