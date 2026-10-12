@@ -37,10 +37,10 @@
 - `reports/` 环境、验收证据（按 run_id / 版本归档）
 - `deliverables/` 影片与最终报告
 
-## 当前状态（2026-10-12）
+## 当前状态（2026-10-13）
 
 **M2 矩阵仓库主线**：128 架（4×4 组×8 架×3 层=384 货位）+ 8 车异构车队（F01-F04 叉车 / A01-A04 潜伏顶升 AGV，L1/L2/L3 承重分级、能力强速度慢）+ 需求驱动 24h continuous。
 - 已落地：CP-SAT 调度（能力约束/时间窗/回退贪心）+ 网格 A* + 巷道/交叉口锁矩阵 + 决策面板（`:8400`）+ 利用率反馈控制 + 技能库 + 原子事务/观测隔离/恢复（B1-B3）+ 24h 自恢复看门狗
 - 验证：`pytest tests/` 300+ 用例；Paper I 消融 120 runs（B0-B3）；30 分钟压测脚本 `scripts/press.py`
-- **已知未闭**：8 车满并发下 3 个窄巷用例（zero_collision / determinism / head_on）仍有稀发车-车接触（11mm）与后排放托偏移，根因定位见 `docs/knowledge/detfix_fault_chain.md`（等待车无锁驻巷），收敛中
+- **物理收敛已闭**（DetFix，2026-10-13）：t=558s 六层发散链根断——三修复（落架释放高度 z+0.010 消 1.5mm 楔 / row:j 锁持有至退场 / 载运路由 hard-block 有托台位），全库 320 passed + fleet 15/15（含 determinism 双 run 逐位一致）+ L0/L1 press 点位 7/7 PASS。取证：`docs/knowledge/detfix_fault_chain.md` + `reports/detfix/run1-14`。30min 压测复验进行中
 - design_version 2.3.0（`reports/v2.3.0.md`）；旧 W01-W07 表述已废弃
