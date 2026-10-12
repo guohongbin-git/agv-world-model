@@ -6,6 +6,27 @@
 - 装卸在同一事务原子提交绑定+位置+事件
 - event_id 唯一, (run_id, robot_id, command_id) 动作唯一
 - UNKNOWN 不删除计数; 显式边界事件才离场
+
+G1 状态机 (B3, 故障矩阵 docs/knowledge/paper1_fault_matrix.md):
+    PREPARED → EXECUTING → VERIFIED → commit_transfer() → COMMITTED
+    任意未闭合阶段可 → RECONCILIATION (结果不确定, 隔离复核) 或
+    CANCELLED (复核确认未执行)。任务意图/资源租约/命令 ID 必须在
+    产生不可逆物理影响**前**经 prepare_transfer 持久化 (D01/D02);
+    重启恢复只信重新观测, 不信故障瞬间的状态写入 (见 twin/server
+    recover_open_commands)。
+
+三独立标识 (矩阵「三个独立标识不得混用」, 生成/用途/禁混用):
+- command_id  命令标识, **跨重试幂等**。生成于任务受理
+  (prepare_transfer); 与 transfers.idempotency_key 同源同值
+  (twin 层公式 ``{task_id}:{phase}:{pallet}:{loc}``), 生命周期 =
+  命令闭合 (COMMITTED / CANCELLED)。commit_transfer(command_id=…)
+  强制校验「已 PREPARED 且与幂等键一致」—— 用 evidence_id 或 run_id
+  顶替会被拒绝。
+- evidence_id  证据引用 = execution_evidence 主键 =
+  EvidenceVerdict.verdict_id (``{run_id}-EVD-xxxx``), 带 valid_until
+  有效窗。只作提交凭据, **禁止当幂等键** (过期即作废, S05)。
+- run_id  运行级审计标识。事件前缀 / 库文件名 / 重启恢复身份;
+  **禁止当命令或证据键**。
 """
 from __future__ import annotations
 
@@ -130,6 +151,50 @@ class TransferOutcome:
     new_versions: dict[str, int]       # 实体 → 提交后版本
 
 
+# ---------- G1 状态机阶段 (B3) ----------
+class TransferStage(str, Enum):
+    """prepared_commands.stage 的合法取值 (矩阵 G1 修正版)。
+
+    PREPARED    意图/租约/命令 ID 已持久化, 物理未开始 (D01/D02 边界)
+    EXECUTING   物理执行中 (进程存活时于物理开始前推进; 崩溃后此阶段
+                只作提示 —— 恢复判定以重新观测为准, D03)
+    VERIFIED    EvidenceVerdict 已形成且过门禁 (尚未提交)
+    COMMITTED   物理证据与业务状态闭合 (终态)
+    RECONCILIATION  结果不确定, 隔离复核 (可转 COMMITTED/CANCELLED)
+    CANCELLED   复核确认未执行而安全取消 (终态)
+    """
+    PREPARED = "PREPARED"
+    EXECUTING = "EXECUTING"
+    VERIFIED = "VERIFIED"
+    COMMITTED = "COMMITTED"
+    RECONCILIATION = "RECONCILIATION"
+    CANCELLED = "CANCELLED"
+
+
+# 阶段只进不退; 同阶/降阶调用为 no-op (重试路径安全)
+_STAGE_RANK = {TransferStage.PREPARED: 1, TransferStage.EXECUTING: 2,
+               TransferStage.VERIFIED: 3, TransferStage.RECONCILIATION: 4,
+               TransferStage.COMMITTED: 5, TransferStage.CANCELLED: 5}
+
+_ALLOWED_STAGE_TRANSITIONS = {
+    TransferStage.PREPARED: {TransferStage.EXECUTING,
+                             TransferStage.COMMITTED,    # 恢复补确认 (D06)
+                             TransferStage.CANCELLED},
+    TransferStage.EXECUTING: {TransferStage.VERIFIED,
+                              TransferStage.COMMITTED,   # 恢复补提交 (D03)
+                              TransferStage.RECONCILIATION,
+                              TransferStage.CANCELLED},
+    TransferStage.VERIFIED: {TransferStage.COMMITTED,
+                             TransferStage.RECONCILIATION,
+                             TransferStage.CANCELLED},
+    TransferStage.RECONCILIATION: {TransferStage.COMMITTED,
+                                   TransferStage.CANCELLED},
+    TransferStage.COMMITTED: set(),
+    TransferStage.CANCELLED: set(),
+}
+
+_TERMINAL_STAGES = (TransferStage.COMMITTED, TransferStage.CANCELLED)
+
 @dataclass
 class World:
     """单进程世界模型 + SQLite 持久化。所有业务写入只经此事务边界。"""
@@ -145,31 +210,49 @@ class World:
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._create_tables()
         self._events = {}
-        self._seq = itertools.count(1)
+        # 重启恢复 (B3): 事件序号接续既有库 —— event_id 全局唯一不回绕
+        row = self._conn.execute(
+            "SELECT MAX(CAST(SUBSTR(event_id, -6) AS INTEGER)) FROM events "
+            "WHERE event_id LIKE ?", (f"{self.run_id}-EVT-%",)).fetchone()
+        self._seq = itertools.count((row[0] or 0) + 1)
 
     # ---------- schema ----------
     def _create_tables(self) -> None:
         c = self._conn
         c.executescript(
             """
-            CREATE TABLE pallets(pallet_id TEXT PRIMARY KEY, location TEXT,
+            CREATE TABLE IF NOT EXISTS pallets(pallet_id TEXT PRIMARY KEY, location TEXT,
               cargo_state TEXT, tare_mass_kg REAL, entity_version INTEGER);
-            CREATE TABLE goods(goods_id TEXT PRIMARY KEY, sku TEXT, mass_kg REAL,
+            CREATE TABLE IF NOT EXISTS goods(goods_id TEXT PRIMARY KEY, sku TEXT, mass_kg REAL,
               location TEXT, lifecycle TEXT, entity_version INTEGER);
-            CREATE TABLE slots(slot_id TEXT PRIMARY KEY, x_m REAL, y_m REAL, z_m REAL,
+            CREATE TABLE IF NOT EXISTS slots(slot_id TEXT PRIMARY KEY, x_m REAL, y_m REAL, z_m REAL,
               occupancy TEXT, reservation_id TEXT);
-            CREATE TABLE bindings(goods_id TEXT, pallet_id TEXT,
+            CREATE TABLE IF NOT EXISTS bindings(goods_id TEXT, pallet_id TEXT,
               binding_version INTEGER, active INTEGER,
               PRIMARY KEY(goods_id, pallet_id, binding_version));
-            CREATE TABLE events(event_id TEXT PRIMARY KEY, task_id TEXT, type TEXT,
+            CREATE TABLE IF NOT EXISTS events(event_id TEXT PRIMARY KEY, task_id TEXT, type TEXT,
               payload TEXT, sim_time_s REAL);
-            CREATE TABLE command_log(run_id TEXT, robot_id TEXT, command_id TEXT,
+            CREATE TABLE IF NOT EXISTS command_log(run_id TEXT, robot_id TEXT, command_id TEXT,
               status TEXT, PRIMARY KEY(run_id, robot_id, command_id));
-            CREATE TABLE execution_evidence(evidence_id TEXT PRIMARY KEY,
+            CREATE TABLE IF NOT EXISTS execution_evidence(evidence_id TEXT PRIMARY KEY,
               schema_version INTEGER, kind TEXT, pallet_id TEXT, vehicle_id TEXT,
               task_id TEXT, payload TEXT, valid_until REAL, sim_time_s REAL);
-            CREATE TABLE transfers(idempotency_key TEXT PRIMARY KEY,
+            CREATE TABLE IF NOT EXISTS transfers(idempotency_key TEXT PRIMARY KEY,
               evidence_id TEXT, result_json TEXT, sim_time_s REAL);
+            -- G1 PREPARED 持久化 (B3): 任务意图/资源租约/命令 ID 在任何
+            -- 不可逆物理影响前落盘; 重启后由 open_prepared_commands 扫出
+            -- 未闭合命令做现场对账 (D02/D03/D06)。
+            --   command_id        跨重试幂等命令标识 (= 提交幂等键)
+            --   run_id/task_id    审计归属 (恢复时沿用原 run 身份)
+            --   stage             TransferStage (状态机阶段)
+            --   intent           任务意图 JSON: vehicle/pallet_id/goods_id/
+            --                     src/dst/phase + 可选 slot_expect (C02 重验)
+            --   resource_lease    资源租约 (如 aisle:F01; 取消时释放)
+            --   expected_versions prepare 时刻乐观版本快照 (执行前重验)
+            CREATE TABLE IF NOT EXISTS prepared_commands(command_id TEXT PRIMARY KEY,
+              run_id TEXT NOT NULL, task_id TEXT, stage TEXT NOT NULL,
+              intent TEXT NOT NULL, resource_lease TEXT,
+              expected_versions TEXT NOT NULL, sim_time_s REAL);
             """
         )
         c.commit()
@@ -415,7 +498,8 @@ class World:
                         events: list[tuple[str, dict]],
                         idempotency_key: str, *, task_id: str = "",
                         sim_time_s: float = 0.0,
-                        evidence_json: str = "") -> TransferOutcome:
+                        evidence_json: str = "",
+                        command_id: str = "") -> TransferOutcome:
         """原子提交一次物理转移: 单一 SQLite 事务内完成
         乐观版本检查 → 状态变更 → 事件写入 → 证据快照登记 → 幂等登记。
 
@@ -426,11 +510,42 @@ class World:
           不重复发事件) —— 应答丢失/重试安全。
         - ``evidence_json`` 为 :class:`services.world.evidence.EvidenceVerdict`
           序列化; 过期 (sim_time_s > valid_until) → ConstraintViolation。
+        - G1 (B3): ``command_id`` 是跨重试幂等的命令标识, **必须与
+          ``idempotency_key`` 一致**且已经 :meth:`prepare_transfer`
+          PREPARED —— 用 evidence_id / run_id 顶替或未预登记均拒绝
+          (三标识分离)。提交成功时在同一事务内把命令阶段推进到
+          COMMITTED 并写 CommandStage 审计事件 (状态+事件+幂等记录
+          同生共死, I3)。
         """
+        if command_id:
+            if command_id != idempotency_key:
+                raise ConstraintViolation(
+                    f"command_id 与幂等键不一致 (三标识混用): "
+                    f"{command_id!r} ≠ {idempotency_key!r}")
+            prow = self._conn.execute(
+                "SELECT stage FROM prepared_commands WHERE command_id=?",
+                (command_id,)).fetchone()
+            if prow is None:
+                raise ConstraintViolation(
+                    f"命令未 PREPARED, 拒绝提交: {command_id!r} "
+                    "(command_id ≠ evidence_id/run_id, 不得混用)")
+            if TransferStage(prow[0]) is TransferStage.CANCELLED:
+                raise ConstraintViolation(f"命令已取消, 拒绝提交: {command_id}")
         prev = self._conn.execute(
             "SELECT result_json FROM transfers WHERE idempotency_key=?",
             (idempotency_key,)).fetchone()
         if prev is not None:
+            # D06 重试: 返回首次结果, 零重复事件/记账; 顺手闭合尚开放
+            # 的命令阶段 (首次提交未携带 command_id 的旧路径) —— 静默,
+            # 不产生新事件。
+            if command_id:
+                self._conn.execute(
+                    "UPDATE prepared_commands SET stage=?, sim_time_s=? "
+                    "WHERE command_id=? AND stage NOT IN (?,?)",
+                    (TransferStage.COMMITTED.value, sim_time_s, command_id,
+                     TransferStage.COMMITTED.value,
+                     TransferStage.CANCELLED.value))
+                self._conn.commit()
             r = json.loads(prev[0])
             return TransferOutcome(key=idempotency_key, committed=True,
                                    replayed=True,
@@ -478,6 +593,22 @@ class World:
                 (idempotency_key, evidence_id,
                  json.dumps({"event_ids": event_ids,
                              "new_versions": new_versions}), sim_time_s))
+            if command_id:      # G1: 阶段 → COMMITTED 与业务提交同事务
+                srow = self._conn.execute(
+                    "SELECT stage FROM prepared_commands WHERE command_id=?",
+                    (command_id,)).fetchone()
+                self._conn.execute(
+                    "UPDATE prepared_commands SET stage=?, sim_time_s=? "
+                    "WHERE command_id=?",
+                    (TransferStage.COMMITTED.value, sim_time_s, command_id))
+                stage_eid = f"{self.run_id}-EVT-{next(self._seq):06d}"
+                self._conn.execute(
+                    "INSERT INTO events VALUES(?,?,?,?,?)",
+                    (stage_eid, task_id, "CommandStage",
+                     json.dumps({"command_id": command_id,
+                                 "from_stage": srow[0] if srow else None,
+                                 "to_stage": TransferStage.COMMITTED.value}),
+                     sim_time_s))
         for eid, (type_, payload) in zip(event_ids, events):
             self._events[eid] = Event(eid, task_id, type_, payload, sim_time_s)
         return TransferOutcome(key=idempotency_key, committed=True,
@@ -496,3 +627,178 @@ class World:
         return self._conn.execute(
             "SELECT 1 FROM transfers WHERE idempotency_key=?",
             (idempotency_key,)).fetchone() is not None
+
+    # ---------- G1 状态机: PREPARED 持久化与重启恢复 (B3) ----------
+
+    @staticmethod
+    def _core_intent(intent: dict) -> tuple:
+        """意图中定义命令身份的核心字段 (command_id 复用一致性检查)。"""
+        return (intent.get("vehicle"), intent.get("pallet_id"),
+                intent.get("phase"), intent.get("src"), intent.get("dst"))
+
+    def _stage_event(self, task_id: str, payload: dict,
+                     sim_time_s: float) -> None:
+        """在已开启的事务内写 CommandStage 审计事件 (调用方持事务)。"""
+        event_id = f"{self.run_id}-EVT-{next(self._seq):06d}"
+        self._conn.execute(
+            "INSERT INTO events VALUES(?,?,?,?,?)",
+            (event_id, task_id, "CommandStage", json.dumps(payload), sim_time_s))
+
+    def prepare_transfer(self, command_id: str, *, task_id: str,
+                         intent: dict, resource_lease: str,
+                         expected_versions: dict[str, int],
+                         sim_time_s: float = 0.0) -> dict:
+        """G1 PREPARED (矩阵 D01/D02): 任务意图 / 资源租约 / 命令 ID 在
+        产生任何不可逆物理影响**前**持久化。
+
+        - 首次: 插入 stage=PREPARED + CommandStage 审计事件 (同一事务)。
+        - 幂等重试 (命令未闭合): 核心意图一致时刷新乐观版本快照与租约
+          (阶段不回退) —— 重启后重执行的安全前提。
+        - 已 COMMITTED: 返回既有记录 (replayed=True), 上层重放提交即
+          得首次结果 (D06)。
+        - 已 CANCELLED: 拒绝复用 command_id —— 需新命令重新调度。
+        - 核心意图不一致: 拒绝 (command_id 不得混用)。
+        """
+        row = self._conn.execute(
+            "SELECT stage, intent FROM prepared_commands WHERE command_id=?",
+            (command_id,)).fetchone()
+        payload = {"command_id": command_id, "run_id": self.run_id}
+        if row is None:
+            with self._conn:
+                self._conn.execute(
+                    "INSERT INTO prepared_commands VALUES(?,?,?,?,?,?,?,?)",
+                    (command_id, self.run_id, task_id,
+                     TransferStage.PREPARED.value, json.dumps(intent),
+                     resource_lease, json.dumps(expected_versions or {}),
+                     sim_time_s))
+                self._stage_event(task_id,
+                                  {**payload, "to_stage":
+                                   TransferStage.PREPARED.value,
+                                   "intent": intent,
+                                   "resource_lease": resource_lease},
+                                  sim_time_s)
+            return {"command_id": command_id, "stage":
+                    TransferStage.PREPARED.value, "replayed": False}
+        stage = TransferStage(row[0])
+        if stage is TransferStage.CANCELLED:
+            raise ConstraintViolation(
+                f"命令已取消, 拒绝复用 command_id (需新命令重新调度): "
+                f"{command_id}")
+        if stage is TransferStage.COMMITTED:
+            return {"command_id": command_id,
+                    "stage": stage.value, "replayed": True}
+        if self._core_intent(json.loads(row[1])) != self._core_intent(intent):
+            raise ConstraintViolation(
+                f"command_id 复用但核心意图不同 (禁止混用): {command_id}")
+        with self._conn:     # 重试: 刷新快照, 阶段保持
+            self._conn.execute(
+                "UPDATE prepared_commands SET expected_versions=?, "
+                "resource_lease=?, sim_time_s=? WHERE command_id=?",
+                (json.dumps(expected_versions or {}), resource_lease,
+                 sim_time_s, command_id))
+        return {"command_id": command_id, "stage": stage.value,
+                "replayed": True}
+
+    def advance_stage(self, command_id: str, stage: TransferStage, *,
+                      sim_time_s: float = 0.0, note: str = "") -> str:
+        """推进命令阶段 (PREPARED→EXECUTING→VERIFIED→…, 只进不退)。
+
+        阶段更新与 CommandStage 审计事件同一事务; 同阶/降阶为 no-op
+        (重试路径安全), 非法跃迁 ConstraintViolation。
+        """
+        row = self._conn.execute(
+            "SELECT stage, task_id FROM prepared_commands WHERE command_id=?",
+            (command_id,)).fetchone()
+        if row is None:
+            raise ConstraintViolation(f"命令未 PREPARED: {command_id}")
+        cur = TransferStage(row[0])
+        if _STAGE_RANK[stage] <= _STAGE_RANK[cur]:
+            return cur.value
+        if stage not in _ALLOWED_STAGE_TRANSITIONS[cur]:
+            raise ConstraintViolation(
+                f"非法阶段跃迁 {cur.value} → {stage.value}: {command_id}")
+        with self._conn:
+            self._conn.execute(
+                "UPDATE prepared_commands SET stage=?, sim_time_s=? "
+                "WHERE command_id=?", (stage.value, sim_time_s, command_id))
+            self._stage_event(row[1],
+                              {"command_id": command_id,
+                               "from_stage": cur.value,
+                               "to_stage": stage.value, "note": note},
+                              sim_time_s)
+        return stage.value
+
+    def cancel_prepared(self, command_id: str, *, reason: str,
+                        sim_time_s: float = 0.0) -> None:
+        """安全取消未闭合命令 (D02 恢复: 复核确认物理未执行)。
+
+        账本不动 (未提交过的业务事实零变化), 记 CommandCancelled 事件
+        (含取消原因与租约释放信息); 租约的物理侧释放由调用方负责。
+        """
+        row = self._conn.execute(
+            "SELECT stage, task_id, resource_lease FROM prepared_commands "
+            "WHERE command_id=?", (command_id,)).fetchone()
+        if row is None:
+            raise ConstraintViolation(f"命令未 PREPARED: {command_id}")
+        cur = TransferStage(row[0])
+        if cur in _TERMINAL_STAGES:
+            raise ConstraintViolation(
+                f"命令已闭合 ({cur.value}), 不可取消: {command_id}")
+        with self._conn:
+            self._conn.execute(
+                "UPDATE prepared_commands SET stage=?, sim_time_s=? "
+                "WHERE command_id=?",
+                (TransferStage.CANCELLED.value, sim_time_s, command_id))
+            self._stage_event(row[1],
+                              {"command_id": command_id,
+                               "from_stage": cur.value,
+                               "to_stage": TransferStage.CANCELLED.value,
+                               "reason": reason,
+                               "lease_released": row[2]},
+                              sim_time_s)
+
+    def revalidate_prepared(self, command_id: str) -> None:
+        """执行前重验世界状态 (矩阵 C02): 调度可行 ≠ 执行时可提交。
+
+        对比 prepare 时刻的乐观版本快照与货位占用前置条件
+        (intent["slot_expect"]); 不符 → VersionConflict /
+        ConstraintViolation —— 拒绝旧计划, 需重新规划。已闭合命令 no-op。
+        """
+        row = self._conn.execute(
+            "SELECT stage, expected_versions, intent FROM prepared_commands "
+            "WHERE command_id=?", (command_id,)).fetchone()
+        if row is None:
+            raise ConstraintViolation(f"命令未 PREPARED: {command_id}")
+        if TransferStage(row[0]) in _TERMINAL_STAGES:
+            return
+        for entity, expected in json.loads(row[1]).items():
+            current = self.entity_version_of(entity)
+            if current != expected:
+                raise VersionConflict(
+                    f"旧计划拒绝 (C02): {entity} 计划 v{expected}, "
+                    f"当前 v{current} — 世界已变化, 需重新规划 "
+                    f"({command_id})")
+        for slot, want in ((json.loads(row[2]).get("slot_expect"))
+                           or {}).items():
+            cur = self._conn.execute(
+                "SELECT occupancy FROM slots WHERE slot_id=?",
+                (slot,)).fetchone()
+            if cur is None or cur[0] != want:
+                raise ConstraintViolation(
+                    f"旧计划拒绝 (C02): 货位 {slot} 当前 "
+                    f"{cur[0] if cur else '不存在'} ≠ 计划 {want} "
+                    f"— 执行时重验失败 ({command_id})")
+
+    def open_prepared_commands(self) -> list[dict]:
+        """扫描未闭合命令 (I6 可恢复性): 重启恢复的输入, 按创建顺序。"""
+        rows = self._conn.execute(
+            "SELECT command_id, run_id, task_id, stage, intent, "
+            "resource_lease, expected_versions, sim_time_s "
+            "FROM prepared_commands WHERE stage NOT IN (?,?) ORDER BY rowid",
+            (TransferStage.COMMITTED.value,
+             TransferStage.CANCELLED.value)).fetchall()
+        return [{"command_id": r[0], "run_id": r[1], "task_id": r[2],
+                 "stage": r[3], "intent": json.loads(r[4]),
+                 "resource_lease": r[5],
+                 "expected_versions": json.loads(r[6]),
+                 "sim_time_s": r[7]} for r in rows]

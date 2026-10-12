@@ -61,6 +61,11 @@ TOOLS = [
         "name": "clear_cone", "description": "移除场景中的锥桶",
         "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {
+        "name": "recover_commands",
+        "description": "扫描未闭合命令并重新观测现场对账 (G1 重启恢复: "
+                       "已入账补确认/已发生补提交/未执行安全取消/不确定隔离)",
+        "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {
         "name": "events_query", "description": "查询最近世界模型事件",
         "parameters": {"type": "object",
                        "properties": {"limit": {"type": "integer"}}}}},
@@ -89,6 +94,8 @@ def _exec(cmd: str, svc, value=None) -> str:
         return json.dumps(svc.cmd("dispatch", value), ensure_ascii=False)
     if cmd == "inject_cone":
         return json.dumps(svc.cmd("inject_cone", value), ensure_ascii=False)
+    if cmd == "recover_commands":
+        return json.dumps(svc.cmd("recover"), ensure_ascii=False)
     if cmd == "clear_cone":
         return json.dumps(svc.cmd("clear_cone"), ensure_ascii=False)
     if cmd == "events_query":
@@ -110,6 +117,12 @@ def rules(text: str, svc) -> tuple[str, list]:
     if any(w in t for w in ("暂停", "停一下", "pause")):
         tools.append(("task_pause", None))
         reply = "已暂停。物理冻结在当前状态, 目标位保持; 说\u201c继续\u201d恢复。"
+    elif any(w in t for w in ("对账", "核对恢复", "recover")):
+        tools.append(("recover_commands", None))
+        r = svc.cmd("recover")
+        reply = (f"重启对账完成: {len(r['recovery'])} 条未闭合命令已按"
+                 "重新观测处置 (补确认/补提交/安全取消/隔离), 剩余未闭合 "
+                 f"{r['open']} 条; 详见事件流与叙述。")
     elif any(w in t for w in ("继续", "恢复", "resume")):
         tools.append(("task_resume", None))
         reply = "已恢复执行。"
