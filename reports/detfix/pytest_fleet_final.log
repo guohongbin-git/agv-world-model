@@ -1,0 +1,24 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0 -- /Users/guohongbin/1-Projects/desktop-agv-demo/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/guohongbin/1-Projects/desktop-agv-demo
+plugins: platformdirs-4.12.4, anyio-4.15.1
+collecting ... collected 15 items
+
+tests/test_fleet_navigation.py::test_graph_derives_from_layout PASSED    [  6%]
+tests/test_fleet_navigation.py::test_vehicles_match_layout_classes PASSED [ 13%]
+tests/test_fleet_navigation.py::test_astar_matches_dijkstra PASSED       [ 20%]
+tests/test_fleet_navigation.py::test_turn_penalty_visible PASSED         [ 26%]
+tests/test_fleet_navigation.py::test_lock_penalty_detour_route_change PASSED [ 33%]
+tests/test_fleet_navigation.py::test_turn_envelope_constraints PASSED    [ 40%]
+tests/test_fleet_navigation.py::test_claim_atomicity_and_wait_event PASSED [ 46%]
+tests/test_fleet_navigation.py::test_retention_release_chain PASSED      [ 53%]
+tests/test_fleet_navigation.py::test_randomized_no_deadlock PASSED       [ 60%]
+tests/test_fleet_navigation.py::test_8task_all_complete PASSED           [ 66%]
+tests/test_fleet_navigation.py::test_8task_zero_collision_no_deadlock PASSED [ 73%]
+tests/test_fleet_navigation.py::test_8task_determinism PASSED            [ 80%]
+tests/test_fleet_navigation.py::test_two_agv_head_on_wait_and_complete PASSED [ 86%]
+tests/test_fleet_navigation.py::test_detour_when_column_held PASSED      [ 93%]
+tests/test_fleet_navigation.py::test_class_speeds_reflected_in_mission PASSED [100%]
+
+======================= 15 passed in 3229.02s (0:53:49) ========================

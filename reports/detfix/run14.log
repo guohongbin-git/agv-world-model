@@ -1,0 +1,7 @@
+tasks: [{"kind": "pick", "slot": "R11-S0", "level": 1, "stand": "H02"}, {"kind": "pick", "slot": "R11-S0", "level": 2, "stand": "H03"}, {"kind": "pick", "slot": "R11-S6", "level": 2, "stand": "H04"}, {"kind": "pick", "slot": "R12-S6", "level": 1, "stand": "H05"}, {"kind": "haul", "stand": "H02", "dock": "D_G11", "after": [0]}, {"kind": "haul", "stand": "H03", "dock": "D_G22", "after": [1]}, {"kind": "haul", "stand": "H04", "dock": "D_G33", "after": [2]}, {"kind": "haul", "stand": "H05", "dock": "D_G44", "after": [3]}]
+  [wall    234s] sim t=  200.50s
+  [wall    476s] sim t=  400.50s
+  [wall    716s] sim t=  600.50s
+mission done; op_errors: []
+audit max_pen: 1.618585794473104e-05 violations: []
+saved reports/detfix/run14.json wall=942s

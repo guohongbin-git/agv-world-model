@@ -1,0 +1,42 @@
+[press] run=MX-20261012-111604-e1ed604d duration=1800s multiplier=1.0 — 每 60s 快照
+[press   1.0m] sim=    67.6s (1.12x) rss=  166.7MB thr=  0.0/h ord=  0 fail= 0 open= 4 wait=   1 pen= 0.00mm dec=   5 | F01:69% F02:0% F03:0% F04:69% A01:0% A02:0% A03:0% A04:0%
+[press   2.0m] sim=   133.3s (1.11x) rss=  166.8MB thr=  0.0/h ord=  0 fail= 0 open= 4 wait=   1 pen= 0.01mm dec=   6 | F01:85% F02:0% F03:0% F04:85% A01:0% A02:0% A03:0% A04:0%
+[press   3.0m] sim=   199.8s (1.11x) rss=  167.3MB thr=  0.0/h ord=  0 fail= 0 open=10 wait=   4 pen= 0.01mm dec=  15 | F01:90% F02:2% F03:2% F04:90% A01:0% A02:0% A03:0% A04:0%
+[press   4.0m] sim=   263.0s (1.09x) rss=  167.4MB thr=  6.0/h ord=  0 fail= 0 open=13 wait=   6 pen= 0.02mm dec=  20 | F01:82% F02:26% F03:26% F04:93% A01:0% A02:0% A03:10% A04:0%
+[press   5.0m] sim=   328.8s (1.09x) rss=  167.5MB thr=  6.0/h ord=  0 fail= 0 open=16 wait=   6 pen= 0.02mm dec=  25 | F01:66% F02:41% F03:41% F04:94% A01:0% A02:0% A03:28% A04:0%
+[press   6.0m] sim=   391.6s (1.09x) rss=  167.6MB thr= 18.0/h ord=  1 fail= 0 open=20 wait=   9 pen= 0.02mm dec=  41 | F01:62% F02:51% F03:51% F04:94% A01:0% A02:0% A03:30% A04:10%
+[press   7.0m] sim=   456.3s (1.08x) rss=  167.8MB thr= 18.0/h ord=  1 fail= 0 open=24 wait=  11 pen= 0.07mm dec=  50 | F01:67% F02:57% F03:57% F04:81% A01:0% A02:0% A03:25% A04:22%
+[press   8.0m] sim=   520.5s (1.08x) rss=  168.0MB thr= 18.0/h ord=  1 fail= 0 open=24 wait=  15 pen= 0.24mm dec=  51 | F01:72% F02:63% F03:63% F04:71% A01:0% A02:0% A03:22% A04:32%
+[press   9.0m] sim=   584.1s (1.08x) rss=  168.0MB thr= 24.0/h ord=  1 fail= 1 open=24 wait=  15 pen= 0.24mm dec=  53 | F01:74% F02:64% F03:67% F04:63% A01:0% A02:0% A03:20% A04:39%
+[press  10.0m] sim=   647.5s (1.08x) rss=  168.0MB thr= 30.0/h ord=  1 fail= 1 open=24 wait=  15 pen= 0.24mm dec=  53 | F01:74% F02:58% F03:62% F04:57% A01:0% A02:0% A03:18% A04:42%
+[press  11.0m] sim=   710.2s (1.07x) rss=  168.1MB thr= 36.0/h ord=  1 fail= 1 open=24 wait=  15 pen= 0.24mm dec=  54 | F01:78% F02:53% F03:62% F04:52% A01:0% A02:0% A03:16% A04:44%
+[press  12.0m] sim=   771.6s (1.07x) rss=  168.1MB thr= 36.0/h ord=  1 fail= 1 open=24 wait=  18 pen= 0.24mm dec=  55 | F01:80% F02:49% F03:66% F04:48% A01:0% A02:0% A03:15% A04:49%
+[press  13.0m] sim=   831.1s (1.06x) rss=  168.1MB thr= 36.0/h ord=  1 fail= 1 open=24 wait=  18 pen= 4.98mm dec=  56 | F01:82% F02:45% F03:69% F04:44% A01:0% A02:0% A03:14% A04:53%
+[press  14.0m] sim=   894.8s (1.06x) rss=  168.1MB thr= 42.0/h ord=  1 fail= 2 open=23 wait=  18 pen= 4.98mm dec=  61 | F01:80% F02:42% F03:71% F04:41% A01:3% A02:0% A03:13% A04:56%
+[press  15.0m] sim=   958.0s (1.06x) rss=  168.1MB thr= 36.0/h ord=  1 fail= 2 open=23 wait=  20 pen= 6.82mm dec=  62 | F01:75% F02:39% F03:73% F04:38% A01:9% A02:0% A03:12% A04:59%
+[press  16.0m] sim=  1023.0s (1.06x) rss=  168.2MB thr= 36.0/h ord=  1 fail= 3 open=22 wait=  21 pen= 6.82mm dec=  71 | F01:70% F02:37% F03:73% F04:37% A01:15% A02:0% A03:11% A04:62%
+[press  17.0m] sim=  1088.2s (1.07x) rss=  168.2MB thr= 36.0/h ord=  1 fail= 3 open=22 wait=  21 pen=62.00mm dec=  72 | F01:66% F02:34% F03:68% F04:41% A01:20% A02:0% A03:11% A04:64%
+[press  18.0m] sim=  1151.7s (1.07x) rss=  168.2MB thr= 42.0/h ord=  1 fail= 4 open=21 wait=  21 pen=62.00mm dec=  72 | F01:63% F02:33% F03:69% F04:44% A01:20% A02:0% A03:10% A04:66%
+[press  19.0m] sim=  1214.1s (1.06x) rss=  168.2MB thr= 30.0/h ord=  1 fail= 4 open=21 wait=  21 pen=62.00mm dec=  72 | F01:59% F02:31% F03:70% F04:47% A01:18% A02:0% A03:10% A04:67%
+[press  20.0m] sim=  1274.8s (1.06x) rss=  168.2MB thr= 30.0/h ord=  2 fail= 4 open=20 wait=  22 pen=62.00mm dec=  75 | F01:56% F02:34% F03:72% F04:50% A01:18% A02:0% A03:9% A04:64%
+[press  21.0m] sim=  1336.5s (1.06x) rss=  168.3MB thr= 30.0/h ord=  2 fail= 4 open=20 wait=  22 pen=62.00mm dec=  75 | F01:54% F02:36% F03:73% F04:52% A01:17% A02:0% A03:9% A04:61%
+[press  22.0m] sim=  1398.1s (1.06x) rss=  168.3MB thr= 30.0/h ord=  2 fail= 4 open=20 wait=  23 pen=62.00mm dec=  75 | F01:52% F02:39% F03:73% F04:53% A01:16% A02:0% A03:8% A04:58%
+[press] 收尾 drain: 停止出单, 等待在飞任务清空
+[press  23.0m] sim=  1459.3s (1.06x) rss=  168.5MB thr= 30.0/h ord=  2 fail= 4 open=24 wait=  24 pen=62.00mm dec=  88 | F01:49% F02:42% F03:75% F04:55% A01:15% A02:3% A03:8% A04:56%
+[press  24.0m] sim=  1519.3s (1.05x) rss=  168.5MB thr= 24.0/h ord=  2 fail= 4 open=24 wait=  30 pen=62.00mm dec=  90 | F01:47% F02:44% F03:72% F04:58% A01:15% A02:7% A03:8% A04:57%
+[press  25.0m] sim=  1578.1s (1.05x) rss=  168.5MB thr= 24.0/h ord=  2 fail= 4 open=24 wait=  32 pen=62.00mm dec=  90 | F01:46% F02:46% F03:69% F04:59% A01:14% A02:11% A03:7% A04:59%
+[press  26.0m] sim=  1638.0s (1.05x) rss=  168.5MB thr= 24.0/h ord=  2 fail= 4 open=24 wait=  32 pen=62.00mm dec=  90 | F01:44% F02:46% F03:67% F04:61% A01:14% A02:14% A03:7% A04:61%
+[press  27.0m] sim=  1699.0s (1.05x) rss=  168.6MB thr= 30.0/h ord=  2 fail= 4 open=24 wait=  33 pen=62.00mm dec=  90 | F01:42% F02:44% F03:64% F04:59% A01:13% A02:17% A03:7% A04:62%
+[press  28.0m] sim=  1761.0s (1.05x) rss=  168.6MB thr= 30.0/h ord=  2 fail= 5 open=24 wait=  33 pen=62.00mm dec=  91 | F01:41% F02:43% F03:62% F04:57% A01:13% A02:18% A03:7% A04:62%
+[press  29.0m] sim=  1822.9s (1.05x) rss=  168.6MB thr= 30.0/h ord=  2 fail= 6 open=24 wait=  34 pen=62.00mm dec=  95 | F01:40% F02:41% F03:60% F04:55% A01:12% A02:18% A03:6% A04:64%
+[press  30.0m] sim=  1884.6s (1.05x) rss=  168.6MB thr= 30.0/h ord=  2 fail= 6 open=24 wait=  34 pen=62.00mm dec=  95 | F01:42% F02:40% F03:58% F04:53% A01:12% A02:17% A03:6% A04:66%
+[press  39.0m] drain 完成: open=24 queue=17
+
+===== 压测判据 =====
+[mem      ] ✅ PASS  RSS 首尾增长 < 10%  {'rss_first_mb': 166.7, 'rss_last_mb': 168.7, 'growth_pct': 1.2}
+[deadlock ] ✅ PASS  任务全部完成或活跃; 有任务时无 >180s 停滞; mode≠failed  {'mode': 'stopped', 'max_no_progress_with_work_s': 20.6, 'chains_open_end': 24, 'queue_depth_end': 17, 'jobs_active_end': 1}
+[utilization] ❌ FAIL  各车滑动窗利用率均值 ≥ 60% (无有效样本)  {'per_vehicle_mean': {}, 'fleet_mean': 0.0}
+[collision] ❌ FAIL  max_pen < 5e-4 m 且穿透违规 == 0  {'max_pen_m': 0.062, 'violations': 32}
+[ops      ] ❌ FAIL  物理任务零失败 (op_errors 空)  {'tasks_failed': 7, 'op_errors': 7}
+
+订单完成 2 | 任务腿 10 | 决策事件 96 | 锁等待 45 次 0.0s | 报告 → /Users/guohongbin/1-Projects/desktop-agv-demo/reports/press_matrix_20261012-115504.json

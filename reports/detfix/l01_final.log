@@ -1,0 +1,8 @@
+tasks: [{"kind": "pick", "slot": "R34-S6", "level": 0, "stand": "H02"}, {"kind": "pick", "slot": "R41-S2", "level": 1, "stand": "H03"}, {"kind": "pick", "slot": "R44-S2", "level": 1, "stand": "H04"}, {"kind": "putaway", "slot": "R12-S6", "level": 0, "stand": "H02", "after": [0]}, {"kind": "putaway", "slot": "R13-S0", "level": 0, "stand": "H03", "after": [1]}, {"kind": "putaway", "slot": "R31-S4", "level": 1, "stand": "H04", "after": [2]}, {"kind": "putaway", "slot": "R31-S5", "level": 0, "stand": "H05"}]
+op_errors: []
+max_pen: 1.4990240050487336e-05 violations: []
+put R12-S6-L0 ← pallet_R34_S6_L0: dxy=0.0002 dz=-0.0000
+put R13-S0-L0 ← pallet_R41_S2_L1: dxy=0.0002 dz=-0.0000
+put R31-S4-L1 ← pallet_R44_S2_L1: dxy=0.0002 dz=-0.0000
+put R31-S5-L0 ← pallet_H05: dxy=0.0009 dz=-0.0000
+RESULT: PASS

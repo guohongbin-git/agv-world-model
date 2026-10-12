@@ -1,0 +1,26 @@
+tasks: [{"kind": "pick", "slot": "R11-S0", "level": 1, "stand": "H02"}, {"kind": "pick", "slot": "R11-S0", "level": 2, "stand": "H03"}, {"kind": "pick", "slot": "R11-S6", "level": 2, "stand": "H04"}, {"kind": "pick", "slot": "R12-S6", "level": 1, "stand": "H05"}, {"kind": "haul", "stand": "H02", "dock": "D_G11", "after": [0]}, {"kind": "haul", "stand": "H03", "dock": "D_G22", "after": [1]}, {"kind": "haul", "stand": "H04", "dock": "D_G33", "after": [2]}, {"kind": "haul", "stand": "H05", "dock": "D_G44", "after": [3]}]
+  [wall    236s] sim t=  200.50s
+
+=== TRIGGER pallet_R11_S0_L1_fall at t=268.273 (wall 316s) ===
+  t=268.075 R11_S0_L1=(-1.589,-1.152,0.0978) R11_S0_L2=(-1.890,-1.880,0.4000) fmax=23.6 fpair=('stand_D_G11_strip_pp', 'pallet_R11_S0_L1_boss')
+      stand_D_G11_strip_pp <-> pallet_R11_S0_L1_boss F=23.55N pen=-0.271mm
+      pallet_R11_S0_L1_bottom_c <-> F01_fork_l F=4.13N pen=-0.09mm
+  t=268.095 R11_S0_L1=(-1.584,-1.145,0.0948) R11_S0_L2=(-1.890,-1.880,0.4000) fmax=19.4 fpair=('stand_D_G11_strip_pp', 'pallet_R11_S0_L1_bottom_r')
+      stand_D_G11_strip_pp <-> pallet_R11_S0_L1_bottom_r F=19.37N pen=-0.132mm
+  t=268.115 R11_S0_L1=(-1.581,-1.141,0.0943) R11_S0_L2=(-1.890,-1.880,0.4000) fmax=1.3 fpair=('stand_D_G11_strip_pp', 'pallet_R11_S0_L1_bottom_r')
+      stand_D_G11_strip_pp <-> pallet_R11_S0_L1_bottom_r F=1.3N pen=-0.015mm
+  t=268.135 R11_S0_L1=(-1.581,-1.135,0.0920) R11_S0_L2=(-1.890,-1.880,0.4000) fmax=0.07 fpair=('pallet_R12_S6_L1_ceil_r', 'F02_fork_l')
+  t=268.155 R11_S0_L1=(-1.579,-1.132,0.0921) R11_S0_L2=(-1.890,-1.880,0.4000) fmax=5.97 fpair=('stand_D_G11_strip_pp', 'pallet_R11_S0_L1_boss')
+      stand_D_G11_strip_pp <-> pallet_R11_S0_L1_boss F=5.97N pen=-0.148mm
+  t=268.175 R11_S0_L1=(-1.577,-1.131,0.0911) R11_S0_L2=(-1.890,-1.880,0.4000) fmax=0.07 fpair=('pallet_R12_S6_L1_ceil_r', 'F02_fork_l')
+  t=268.195 R11_S0_L1=(-1.576,-1.131,0.0875) R11_S0_L2=(-1.890,-1.880,0.4000) fmax=0.07 fpair=('pallet_R12_S6_L1_ceil_r', 'F02_fork_l')
+  t=268.215 R11_S0_L1=(-1.575,-1.130,0.0810) R11_S0_L2=(-1.890,-1.880,0.4000) fmax=0.07 fpair=('pallet_R12_S6_L1_ceil_r', 'F02_fork_l')
+  t=268.235 R11_S0_L1=(-1.574,-1.130,0.0714) R11_S0_L2=(-1.890,-1.880,0.4000) fmax=0.07 fpair=('pallet_R12_S6_L1_ceil_r', 'F02_fork_l')
+  t=268.255 R11_S0_L1=(-1.573,-1.129,0.0589) R11_S0_L2=(-1.890,-1.880,0.4000) fmax=0.07 fpair=('pallet_R12_S6_L1_ceil_r', 'F02_fork_l')
+  [wall    470s] sim t=  400.50s
+  [wall    705s] sim t=  600.50s
+  [wall    946s] sim t=  800.50s
+  [wall   1190s] sim t= 1000.50s
+mission done; op_errors: ['A02: haul 物理校验失败 pallet_R11_S0_L1 dxy=2.224 dz=-0.075']
+audit max_pen: 0.005780146257199612 violations: ['穿透 0.57mm @ t=268.15s', '穿透 5.78mm @ t=404.12s', '穿透 0.60mm @ t=404.37s', '穿透 4.21mm @ t=404.55s', '穿透 0.52mm @ t=405.67s']
+saved reports/detfix/run11_fixture.json wall=1228s

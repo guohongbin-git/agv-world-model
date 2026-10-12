@@ -1,0 +1,5 @@
+tasks: [{"kind": "pick", "slot": "R34-S6", "level": 0, "stand": "H02"}]
+  [wall     50s] sim t=  200.50s
+mission done; op_errors: []
+audit max_pen: 0.0001660959788261245 violations: []
+saved reports/detfix/run8_pick34.json wall=73s

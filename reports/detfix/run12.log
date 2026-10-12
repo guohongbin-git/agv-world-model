@@ -1,0 +1,32 @@
+tasks: [{"kind": "pick", "slot": "R11-S0", "level": 1, "stand": "H02"}, {"kind": "pick", "slot": "R11-S0", "level": 2, "stand": "H03"}, {"kind": "pick", "slot": "R11-S6", "level": 2, "stand": "H04"}, {"kind": "pick", "slot": "R12-S6", "level": 1, "stand": "H05"}, {"kind": "haul", "stand": "H02", "dock": "D_G11", "after": [0]}, {"kind": "haul", "stand": "H03", "dock": "D_G22", "after": [1]}, {"kind": "haul", "stand": "H04", "dock": "D_G33", "after": [2]}, {"kind": "haul", "stand": "H05", "dock": "D_G44", "after": [3]}]
+  [wall    232s] sim t=  200.50s
+  [wall    476s] sim t=  400.50s
+
+=== TRIGGER pallet_R11_S0_L1_fall at t=556.148 (wall 664s) ===
+  t=555.950 R11_S0_L1=(-1.469,-0.822,0.2918) R11_S0_L2=(+0.000,-2.099,0.0950) fmax=11 fpair=('A01_base', 'F04_chassis_body')
+  t=555.970 R11_S0_L1=(-1.471,-0.809,0.2648) R11_S0_L2=(+0.000,-2.099,0.0950) fmax=12.2 fpair=('A01_base', 'F04_chassis_body')
+  t=555.990 R11_S0_L1=(-1.473,-0.802,0.2415) R11_S0_L2=(+0.000,-2.099,0.0950) fmax=10.8 fpair=('A01_base', 'F04_chassis_body')
+  t=556.010 R11_S0_L1=(-1.478,-0.802,0.2178) R11_S0_L2=(+0.000,-2.099,0.0950) fmax=10.6 fpair=('A01_base', 'F04_chassis_body')
+  t=556.030 R11_S0_L1=(-1.484,-0.801,0.1904) R11_S0_L2=(+0.000,-2.099,0.0950) fmax=11 fpair=('A01_base', 'F04_chassis_body')
+  t=556.050 R11_S0_L1=(-1.491,-0.800,0.1580) R11_S0_L2=(+0.000,-2.099,0.0950) fmax=10.4 fpair=('A01_base', 'F04_chassis_body')
+  t=556.070 R11_S0_L1=(-1.498,-0.800,0.1203) R11_S0_L2=(+0.000,-2.099,0.0950) fmax=10.3 fpair=('A01_base', 'F04_chassis_body')
+  t=556.090 R11_S0_L1=(-1.494,-0.800,0.0948) R11_S0_L2=(+0.000,-2.099,0.0950) fmax=11.6 fpair=('A01_base', 'F04_chassis_body')
+  t=556.110 R11_S0_L1=(-1.484,-0.800,0.0775) R11_S0_L2=(+0.000,-2.099,0.0950) fmax=10.2 fpair=('A01_base', 'F04_chassis_body')
+  t=556.130 R11_S0_L1=(-1.478,-0.799,0.0607) R11_S0_L2=(+0.000,-2.099,0.0950) fmax=10.1 fpair=('A01_base', 'F04_chassis_body')
+  [wall    719s] sim t=  600.50s
+WARNING: Nan, Inf or huge value in QACC at DOF 6. The simulation is unstable. Time = 684.5560.
+
+
+=== TRIGGER blow at t=684.556 (wall 824s) ===
+  t=684.360 R11_S0_L1=(-1.463,-0.777,0.0333) R11_S0_L2=(-0.550,-0.085,0.0950) fmax=1.9e+05 fpair=('pallet_R11_S6_L2_ceil_r', 'F04_fork_r')
+  t=684.380 R11_S0_L1=(-1.463,-0.777,0.0333) R11_S0_L2=(-0.550,-0.085,0.0950) fmax=1.9e+05 fpair=('pallet_R11_S6_L2_ceil_r', 'F04_fork_r')
+  t=684.400 R11_S0_L1=(-1.463,-0.777,0.0333) R11_S0_L2=(-0.550,-0.085,0.0950) fmax=1.9e+05 fpair=('pallet_R11_S6_L2_ceil_r', 'F04_fork_r')
+  t=684.420 R11_S0_L1=(-1.463,-0.777,0.0333) R11_S0_L2=(-0.550,-0.085,0.0950) fmax=1.9e+05 fpair=('pallet_R11_S6_L2_ceil_r', 'F04_fork_r')
+  t=684.440 R11_S0_L1=(-1.463,-0.777,0.0333) R11_S0_L2=(-0.550,-0.085,0.0950) fmax=1.9e+05 fpair=('pallet_R11_S6_L2_ceil_r', 'F04_fork_r')
+  t=684.460 R11_S0_L1=(-1.463,-0.777,0.0333) R11_S0_L2=(-0.550,-0.085,0.0950) fmax=1.9e+05 fpair=('pallet_R11_S6_L2_ceil_r', 'F04_fork_r')
+  t=684.480 R11_S0_L1=(-1.463,-0.777,0.0333) R11_S0_L2=(-0.550,-0.085,0.0950) fmax=1.9e+05 fpair=('pallet_R11_S6_L2_ceil_r', 'F04_fork_r')
+  t=684.500 R11_S0_L1=(-1.463,-0.777,0.0333) R11_S0_L2=(-0.550,-0.085,0.0950) fmax=1.9e+05 fpair=('pallet_R11_S6_L2_ceil_r', 'F04_fork_r')
+  t=684.520 R11_S0_L1=(-1.463,-0.777,0.0333) R11_S0_L2=(-0.550,-0.085,0.0950) fmax=1.9e+05 fpair=('pallet_R11_S6_L2_ceil_r', 'F04_fork_r')
+  t=684.540 R11_S0_L1=(-1.463,-0.777,0.0333) R11_S0_L2=(-0.550,-0.085,0.0950) fmax=0.11 fpair=('floor', 'pallet_R11_S0_L1_boss')
+BlowUp: {'t': 684.5559999907243, 'dof': 6, 'body': 'pallet_R11_S6_L2'}
+saved reports/detfix/run12.json wall=825s

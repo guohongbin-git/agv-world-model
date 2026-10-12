@@ -1,0 +1,25 @@
+tasks: [{"kind": "pick", "slot": "R34-S6", "level": 0, "stand": "H02"}, {"kind": "pick", "slot": "R41-S2", "level": 1, "stand": "H03"}, {"kind": "pick", "slot": "R44-S2", "level": 1, "stand": "H04"}, {"kind": "putaway", "slot": "R12-S6", "level": 0, "stand": "H02", "after": [0]}, {"kind": "putaway", "slot": "R13-S0", "level": 0, "stand": "H03", "after": [1]}, {"kind": "putaway", "slot": "R31-S4", "level": 1, "stand": "H04", "after": [2]}, {"kind": "putaway", "slot": "R31-S5", "level": 0, "stand": "H05"}]
+
+=== TRIGGER pallet_R34_S6_L0_moved at t=0.501 (wall 0s) ===
+
+=== TRIGGER pallet_H05_moved at t=94.046 (wall 23s) ===
+  t=93.850 R34_S6_L0=(+1.730,+0.800,0.1000) H05=(+2.220,-2.100,0.1272) fmax=0.07 fpair=('pallet_R41_S2_L1_ceil_r', 'F01_fork_r')
+  t=93.870 R34_S6_L0=(+1.730,+0.800,0.1000) H05=(+2.220,-2.100,0.1272) fmax=0.07 fpair=('pallet_R41_S2_L1_ceil_r', 'F01_fork_r')
+  t=93.890 R34_S6_L0=(+1.730,+0.800,0.1000) H05=(+2.220,-2.101,0.1272) fmax=0.07 fpair=('pallet_R41_S2_L1_ceil_r', 'F01_fork_r')
+  t=93.910 R34_S6_L0=(+1.730,+0.800,0.1000) H05=(+2.220,-2.101,0.1272) fmax=0.07 fpair=('pallet_R41_S2_L1_ceil_r', 'F01_fork_r')
+  t=93.930 R34_S6_L0=(+1.730,+0.800,0.1000) H05=(+2.220,-2.102,0.1272) fmax=0.07 fpair=('pallet_R41_S2_L1_ceil_r', 'F01_fork_r')
+  t=93.950 R34_S6_L0=(+1.730,+0.800,0.1000) H05=(+2.220,-2.103,0.1272) fmax=0.07 fpair=('pallet_R41_S2_L1_ceil_l', 'F01_fork_l')
+  t=93.970 R34_S6_L0=(+1.730,+0.800,0.1000) H05=(+2.220,-2.104,0.1272) fmax=0.07 fpair=('pallet_R41_S2_L1_ceil_l', 'F01_fork_l')
+  t=93.990 R34_S6_L0=(+1.730,+0.800,0.1000) H05=(+2.220,-2.105,0.1272) fmax=0.07 fpair=('pallet_R41_S2_L1_ceil_l', 'F01_fork_l')
+  t=94.010 R34_S6_L0=(+1.730,+0.800,0.1000) H05=(+2.220,-2.106,0.1272) fmax=0.07 fpair=('pallet_R41_S2_L1_ceil_l', 'F01_fork_l')
+  t=94.030 R34_S6_L0=(+1.730,+0.800,0.1000) H05=(+2.220,-2.107,0.1272) fmax=0.07 fpair=('pallet_R41_S2_L1_ceil_l', 'F01_fork_l')
+  [wall     48s] sim t=  200.50s
+  [wall     96s] sim t=  400.50s
+  [wall    143s] sim t=  600.50s
+  [wall    188s] sim t=  800.50s
+  [wall    232s] sim t= 1000.50s
+  [wall    277s] sim t= 1200.50s
+  [wall    322s] sim t= 1400.50s
+mission done; op_errors: ['F03: putaway 物理校验失败 pallet_H05 dxy=0.154 dz=-0.041', 'F02: pick 物理校验失败 pallet_R34_S6_L0 dxy=4.052 dz=0.005', 'F01: putaway 物理校验失败 pallet_R34_S6_L0 dxy=3.083 dz=-0.000']
+audit max_pen: 0.0004578948187283573 violations: []
+saved reports/detfix/run9_l01.json wall=363s
