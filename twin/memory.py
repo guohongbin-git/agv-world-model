@@ -31,6 +31,8 @@ class DecisionMemory:
     @staticmethod
     def signature(reason: str, step_label: str, obstacle_x: float | None,
                   bucket_m: float = 0.05) -> str:
+        """obstacle_x 是观测通道的锥桶位置估计 (含噪, P0-3), 非真值 ——
+        反模式红线: 不记忆上帝视角状态。"""
         x = "" if obstacle_x is None else f"@{round(obstacle_x / bucket_m) * bucket_m:.2f}"
         return f"{reason}|{step_label}|{x}"
 

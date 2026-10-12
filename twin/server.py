@@ -222,14 +222,16 @@ class WorldService:
             for vid in cell.vehicles}
         RUNS.mkdir(exist_ok=True)
         from twin.memory import DecisionMemory
-        from twin.perception import Lidar
-        self.lidar = Lidar(cell)
+        from twin.observation import ObservationChannel
+        # 观测隔离 (P0-3): 决策侧 (避障/恢复/记忆) 只经 ObservationChannel
+        # 拿带噪估计; mocap 真值只留在环境操作 (place/remove_cones)。
+        self.obs = ObservationChannel(cell)
         self.memory = DecisionMemory(RUNS / "decision_memory.jsonl")
         self._blocked_sig: str | None = None
         self._blocked_t0: float | None = None
         self._blocked_retries = 0
         self.blocked_reason: str | None = None
-        self.cones: list[list[float]] = []
+        self._blocked_dir: float = 1.0    # 受阻时的行车方向 (恢复确认用)
         self._new_identity()
         self._verdict_seq = itertools.count(1)
         self.reconciliation = {}
@@ -605,13 +607,15 @@ class WorldService:
         for _ in range(n):
             d.ctrl[idx] = ramp.at(min(d.time - t0, ramp.duration))
             tick()
-            # P4 行车避障: 每 0.5s 仿真用 LiDAR 检查前方 (观测通道, 禁上帝视角)
+            # P4 行车避障: 每 0.5s 仿真经观测通道检查前方 (带噪扫描估计,
+            # 禁上帝视角 —— GPT 评审 P0-3: 不读 mocap 真值)
             if watch and d.time - last_check >= 0.5:
                 last_check = d.time
-                dd = self.lidar.front_distance(watch, axle_x=ad.view.axle_x)
-                if dd < 0.12:
+                dd = self.obs.front_obstacle(ad.view.vid, direction=watch)
+                if dd.near_dist_est < 0.12:
                     with self.gate.lock:
                         self.blocked_reason = "cone"
+                        self._blocked_dir = float(watch)
                     return False
             if abs(float(d.qpos[qadr]) - q_target) <= 1e-3:
                 if not calm or float(np.abs(d.qvel).max()) < 5e-3:
@@ -678,21 +682,30 @@ class WorldService:
                                                 float(d.time))
                             self.mode = "blocked"
                             self.step_label = f"受阻: {label}"
-                            obs_x = self.cones[0][0] if self.cones else None
+                            # 记忆签名只用观测估计 (P0-3: 不用注入真值坐标)
+                            est_xy, _ = self.obs.cone_estimate(vid)
+                            obs_x = est_xy[0] if est_xy else None
                             self._blocked_sig = self.memory.signature(
                                 br, label, obs_x)
                             self._blocked_t0 = time.monotonic()
                             self._blocked_retries = 0
+                            self.obs.reset_clear(vid)   # 恢复连胜清零
                             self.narrate("LiDAR 检测到前方障碍, 车辆已安全停车。"
                                          "原路径 PATH_INFEASIBLE (巷道无法绕行) — "
                                          "请移除障碍, 我会重新感知并恢复执行。")
                             hint = self.memory.hint(self._blocked_sig)
                             if hint:
                                 self.narrate(hint)
-                            while self.blocked_reason and self.mode == "blocked":
+                            # 恢复确认 = 连续 N 次扫描无障碍 (不因一句指令
+                            # 放行); reset 打断 (mode 离开 blocked) 同样退出。
+                            while (self.mode == "blocked"
+                                   and not self.obs.clear_confirmed(
+                                       vid, direction=self._blocked_dir)):
                                 time.sleep(0.2)
                             if self.mode != "blocked":
                                 return                      # reset 打断
+                            with self.gate.lock:
+                                self.blocked_reason = None
                             attempts += 1
                             self._blocked_retries = attempts
                             self.narrate(f"重新感知: 通道恢复确认 (第 {attempts} 次"
@@ -850,30 +863,30 @@ class WorldService:
         return {"ok": True, "key": key, "replayed": out.replayed,
                 "event_ids": list(out.event_ids)}
 
-    # ---------- 锥桶注入/移除 (mocap) ----------
+    # ---------- 锥桶注入/移除 (mocap; 环境操作, 非决策) ----------
     def place_cone(self, x: float) -> None:
+        """模拟现场人员放锥 (环境变化, 非任务指令)。mocap 真值只在此
+        与 evaluator (tests) 出现 —— 决策侧经 ObservationChannel 感知。"""
         d = self.cell.data
-        for i, mid in enumerate(self.cell.cone_mocapid):
+        for mid in self.cell.cone_mocapid:
             if mid < 0:
                 continue
             cur = d.mocap_pos[mid]
             if abs(cur[1]) < 1.0:                     # 场景内已有锥桶
                 continue
             d.mocap_pos[mid] = [x, 0.0, 0.045]
-            self.cones.append([x, 0.0])
             with self.db_lock:
                 self.world.emit(self.task_id, "ConeInjected",
                                 {"x_m": x}, float(d.time))
             return
 
     def remove_cones(self) -> None:
+        """移锥只改环境; 恢复与否由观测通道连续 N 次扫描确认
+        (clear_confirmed), 不在这里直接解除 blocked。"""
         d = self.cell.data
-        for i, mid in enumerate(self.cell.cone_mocapid):
+        for mid in self.cell.cone_mocapid:
             if mid >= 0:
                 d.mocap_pos[mid] = [0.0, 5.0, 0.045]
-        if self.cones:
-            self.cones = []
-            self.blocked_reason = None
 
     # ---------- 输出 ----------
     def narrate(self, text: str) -> None:
@@ -930,9 +943,20 @@ class WorldService:
             "step": self.step, "total": self.steps_total,
             "step_label": self.step_label,
             "events": events, "n_events": len(rows),
-            "cones": self.cones, "blocked": self.blocked_reason,
+            # UI 障碍标记走观测侧口径 (最近扫描估计, P0-3); 3D 场景本身
+            # 渲染的是物理真值, 这个标记表达「车看到了什么」。
+            "cones": self._observed_cones(), "blocked": self.blocked_reason,
             "chat": chats, "board": self.board(),
         }
+
+    def _observed_cones(self) -> list[list[float]]:
+        """各车最近一次扫描的锥桶估计 (无扫描/无命中 = 空)。"""
+        out = []
+        for vid in self.cell.vehicles:
+            est, _ = self.obs.cone_estimate(vid)
+            if est:
+                out.append([est[0], est[1]])
+        return out
 
 
 SVC = WorldService()

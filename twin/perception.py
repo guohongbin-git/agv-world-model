@@ -62,15 +62,21 @@ class Lidar:
         self.scan_count = 0
 
     # ------------------------------------------------------------------
-    def scan(self) -> dict:
+    def scan(self, *, axle_x: float | None = None,
+             direction: float = +1.0) -> dict:
         """执行一次扫描。返回 {dist: np[n], hits: [(x,y)...], cones: [(x,y)...]}。
 
         hits: 滤除自体/已知静态后的命中点 (世界坐标)。
         cones: 命中锥桶体的估计中心坐标 (占据栅格来源)。
+        axle_x: 观测原点 (该车前轴); 缺省 = cell 首车前轴 (单车 API 不变)。
+        direction: ±1 —— 扇形朝向行车方向 (倒车时旋 180°, 决策侧避障用)。
         """
         m, d = self.cell.model, self.cell.data
-        pnt = np.array([self.cell.axle_x, 0.0, self.z])
+        pnt = np.array([self.cell.axle_x if axle_x is None else float(axle_x),
+                        0.0, self.z])
         ang = np.linspace(-self.fov / 2, self.fov / 2, self.n)
+        if direction < 0:
+            ang = ang + np.pi
         dist = np.full(self.n, self.max_range)
         hits, cone_hits = [], []
         geomid = np.zeros(1, dtype=np.int32)
@@ -118,36 +124,6 @@ class Lidar:
                 self.grid[ix, iy] = True
         return {"dist": dist, "angles": ang, "hits": hits,
                 "cones": cone_hits}
-
-    # ------------------------------------------------------------------
-    def front_distance(self, direction: float = +1.0,
-                       axle_x: float | None = None) -> float:
-        """行车方向 ±45° 锥内最近障碍距离 (含噪), 无则 max_range。
-
-        axle_x: 观测原点 (该车前轴 x); 缺省 = cell 首车前轴 (单车 API 不变)。
-        P3 Wave2: F02 的行车避障用自己的前轴作原点。
-
-        实现: 对已注册动态障碍 (锥桶 mocap 体) 做 AABB-射线解析相交 ——
-        等价 mj_ray 但不受 binding 语义影响; 锥桶真值坐标只用于
-        射线相交测试, 不直接暴露给导航 (设计 §19.2 观测通道)。
-        """
-        d = self.cell.data
-        pnt_x = self.cell.axle_x if axle_x is None else float(axle_x)
-        best = self.max_range
-        for i, bid in enumerate(self.cone_bids):
-            if bid < 0 or self.cell.cone_mocapid[i] < 0:
-                continue
-            cx, cy, _ = d.mocap_pos[self.cell.cone_mocapid[i]]
-            dx = (cx - pnt_x) * direction
-            if not (0.0 < dx < self.max_range):
-                continue                       # 不在行车方向/量程内
-            lat = abs(cy)                      # 横向偏移
-            if lat > 0.025 + 0.045:            # 锥半径 + 车半宽裕量
-                continue
-            best = min(best, dx - 0.025)
-        if best < self.max_range:
-            best = max(0.01, best + float(self.rng.normal(0.0, self.sigma)))
-        return best
 
     def cone_positions(self) -> list[tuple[float, float]]:
         """占据栅格里被确认的锥桶单元中心 (供 UI/叙述; 估计坐标)。"""
