@@ -1082,18 +1082,31 @@ class MatrixService:
         self._tune_demand(t)
         self._maybe_reposition(t)
 
+    DEMAND_MULT_MAX = 3.0     # 加压上限: 实测 30min 压测 17.9× 雪崩
+                              # (chains 20/24 顶满 → 批次=1 → 队列淹死,
+                              #  拥堵剐蹭 32 条穿透采样; 3× 已足够触底)
     def _tune_demand(self, t: float) -> None:
-        """利用率反馈: <60% 加压 ×1.3 (≤64×); >85% 减压 ×0.85 (≥1×)。"""
+        """利用率反馈: <60% 加压 ×1.3 (≤3×); >85% 减压 ×0.85 (≥1×)。
+
+        队列感知: chains_open ≥ 80% 上限 视为饱和, 只减不增 ——
+        利用率低但队列满 = 派发/执行瓶颈, 加压只会淹死队列 (实测)。
+        """
         if not self._demand_on or not self._util_win:
             return
         util = self._util_win[-1]["fleet"]
         old = float(self.multiplier)
         new = old
         why = ""
-        if util < 0.60:
-            new, why = min(old * 1.3, 64.0), "util<60% → ×1.3 加压"
-        elif util > 0.85:
-            new, why = max(old * 0.85, 1.0), "util>85% → ×0.85 防过载"
+        n_open = sum(1 for c in self.chains
+                     if c.state in ("pending", "active"))
+        saturated = n_open >= 0.8 * MAX_CHAINS
+        if util < 0.60 and not saturated:
+            new, why = min(old * 1.3, self.DEMAND_MULT_MAX), \
+                "util<60% → ×1.3 加压"
+        elif util > 0.85 or (saturated and old > 1.0):
+            new, why = max(old * 0.85, 1.0), \
+                ("util>85%" if util > 0.85 else f"chains {n_open}/{MAX_CHAINS} 饱和") \
+                + " → ×0.85 防过载"
         if abs(new - old) < 1e-9:
             return
         self.multiplier = round(new, 3)
