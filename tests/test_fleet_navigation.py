@@ -349,11 +349,19 @@ def test_8task_determinism():
                              for n in free_nodes
                              if n not in occupied)[:4]
         assert len(free_stands) == 4 and slots
-        tasks = []
-        for i, name in enumerate(slots[:4]):
+        # 同格不同层并发取托会共享面位节点且两叉同空间交叉 (物理扰动,
+        # 真实仓库亦由库位互斥禁止) —— 与 head-on 用例同款约束: 每格只挑一层
+        tasks, used_slots = [], set()
+        for name in slots:
+            if len(tasks) == 4:
+                break
             slot = led.loc[name][len("slot:"):]
+            if slot in used_slots:
+                continue
+            used_slots.add(slot)
             tasks.append({"kind": "pick", "slot": slot,
-                          "level": int(name[-1]), "stand": free_stands[i]})
+                          "level": int(name[-1]),
+                          "stand": free_stands[len(tasks)]})
         docks = ("D_G11", "D_G22", "D_G33", "D_G44")
         tasks += [{"kind": "haul", "stand": free_stands[i], "dock": docks[i],
                    "after": [i]} for i in range(4)]

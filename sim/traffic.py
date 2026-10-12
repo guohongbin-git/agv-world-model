@@ -136,7 +136,25 @@ class TrafficManager:
             if not (anchor and deep):
                 self._release(vid, prev, is_node=True)
         if idx >= len(edges):                    # 路由终点: 清 lane 与历史节点
+            # detfix: 终点是槽位面 (sf) 时保留末边 lane 及其 crosses
+            # (stub:j:c:k + row:j) —— 槽位作业车体横占巷道走廊, 若
+            # 到位即释放, 等待 op 相位的车会成为无锁路障: 过路车
+            # (实测 F03 载运西行) 与后到取托车 (实测 F02 取 R34-S6
+            # 被 F04 遗留等待位顶偏, 插叉全程落空) 都从其底盘上碾
+            # 过。保留至下一路由首次 notify_progress 释放 (作业相位
+            # 的 op claim 对自持资源幂等)。
+            keep = set()
+            # 终点为槽位面 (sf) 或槽位嘴 (sm) —— 作业进场点 —— 时保留
+            # 末边 lane 及 crosses: 车体已横占该巷道走廊, 若到位即释放,
+            # 该车即成"无锁路障", 持锁过路车 (实测 A02_base↔F04_chassis
+            # 11mm 穿透) 与后到作业车都从其底盘碾过。保留至下一路由首次
+            # notify_progress (作业相位 op claim 对自持资源幂等)。
+            if edges and self.graph.pos[path[-1]].kind in ("sf", "sm"):
+                e = edges[-1]
+                keep = {e.lane, *e.crosses}
             for r in sorted(self.held[vid]):
+                if r in keep:
+                    continue
                 if r in self.lane_holder and self.lane_holder[r] == vid:
                     self._release(vid, r, is_node=False)
                 elif r in self.node_holder and self.node_holder[r] == vid \

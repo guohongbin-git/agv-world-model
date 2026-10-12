@@ -405,7 +405,11 @@ class MotionPlanner:
                 legs.append(Leg("yaw", "yaw", _QUADS[nq], sp["yaw"],
                                 sp["yaw_acc"]))
                 q = nq
-            legs.append(Leg("move", axis, target, sp["cruise"], sp["accel"]))
+            # 载货减速: 加减速惯性使叉上/顶载托盘沿摩擦面滑移 (haul 实测
+            # dxy 0.039), 速度/加速度各降 40%/50%
+            f = 0.6 if carrying else 1.0
+            legs.append(Leg("move", axis, target, sp["cruise"] * f,
+                            sp["accel"] * 0.5 if carrying else sp["accel"]))
         return legs
 
 

@@ -28,7 +28,7 @@ SPEC = [
     ("rack_beam", "PaintedMetal001", "mix", (0.60, 0.13, 0.01)),
     ("rack_upright", "PaintedMetal001", "mix", (0.03, 0.08, 0.26)),
     ("machinery_dark", "MetalPlates006", "mix", (0.05, 0.05, 0.06)),
-    ("fork_steel", "MetalPlates006", "raw", None),
+    ("fork_steel", "MetalPlates006", "mix", (0.32, 0.33, 0.35)),
     ("pallet_wood", "Wood096", "mul", (0.72, 0.48, 0.28)),
 ]
 
