@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>W3b · 矩阵仓库数字空间 (8 车 / 384 货位)</title>
+<style>
+:root{--bg:#0d1117;--panel:#161b22;--line:#30363d;--acc:#f0883e;--txt:#e6edf3;
+--dim:#8b949e;--ok:#3fb950;--warn:#d29922;--bad:#f85149;--blue:#58a6ff;--pur:#bc8cff}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--txt);font:13px/1.5 -apple-system,"PingFang SC",sans-serif;overflow:hidden}
+#app{display:flex;height:100vh}
+#stage{position:relative;flex:1;min-width:0}
+canvas{display:block}
+.hud{position:absolute;top:12px;left:12px;background:#161b22cc;backdrop-filter:blur(10px);
+border:1px solid var(--line);border-radius:12px;padding:10px 13px;min-width:238px;z-index:5}
+.hud h1{font-size:13.5px;margin-bottom:2px}
+.hud .sub{color:var(--dim);font-size:10.5px;margin-bottom:6px}
+.row{display:flex;gap:8px;margin:3px 0;align-items:center}
+.k{color:var(--dim);width:66px;font-size:11px;flex:none}
+.v{font-variant-numeric:tabular-nums;font-weight:600}
+.badge{display:inline-block;padding:1px 8px;border-radius:99px;font-size:10.5px;font-weight:700}
+.m-idle{background:#30363d}.m-running{background:#1a7f37}.m-paused{background:#9e6a03}
+.m-stopped{background:#58a6ff33;color:var(--blue)}.m-failed{background:#da3633}
+.legend{position:absolute;top:12px;right:12px;background:#161b22cc;border:1px solid var(--line);
+border-radius:10px;padding:8px 11px;font-size:11px;color:var(--dim);z-index:5;line-height:1.8}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.speedbar{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:6px;
+background:#161b22cc;backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:12px;
+padding:7px 9px;z-index:5}
+.speedbar button{background:#21262d;color:var(--txt);border:1px solid var(--line);border-radius:8px;
+padding:4px 11px;font-size:12px;cursor:pointer}
+.speedbar button.on{background:var(--acc);color:#0d1117;border-color:var(--acc);font-weight:700}
+.vehbar{position:absolute;bottom:14px;left:14px;display:flex;gap:5px;background:#161b22cc;
+border:1px solid var(--line);border-radius:12px;padding:7px 9px;z-index:5;flex-wrap:wrap;max-width:46%}
+.vehbar button{background:#21262d;color:var(--txt);border:1px solid var(--line);border-radius:8px;
+padding:4px 9px;font-size:11.5px;cursor:pointer;font-variant-numeric:tabular-nums}
+.vehbar button.on{border-color:var(--acc);color:var(--acc);font-weight:700}
+#rail{width:440px;border-left:1px solid var(--line);display:flex;flex-direction:column;background:var(--panel)}
+#tabs{display:flex;border-bottom:1px solid var(--line)}
+#tabs button{flex:1;background:none;border:0;color:var(--dim);padding:10px 4px;font-size:12.5px;
+font-weight:700;cursor:pointer;border-bottom:2px solid transparent}
+#tabs button.on{color:var(--txt);border-bottom-color:var(--acc)}
+.pane{flex:1;display:none;flex-direction:column;min-height:0}
+.pane.on{display:flex}
+#msgs{flex:1;overflow-y:auto;padding:8px 12px}
+.msg{margin:6px 0;padding:8px 10px;border-radius:10px;max-width:97%;white-space:pre-wrap;font-size:12.5px}
+.user{background:#1f6feb22;border:1px solid #1f6feb55;margin-left:auto}
+.agent{background:#21262d;border:1px solid var(--line)}
+.tool{font-size:10.5px;color:var(--acc);margin-top:3px;font-family:ui-monospace,monospace}
+#in{display:flex;gap:6px;padding:8px 10px;border-top:1px solid var(--line)}
+#in input{flex:1;background:#0d1117;border:1px solid var(--line);color:var(--txt);border-radius:9px;
+padding:8px 10px;font-size:13px;outline:none}
+#in input:focus{border-color:var(--acc)}
+#in button{background:var(--acc);color:#0d1117;border:0;border-radius:9px;padding:0 14px;font-weight:700;cursor:pointer}
+#decs{flex:1;overflow-y:auto;padding:8px 10px}
+.card{border:1px solid var(--line);border-left:3px solid var(--blue);border-radius:9px;
+padding:7px 9px;margin:6px 0;background:#0d1117aa;font-size:12px}
+.card.commit{border-left-color:var(--ok)}
+.card.fail{border-left-color:var(--bad)}
+.card .hd{display:flex;gap:7px;align-items:center;margin-bottom:3px;flex-wrap:wrap}
+.card .hd b{font-family:ui-monospace,monospace;font-size:11.5px}
+.card .t{color:var(--dim);font-size:10.5px;font-variant-numeric:tabular-nums}
+.st{padding:0 7px;border-radius:99px;font-size:10px;font-weight:700}
+.st-OPTIMAL{background:#1a7f37}.st-FEASIBLE{background:#9e6a03}
+.st-FALLBACK_GREEDY{background:#bd561d}.st-INFEASIBLE,.st-INFEASIBLE_FILTER{background:#da3633}
+.st-RUNTIME_BALANCE{background:#1f6feb}
+.chips{display:flex;gap:4px;flex-wrap:wrap;margin:2px 0}
+.chip{padding:0 7px;border-radius:6px;background:#21262d;border:1px solid var(--line);
+font-size:10.5px;font-family:ui-monospace,monospace;color:var(--dim)}
+.chip.sel{color:#0d1117;font-weight:700}
+.chip.f{border-color:#f0883e88}.chip.f.sel{background:var(--acc)}
+.chip.a{border-color:#58a6ff88}.chip.a.sel{background:var(--blue)}
+.reason{color:var(--dim);font-size:11px;margin-top:2px;font-family:ui-monospace,monospace}
+.ms{color:var(--dim);font-size:10.5px;font-variant-numeric:tabular-nums}
+#mon{flex:1;overflow-y:auto;padding:10px 12px}
+.mgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.metric{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:#0d1117aa}
+.metric .lab{color:var(--dim);font-size:10.5px}
+.metric .val{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums}
+.metric .val small{font-size:11px;color:var(--dim);font-weight:600}
+.ubox{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:#0d1117aa;margin-top:8px}
+.ubox .lab{color:var(--dim);font-size:10.5px;margin-bottom:5px}
+.urow{display:flex;align-items:center;gap:7px;margin:3px 0;font-size:11px;font-variant-numeric:tabular-nums}
+.urow .vid{width:88px;font-family:ui-monospace,monospace;flex:none}
+.ubar{flex:1;height:8px;background:#21262d;border-radius:5px;overflow:hidden}
+.ubar i{display:block;height:100%;border-radius:5px}
+.urow .pc{width:44px;text-align:right;color:var(--dim);flex:none}
+#evs{flex:1;overflow-y:auto;padding:6px 10px;font-size:11px;font-family:ui-monospace,monospace}
+.ev{padding:2.5px 4px;border-bottom:1px dashed #21262d;display:flex;gap:7px}
+.ev .t{color:var(--dim);flex:none;width:56px;text-align:right}
+.ev .vid{flex:none;width:38px;font-weight:700}
+.ev .kind{flex:none;width:96px;font-weight:700}
+.ev .d{color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.k-claim_wait .kind{color:var(--warn)}.k-reroute .kind{color:#e3b341}
+.k-arrival .kind{color:#58a6ff88}.k-release .kind{color:#58a6ff66}
+.k-dispatch .kind{color:var(--blue)}.k-order_committed .kind{color:var(--ok)}
+.k-task_failed .kind,.k-chain_failed .kind,.k-stall .kind,.k-fatal .kind{color:var(--bad)}
+.k-cone_injected .kind,.k-cone_cleared .kind{color:var(--pur)}
+.k-assign .kind{color:var(--acc)}.k-op_done .kind{color:var(--ok)}
+.k-op_phase .kind,.k-claim_ok .kind{color:var(--dim)}
+::-webkit-scrollbar{width:9px}::-webkit-scrollbar-thumb{background:#30363d;border-radius:5px}
+</style>
+<script type="importmap">
+{"imports":{"three":"./vendor/three.module.js","three/addons/":"./vendor/addons/"}}
+</script>
+</head>
+<body>
+<div id="app">
+  <div id="stage">
+    <div class="hud">
+      <h1>W3b · 矩阵仓库数字空间</h1>
+      <div class="sub">MuJoCo 1kHz · CP-SAT 调度 · 锁矩阵交通 · B1 物理证据提交</div>
+      <div class="row"><span class="k">状态</span><span id="mode" class="badge m-idle">idle</span></div>
+      <div class="row"><span class="k">仿真时间</span><span id="t" class="v">0.0 s</span></div>
+      <div class="row"><span class="k">吞吐</span><span id="thr" class="v" style="color:var(--acc)">0 任务/h</span></div>
+      <div class="row"><span class="k">订单</span><span id="ord" class="v">完成 0 · 在飞 0</span></div>
+      <div class="row"><span class="k">仿真/墙钟</span><span id="ratio" class="v">—</span></div>
+    </div>
+    <div class="legend">
+      <div><i style="background:#3fb950"></i>L1 轻型 (快)</div>
+      <div><i style="background:#d29922"></i>L2 中型</div>
+      <div><i style="background:#f85149"></i>L3 重型 (慢)</div>
+      <div><i style="background:#f0883e"></i>叉车 · <i style="background:#388bfd"></i>AGV</div>
+      <div><i style="background:#e8b53a"></i>黄虚线=通道 · 白框=组/停车</div>
+      <div><i style="background:#58a6ff"></i>蓝框=交接/交付台</div>
+    </div>
+    <div class="vehbar" id="vb"></div>
+    <div class="speedbar" id="sp"></div>
+  </div>
+  <div id="rail">
+    <div id="tabs">
+      <button data-t="chat" class="on">AGENT</button>
+      <button data-t="decs">决策面板</button>
+      <button data-t="mon">长跑监控</button>
+      <button data-t="evs">锁/事件流</button>
+    </div>
+    <div class="pane on" id="p-chat">
+      <div id="msgs"></div>
+      <div id="in"><input id="txt" placeholder="例: 下 10 个订单 / 注入锥桶 col:2 / 库存 / 状态" autocomplete="off"><button id="send">发送</button></div>
+    </div>
+    <div class="pane" id="p-decs"><div id="decs"></div></div>
+    <div class="pane" id="p-mon"><div id="mon"></div></div>
+    <div class="pane" id="p-evs"><div id="evs"></div></div>
+  </div>
+</div>
+<script type="module">
+window.__probe = {errors:[], booted:false, wsOpen:false, states:0, decisions:0, frames:0, veh:0};
+window.addEventListener('error', e => {
+  window.__probe.errors.push(String(e.message||e));
+  document.title = 'BOOTERR:' + String(e.message||e).slice(0,110);
+});
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+
+const el = id => document.getElementById(id);
+const LVC = {L1:0x3fb950, L2:0xd29922, L3:0xf85149};
+const mkMat = (c, opts={}) => new THREE.MeshStandardMaterial({color:c, roughness:.85, metalness:.08, ...opts});
+
+// ── renderer / scene ─────────────────────────────────────────────
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(el('stage').clientWidth, el('stage').clientHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+el('stage').appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x21252b);
+scene.fog = new THREE.Fog(0x21252b, 14, 34);
+scene.add(new THREE.HemisphereLight(0x93a4bd, 0x2a2620, 0.75));
+const sun = new THREE.DirectionalLight(0xfff2e0, 2.0);
+sun.position.set(5, 9, -4); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, {left:-4, right:4, top:4, bottom:-4, far:24});
+sun.shadow.bias = -0.0006;
+scene.add(sun);
+const cam = new THREE.PerspectiveCamera(42, el('stage').clientWidth/el('stage').clientHeight, 0.01, 80);
+cam.position.set(0, 8.6, 2.4);
+const ctl = new OrbitControls(cam, renderer.domElement);
+ctl.target.set(0, 0, 0); ctl.enableDamping = true; ctl.maxPolarAngle = 1.45;
+ctl.minDistance = .4; ctl.maxDistance = 20;
+
+// ── layout fetch ────────────────────────────────────────────────
+let L = null, slotIndex = [];
+const vehNodes = {}, vehTarget = {}, palletInst = {mesh:null, list:[]};
+const coneMeshes = [];
+async function boot(){
+  L = await (await fetch('/api/layout')).json();
+  buildStatic();
+  buildVehicles(L.vehicles);
+  buildPallets(48);
+  window.__probe.booted = true; window.__probe.veh = Object.keys(vehNodes).length;
+}
+function M(x, z, y=0){ return new THREE.Vector3(x, y, -z); }   // mujoco→three
+
+function buildStatic(){
+  const {field, matrix, col_xs, row_ys, groups, stands, docks, parks, group_w, group_h} = L;
+  const W = matrix.w, H = matrix.h;
+  // 地面
+  const pad = new THREE.Mesh(new THREE.PlaneGeometry(40, 40),
+      new THREE.MeshStandardMaterial({color:0x2b3038, roughness:.96}));
+  pad.rotation.x = -Math.PI/2; pad.position.y = -0.003; pad.receiveShadow = true; scene.add(pad);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(field.w, field.h),
+      mkMat(0x343a44, {roughness:.9}));
+  floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; scene.add(floor);
+  // 黄虚线 (通道中心): 复刻 _dash_line (段 0.08 / 间隔 0.06)
+  const yspan = H/2 + 0.32 + 0.10, xspan = W/2 + 0.50 + 0.05;
+  const dashes = [];
+  for (const x of col_xs){
+    for (let c = -yspan + 0.04; c <= yspan; c += 0.14) dashes.push([x, c, true]);
+  }
+  for (const y of row_ys){
+    for (let c = -xspan + 0.04; c <= xspan; c += 0.14) dashes.push([y, c, false]);
+  }
+  const dGeo = new THREE.BoxGeometry(0.005, 0.0008, 0.080);
+  const dInst = new THREE.InstancedMesh(dGeo, mkMat(0xe8b53a, {roughness:.6}), dashes.length);
+  const mtx = new THREE.Matrix4(), q0 = new THREE.Quaternion();
+  dashes.forEach(([a, b, vert], i) => {
+    mtx.compose(M(vert ? a : b, vert ? b : a, 0.0008), vert ? q0 :
+      q0.clone().setFromAxisAngle(new THREE.Vector3(0,1,0), Math.PI/2),
+      new THREE.Vector3(1,1,1));
+    dInst.setMatrixAt(i, mtx);
+  });
+  scene.add(dInst);
+  // 白框: 货架组轮廓 + 停车点 (细带 t=4mm)
+  const outline = (cx, cz, hx, hz, color, y=0.0008) => {
+    const t = 0.004, g = new THREE.Group();
+    const mat = mkMat(color, {roughness:.5});
+    for (const [dx, dz, sx, sz] of [
+        [0, hz, hx+t, t], [0, -hz, hx+t, t], [hx, 0, t, hz+t], [-hx, 0, t, hz+t]]){
+      const m = new THREE.Mesh(new THREE.BoxGeometry(sx*2, 0.0008, sz*2), mat);
+      m.position.copy(M(cx+dx, cz+dz, y)); g.add(m);
+    }
+    scene.add(g);
+  };
+  for (const g of groups) outline(g.x, g.y, group_w/2, group_h/2, 0xeceff4);
+  for (const [vid, [px, py]] of Object.entries(parks)) outline(px, py, 0.18, 0.14, 0xeceff4);
+  // 交接/交付台: 蓝框 + 台面条带 + 导向墙
+  for (const s of [...stands, ...docks]){
+    outline(s.x, s.y, 0.17, 0.22, 0x58a6ff);
+    const g = new THREE.Group();
+    const strip = mkMat(0x3d5a6e, {roughness:.7});
+    for (const [sx, sz] of [[.033,.047],[.033,-.047],[-.033,.047],[-.033,-.047]]){
+      const m = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.004, 0.046), strip);
+      m.position.copy(M(sx, sz, L.stand_top_z - 0.002)); g.add(m);
+    }
+    const wall = mkMat(0x2a3946, {roughness:.8});
+    for (const sz of [0.140, -0.140]){
+      const m = new THREE.Mesh(new THREE.BoxGeometry(0.18, L.stand_top_z, 0.016), wall);
+      m.position.copy(M(0, sz, L.stand_top_z/2)); g.add(m);
+    }
+    g.position.copy(M(s.x, s.y, 0)); g.rotation.y = s.id.startsWith('H') ? Math.PI/2 : 0;
+    scene.add(g);
+  }
+  // 货架: 立柱 + 横梁 (instanced) + 货位占用块
+  const bayZ = [];  // [x, y] 每架
+  slotIndex = [];
+  for (const s of L.slots){
+    const key = s.id.slice(0, s.id.lastIndexOf('-L'));
+    if (!slotIndex.some(e => e.key === key)) slotIndex.push({key, x:s.x, y:s.y});
+  }
+  const uprights = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(0.008, 0.45, 0.116),
+      mkMat(0x3a4048, {roughness:.6, metalness:.3}), slotIndex.length*2);
+  const beams = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(0.006, 0.005, 0.11),
+      mkMat(0xd96f2a, {roughness:.55}), slotIndex.length*L.levels_z.length*2);
+  let ui = 0, bi = 0;
+  const iq = new THREE.Quaternion();
+  for (const b of slotIndex){
+    for (const dx of [-0.072, 0.072]){
+      mtx.compose(M(b.x+dx, b.y, 0.225), iq, new THREE.Vector3(1,1,1));
+      uprights.setMatrixAt(ui++, mtx);
+    }
+    for (const z of L.levels_z) for (const dx of [-0.027, 0.027]){
+      mtx.compose(M(b.x+dx, b.y, z-0.0025), iq, new THREE.Vector3(1,1,1));
+      beams.setMatrixAt(bi++, mtx);
+    }
+  }
+  scene.add(uprights, beams);
+  // 货位占用半透明块 (384, 隐藏时 scale 0)
+  const occMesh = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(0.072, 0.030, 0.050),
+      new THREE.MeshStandardMaterial({color:0xd29922, transparent:true, opacity:.34,
+        roughness:.7, emissive:0x30240a}), L.slots.length);
+  occMesh.name = 'occMesh';
+  scene.add(occMesh);
+  L.slots.forEach((s, i) => {
+    mtx.compose(M(s.x, s.y, s.z + 0.017), iq, new THREE.Vector3(0,0,0));
+    occMesh.setMatrixAt(i, mtx);
+  });
+  occMesh.userData.bySlot = Object.fromEntries(L.slots.map((s, i) => [s.id, i]));
+}
+function buildVehicles(vehMeta){
+  for (const v of vehMeta){
+    const g = new THREE.Group();
+    const lc = LVC[v.level];
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.3, 0.32),
+        new THREE.MeshBasicMaterial({visible:false}));
+    body.name = 'hit'; body.position.y = 0.15; g.add(body);
+    if (v.type === 'forklift'){
+      const c = v.vid.charCodeAt(1) % 2 ? 0xf2a53a : 0xf0883e;
+      const b = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.035, 0.15), mkMat(c));
+      b.position.set(-0.085, 0.0175, 0); b.castShadow = true; g.add(b);
+      const cw = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.035, 0.12), mkMat(0x2c313a));
+      cw.position.set(-0.20, 0.0175, 0); g.add(cw);
+      const mastM = mkMat(0x424a56, {metalness:.5, roughness:.4});
+      for (const dz of [-0.045, 0.045]){
+        const m = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.5, 0.012), mastM);
+        m.position.set(0.005, 0.25, dz); m.castShadow = true; g.add(m);
+      }
+      const top = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.012, 0.102), mastM);
+      top.position.set(0.005, 0.497, 0); g.add(top);
+      const car = new THREE.Group(); car.name = 'carriage';
+      const forkM = mkMat(0x1b1f26, {metalness:.6, roughness:.35});
+      for (const dz of [-0.015, 0.015]){
+        const f = new THREE.Mesh(new THREE.BoxGeometry(0.080, 0.0025, 0.010), forkM);
+        f.position.set(0.080, 0.0648, dz); f.castShadow = true; car.add(f);
+      }
+      const pl = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.016, 0.04), mkMat(0x4a5260));
+      pl.position.set(0.020, 0.068, 0); car.add(pl);
+      g.add(car);
+    } else {
+      const b = new THREE.Mesh(new THREE.CylinderGeometry(0.120, 0.120, 0.060, 28), mkMat(0x2f66d0));
+      b.position.y = 0.032; b.castShadow = true; g.add(b);
+      const st = new THREE.Mesh(new THREE.BoxGeometry(0.040, 0.061, 0.008), mkMat(0xe8c53a));
+      st.position.set(0.095, 0.032, 0); g.add(st);
+      const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.004, 18), mkMat(0xb8bfc9, {metalness:.7}));
+      pin.name = 'pin'; pin.position.y = 0.062; g.add(pin);
+    }
+    // 等级色环 + 标签
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.148, 0.168, 36),
+        new THREE.MeshBasicMaterial({color:lc, transparent:true, opacity:.85, side:THREE.DoubleSide}));
+    ring.rotation.x = -Math.PI/2; ring.position.y = 0.0015; ring.name = 'ring'; g.add(ring);
+    g.add(makeLabel(v.vid + '·' + v.level, lc));
+    scene.add(g);
+    vehNodes[v.vid] = {node:g, meta:v};
+    vehTarget[v.vid] = {x:0, y:0, yaw:0, lift:0};
+  }
+}
+function makeLabel(text, color){
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 72;
+  const cx = cv.getContext('2d');
+  cx.fillStyle = '#0d1117dd'; cx.fillRect(0, 0, 256, 72);
+  cx.strokeStyle = '#' + color.toString(16).padStart(6, '0'); cx.lineWidth = 5;
+  cx.strokeRect(3, 3, 250, 66);
+  cx.font = '700 40px ui-monospace,monospace'; cx.textAlign = 'center'; cx.textBaseline = 'middle';
+  cx.fillStyle = '#e6edf3'; cx.fillText(text, 128, 38);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+      map:new THREE.CanvasTexture(cv), transparent:true, depthTest:false}));
+  sp.scale.set(0.30, 0.085, 1); sp.position.y = 0.62;
+  return sp;
+}
+function buildPallets(n){
+  const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(0.080, 0.032, 0.060),
+      mkMat(0x9a7748, {roughness:.9}), n);
+  inst.castShadow = true; inst.count = 0;
+  scene.add(inst);
+  palletInst.mesh = inst;
+}
+// ── 跟随相机 ────────────────────────────────────────────────────
+let follow = null;
+const vb = el('vb');
+function vehBtn(vid){
+  const b = document.createElement('button');
+  b.textContent = vid; b.dataset.v = vid;
+  b.onclick = () => setFollow(follow === vid ? null : vid);
+  return b;
+}
+function setFollow(vid){
+  follow = vid;
+  vb.querySelectorAll('button').forEach(b => {
+    b.classList.toggle('on', b.dataset.v === vid);
+    if (b.dataset.v) b.textContent = b.dataset.v + (vehNodes[b.dataset.v].meta._task
+        ? ' · ' + vehNodes[b.dataset.v].meta._task : '');
+  });
+  if (!vid){ cam.position.set(0, 8.6, 2.4); ctl.target.set(0, 0, 0); }
+}
+renderer.domElement.addEventListener('pointerdown', ev => {
+  if (ev.target !== renderer.domElement) return;
+  const rect = renderer.domElement.getBoundingClientRect();
+  const nd = new THREE.Vector2(((ev.clientX-rect.left)/rect.width)*2-1,
+                                -((ev.clientY-rect.top)/rect.height)*2+1);
+  const rc = new THREE.Raycaster(); rc.setFromCamera(nd, cam);
+  const hits = rc.intersectObjects(Object.values(vehNodes).map(v => v.node), true);
+  for (const h of hits){
+    let o = h.object;
+    while (o && !Object.values(vehNodes).some(v => v.node === o)) o = o.parent;
+    const vid = Object.keys(vehNodes).find(k => vehNodes[k].node === o);
+    if (vid){ setFollow(vid); return; }
+  }
+});
+// ── ws 状态流 ──────────────────────────────────────────────────
+let ws, chatCur = 0, lastSt = null, wallPrev = performance.now(), simPrev = 0;
+function connect(){
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => { window.__probe.wsOpen = true; };
+  ws.onmessage = e => apply(JSON.parse(e.data));
+  ws.onclose = () => setTimeout(connect, 1200);
+}
+connect();
+const occMtx = new THREE.Matrix4(), occQ = new THREE.Quaternion();
+const occOn = new THREE.Vector3(1,1,1), occOff = new THREE.Vector3(0,0,0);
+function apply(s){
+  window.__probe.states++;
+  lastSt = s;
+  // HUD
+  el('t').textContent = (s.sim_t||0).toFixed(1) + ' s';
+  const mb = el('mode'); mb.textContent = s.mode + (s.paused ? ' · 暂停' : '');
+  mb.className = 'badge m-' + s.mode;
+  const m = s.metrics || {};
+  el('thr').textContent = `${m.throughput_tasks_h||0} 任务/h`;
+  el('ord').textContent = `完成 ${m.orders_done||0} · 在飞 ${m.chains_open||0} · 失败 ${m.tasks_failed||0}`;
+  const dw = (performance.now() - wallPrev)/1000, ds = (s.sim_t||0) - simPrev;
+  if (dw > 0.5 && ds >= 0){ el('ratio').textContent = (ds/dw).toFixed(2) + ' ×'; wallPrev = performance.now(); simPrev = s.sim_t; }
+  document.querySelectorAll('#sp button').forEach(b =>
+    b.classList.toggle('on', parseFloat(b.dataset.v) === s.speed));
+  // 车辆目标位姿
+  for (const v of (s.vehicles || [])){
+    const n = vehNodes[v.vid];
+    if (!n) continue;
+    vehTarget[v.vid] = v;
+    n.meta._task = v.busy ? (v.task + ' ' + (v.arg || '')).trim() : null;
+    const ring = n.node.getObjectByName('ring');
+    if (ring) ring.material.opacity = v.busy ? 1.0 : 0.55;
+  }
+  if (follow) vb.querySelectorAll('button').forEach(b => {
+    if (b.dataset.v) b.textContent = b.dataset.v + (vehNodes[b.dataset.v].meta._task
+        ? ' · ' + vehNodes[b.dataset.v].meta._task : '');
+  });
+  // 托盘: instanced 更新
+  const pl = s.pallets || [];
+  const inst = palletInst.mesh;
+  if (inst){
+    inst.count = Math.min(pl.length, inst.instanceMatrix.count);
+    pl.slice(0, inst.count).forEach((p, i) => {
+      occMtx.compose(M(p.x, p.y, (p.z || 0) + 0.009), occQ, occOn);
+      inst.setMatrixAt(i, occMtx);
+    });
+    inst.instanceMatrix.needsUpdate = true;
+    // 货位占用: 托盘贴近货位中心 → 点亮该层
+    const occMesh = scene.getObjectByName('occMesh');
+    if (occMesh){
+      const idx = occMesh.userData.bySlot;
+      const on = new Set();
+      for (const p of pl){
+        let best = null, bd = 0.055;
+        for (const s2 of L.slots){
+          const d = Math.hypot(p.x - s2.x, p.y - s2.y);
+          if (d < bd && Math.abs((p.z||0) - s2.z) < 0.05){ bd = d; best = s2.id; }
+        }
+        if (best) on.add(best);
+      }
+      for (const [sid, i] of Object.entries(idx)){
+        occMtx.compose(M(0,0,-5), occQ, on.has(sid) ? occOn : occOff);
+        occMesh.setMatrixAt(i, occMtx);
+      }
+      occMesh.instanceMatrix.needsUpdate = true;
+    }
+  }
+  // 锥桶
+  const cones = s.cones || [];
+  while (coneMeshes.length < cones.length){
+    const c = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.09, 20),
+        mkMat(0xff6a00, {roughness:.5, emissive:0x441503}));
+    c.position.y = 0.045; c.castShadow = true;
+    const g = new THREE.Group(); g.add(c); scene.add(g); coneMeshes.push(g);
+  }
+  coneMeshes.forEach((g, i) => { g.visible = i < cones.length;
+    if (cones[i]) g.position.copy(M(cones[i][0], cones[i][1], 0)); });
+  // 聊天
+  for (const c of (s.chat || [])) if (c.seq > chatCur){ chatCur = c.seq; addMsg(c.role, c.text); }
+  // 决策卡
+  for (const d of (s.decisions || [])) addDecision(d);
+  // 事件流
+  for (const e of (s.feeds || [])) addEvent(e);
+  renderMonitor(s);
+}
+// ── 决策面板 ────────────────────────────────────────────────────
+const decBox = el('decs');
+const ST_ZH = {OPTIMAL:'最优', FEASIBLE:'可行', FALLBACK_GREEDY:'贪心回退',
+               INFEASIBLE:'不可行', INFEASIBLE_FILTER:'能力不足'};
+function addDecision(d){
+  window.__probe.decisions++;
+  const div = document.createElement('div');
+  if (d.type === 'TaskCommitted'){
+    div.className = 'card commit';
+    div.innerHTML = `<div class="hd"><span class="t">${(+d.ts_s||0).toFixed(1)}s</span>
+      <b>${d.task_id}</b><span class="st st-OPTIMAL">✓ 已提交 COMMITTED</span></div>
+      <div class="reason">物理证据: ${JSON.stringify(d.evidence_keys||[])} — 台账与位姿校验通过 (B1)</div>`;
+  } else if (d.type === 'TaskReassigned'){
+    div.className = 'card';
+    div.innerHTML = `<div class="hd"><span class="t">${(+d.ts_s||0).toFixed(1)}s</span>
+      <b>${d.task_id}</b><span class="st st-RUNTIME_BALANCE">改派 RUNTIME_BALANCE</span></div>
+      <div>${d.leg}: <b>${d.from}</b> → <b style="color:var(--acc)">${d.to}</b></div>
+      <div class="reason">${d.reason||''}</div>`;
+  } else if (d.type === 'DemandTuned'){
+    div.className = 'card';
+    div.innerHTML = `<div class="hd"><span class="t">${(+d.ts_s||0).toFixed(1)}s</span>
+      <b>需求倍率自适应</b><span class="st st-RUNTIME_BALANCE">FEEDBACK</span></div>
+      <div>${(d.old_multiplier||1)}× → <b style="color:var(--acc)">${(d.new_multiplier||1)}×</b></div>
+      <div class="reason">${d.reason||''}</div>`;
+  } else if (d.type === 'TaskUnassigned'){
+    div.className = 'card fail';
+    div.innerHTML = `<div class="hd"><span class="t">${(+d.ts_s||0).toFixed(1)}s</span>
+      <b>${d.task_id}</b><span class="st st-INFEASIBLE">${d.solver_status}</span></div>
+      <div class="reason">${d.reason||''}</div>`;
+  } else {
+    const chips = (d.candidates||[]).map(v => {
+      const isF = v.startsWith('F');
+      const sel = Object.values(d.chosen||{}).includes(v);
+      return `<span class="chip ${isF?'f':'a'} ${sel?'sel':''}">${v}</span>`;
+    }).join('');
+    const chosen = Object.entries(d.chosen||{}).map(([leg, v]) =>
+      `${v}<span class="ms">(${leg.split(':')[1]})</span>`).join(' + ');
+    div.className = 'card';
+    div.innerHTML = `
+      <div class="hd"><span class="t">${(+d.ts_s||0).toFixed(1)}s</span><b>${d.task_id}</b>
+        <span class="st st-${d.solver_status}">${d.solver_status} ${ST_ZH[d.solver_status]||''}</span>
+        <span class="ms">solve ${(+d.solve_ms||0).toFixed(1)}ms · makespan ${d.makespan_ticks??'—'} ticks</span></div>
+      <div class="chips">${chips}</div>
+      <div>选定: <b>${chosen}</b></div>
+      <div class="reason">${d.reason||''}</div>`;
+  }
+  decBox.prepend(div);
+  while (decBox.children.length > 160) decBox.lastChild.remove();
+}
+// ── 事件流 ─────────────────────────────────────────────────────
+const evBox = el('evs');
+const KIND_ZH = {claim_wait:'锁等待', claim_ok:'锁获取', arrival:'到达', release:'释放',
+  release_all:'全释放', reroute:'绕行', assign:'指派', dispatch:'任务下发',
+  op_phase:'作业相位', op_done:'作业完成', order_committed:'订单提交✓',
+  task_failed:'任务失败', chain_failed:'链失败', cone_injected:'锥桶注入',
+  cone_cleared:'锥桶移除', stall:'停滞告警', fatal:'致命异常'};
+function addEvent(e){
+  const d = document.createElement('div');
+  d.className = 'ev k-' + e.kind;
+  d.innerHTML = `<span class="t">${(+e.t||0).toFixed(1)}s</span><span class="vid">${e.vid||''}</span>
+    <span class="kind">${KIND_ZH[e.kind]||e.kind}</span><span class="d">${e.detail||''}</span>`;
+  evBox.prepend(d);
+  while (evBox.children.length > 400) evBox.lastChild.remove();
+}
+// ── 监控面板 ───────────────────────────────────────────────────
+const monBox = el('mon');
+function renderMonitor(s){
+  const m = s.metrics || {}, uw = m.util_window || {};
+  const u = (uw.per_vehicle && uw.n_samples >= 2) ? uw.per_vehicle
+                                                   : (m.utilization || {});
+  const fleetU = Math.round((uw.fleet||0)*100);
+  const rows = (s.vehicles || []).map(v => {
+    const pc = Math.round((u[v.vid]||0)*100);
+    const c = '#' + LVC[v.level].toString(16).padStart(6,'0');
+    const task = v.busy ? v.task : 'idle';
+    return `<div class="urow"><span class="vid" style="color:${c}">${v.vid}·${v.level}</span>
+      <span style="width:46px;color:var(--dim);flex:none">${task}</span>
+      <div class="ubar"><i style="width:${pc}%;background:${c}"></i></div>
+      <span class="pc" style="${pc<60?'color:var(--warn)':''}">${pc}%</span></div>`;
+  }).join('');
+  monBox.innerHTML = `
+  <div class="mgrid">
+    <div class="metric"><div class="lab">车队利用率 (5min 滑动窗, 反馈目标 ≥60%)</div>
+      <div class="val" style="color:${fleetU>=60?'var(--ok)':'var(--warn)'}">${fleetU}%<small> · 需求倍率 ${uw.multiplier??1}×</small></div></div>
+    <div class="metric"><div class="lab">吞吐 (拖尾 10min 仿真窗)</div>
+      <div class="val">${m.throughput_tasks_h||0}<small> 任务/h</small></div></div>
+    <div class="metric"><div class="lab">订单 / 任务</div>
+      <div class="val">${m.orders_done||0}<small> 单 · ${m.tasks_done||0} 腿 · 失败 ${m.tasks_failed||0}</small></div></div>
+    <div class="metric"><div class="lab">锁等待 (交通)</div>
+      <div class="val">${m.lock_waits||0}<small> 次 · ${(m.lock_wait_s||0).toFixed(1)}s</small></div></div>
+    <div class="metric"><div class="lab">碰撞 (穿透>0.5mm)</div>
+      <div class="val" style="color:${(m.collisions||0)?'var(--bad)':'var(--ok)'}">${m.collisions||0}
+        <small>次 · max_pen ${((m.max_pen_m||0)*1000).toFixed(2)}mm</small></div></div>
+    <div class="metric"><div class="lab">仿真/墙钟</div>
+      <div class="val">${el('ratio').textContent.replace(' ×','') || '—'}<small> × · 速度 ${s.speed==0?'max':s.speed+'×'}</small></div></div>
+    <div class="metric"><div class="lab">队列 / 在飞链</div>
+      <div class="val">${m.queue_depth||0}<small> 排队 · ${m.chains_open||0} 链 · ${m.jobs_active||0} 车忙</small></div></div>
+    <div class="metric"><div class="lab">事件账本深度 (环形有界)</div>
+      <div class="val">${m.feed_depth||0}<small> / 2048 · 决策 ${m.decision_depth||0}/512 · 共 ${m.decisions_total||0}</small></div></div>
+  </div>
+  <div class="ubox"><div class="lab">车辆利用率 (滑动窗 ${uw.window_s||300}s, 分等级配色; <60% 黄色预警; 点击 3D 车辆跟随)</div>${rows}</div>
+  <div class="ubox"><div class="lab">计划库存 · 最近订单链</div>
+    <div class="urow"><span class="vid">库存</span><span class="d" style="flex:1">货架托盘 ${(s.inventory||{}).stock_pallets??'—'} / 空位 ${(s.inventory||{}).free_slots??'—'}</span></div>${
+    (s.chains||[]).slice(-7).reverse().map(c => `<div class="urow"><span class="vid">${c.id}</span>
+      <span class="d" style="flex:1">${c.desc}</span>
+      <span class="pc" style="color:${c.state==='done'?'var(--ok)':c.state==='failed'?'var(--bad)':'var(--warn)'}">${c.state}</span></div>`).join('')
+  }</div>`;
+}
+// ── 聊天 ────────────────────────────────────────────────────────
+function addMsg(who, text, tools){
+  const d = document.createElement('div');
+  d.className = 'msg ' + (who === 'user' ? 'user' : 'agent');
+  d.textContent = text;
+  el('msgs').appendChild(d);
+  el('msgs').scrollTop = 1e9;
+}
+async function send(){
+  const t = el('txt').value.trim(); if (!t) return;
+  el('txt').value = '';
+  try {
+    const r = await fetch('/api/chat', {method:'POST',
+      headers:{'content-type':'application/json'}, body: JSON.stringify({text:t})});
+    await r.json();
+  } catch(e){ addMsg('agent', '通信失败: ' + e); }
+}
+el('send').onclick = send;
+el('txt').addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+// ── 倍率条 / 车辆条 / tabs ─────────────────────────────────────
+const speeds = [0.5, 1, 2, 4, 8, 0];
+el('sp').innerHTML = speeds.map(v => `<button data-v="${v}">${v===0?'max':v+'×'}</button>`).join('');
+el('sp').onclick = async e => {
+  const b = e.target.closest('button'); if (!b) return;
+  await fetch('/api/chat', {method:'POST', headers:{'content-type':'application/json'},
+    body: JSON.stringify({text: b.dataset.v === '0' ? '速度 max' : `速度 ${b.dataset.v}`})});
+};
+el('tabs').onclick = e => {
+  const b = e.target.closest('button'); if (!b) return;
+  document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('.pane').forEach(p => p.classList.toggle('on', p.id === 'p-' + b.dataset.t));
+};
+// ── 渲染循环 (位姿平滑 + 跟随) ──────────────────────────────────
+const tmpV = new THREE.Vector3();
+let lastFrame = performance.now();
+renderer.setAnimationLoop(() => {
+  const now = performance.now(), dt = Math.min((now - lastFrame)/1000, 0.1);
+  lastFrame = now;
+  const k = 1 - Math.pow(0.0001, dt);          // 指数趋近 ws 目标
+  for (const [vid, n] of Object.entries(vehNodes)){
+    const t = vehTarget[vid];
+    if (!t) continue;
+    n.node.position.x += ((t.x||0) - n.node.position.x) * k;
+    n.node.position.z += (-(t.y||0) - n.node.position.z) * k;
+    let dy = (t.yaw||0) - n.node.rotation.y;
+    dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+    n.node.rotation.y += dy * k;
+    if (t.lift !== undefined){
+      const car = n.node.getObjectByName('carriage');
+      if (car) car.position.y = (t.lift||0) * k + car.position.y * (1-k);
+    }
+    if (t.pin !== undefined){
+      const pin = n.node.getObjectByName('pin');
+      if (pin) pin.position.y = 0.062 + (t.pin||0);
+    }
+  }
+  if (follow && vehNodes[follow]){
+    const p = vehNodes[follow].node.position;
+    tmpV.set(p.x + 1.1, 1.7, p.z + 1.1);
+    cam.position.lerp(tmpV, 1 - Math.pow(0.002, dt));
+    ctl.target.lerp(tmpV.set(p.x, 0.08, p.z), 1 - Math.pow(0.002, dt));
+  }
+  ctl.update();
+  renderer.render(scene, cam);
+  window.__probe.frames++;
+});
+addEventListener('resize', () => {
+  cam.aspect = el('stage').clientWidth/el('stage').clientHeight;
+  cam.updateProjectionMatrix();
+  renderer.setSize(el('stage').clientWidth, el('stage').clientHeight);
+});
+// 探针落 DOM (headless dump-dom 断言用: 零错/连上 ws/决策到达/渲染帧)
+setInterval(() => {
+  document.documentElement.dataset.probe = JSON.stringify(window.__probe);
+}, 1000);
+boot().then(() => {
+  for (const v of Object.keys(vehNodes)) vb.appendChild(vehBtn(v));
+  const all = document.createElement('button');
+  all.textContent = '全景'; all.onclick = () => setFollow(null);
+  vb.appendChild(all);
+  addMsg('agent', '矩阵仓库数字空间已就绪: 128 架 / 384 货位 / 8 车混合编队。'
+    + '说「开始持续运行」启动 demand 驱动连续作业; 右侧「决策面板」实时显示 CP-SAT '
+    + '每次任务分配 (候选车→选定→理由→求解状态→耗时),「长跑监控」给吞吐/利用率/'
+    + '锁等待/碰撞/事件深度。可随时「下 10 个订单」加压或「注入锥桶」制造绕行。');
+});
+// 深链选 tab: #decs / #mon / #evs (截图与 headless 断言用)
+{
+  const h = location.hash.slice(1);
+  if (['decs','mon','evs','chat'].includes(h))
+    document.querySelector(`#tabs button[data-t="${h}"]`)?.click();
+}
+</script>
+</body>
+</html>
