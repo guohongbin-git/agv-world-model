@@ -179,10 +179,48 @@ penetration, lease violation, evidence coverage.
 correction, survival handling of timeouts; negative results reported.
 
 \section{Results}\label{sec:results}
-\pending{Fill from frozen harness runs. Structure: 6.1 H1 evidence-gating
-reliability (invalid commits with/without gate under fault injection);
-6.2 H2 VCR vs.\ complexity for B0--B2; 6.3 physical fidelity study
-(timestep/parameter convergence); 6.4 cost accounting.}
+
+\subsection{H1: evidence gating eliminates invalid commits}\label{sec:h1}
+We evaluate the commit gate under the fault-injection study of
+\texttt{experiments/fault\_ablation.py}: 4$\times$10$\times$30 paired
+episodes (four system variants $\times$ ten fault scenarios across six
+injection classes $\times$ thirty seeds; 1{,}200 episodes). All six
+pre-registered hypotheses pass; point estimates are identical to the
+3-seed pilot, indicating the fault response is deterministic per scenario
+rather than seed-lucky.
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{lcccc}
+\toprule
+Variant & Invalid commits & Atomicity viol. & Recovery & VCR (faulted)\\
+\midrule
+B0 rule scheduler      & 61.9\% & 100\% & ---            & 20\%\\
+B1 gate only           & 4.8\%  & 100\% & ---            & 60\%\\
+B2 gate+transactions   & 0\%    & 0\%   & 25\% (2.59\,s) & 70\%\\
+B3 +reconciliation     & \textbf{0\%} & \textbf{0\%} & \textbf{100\%} (0.31\,s) & \textbf{100\%}\\
+\bottomrule
+\end{tabular}
+\caption{Fault-injection study (1{,}200 episodes). B0 commits facts that
+never physically happened; B3 commits nothing unverified and recovers all
+injected faults by re-observation.}
+\label{tab:ablation}
+\end{table}
+
+The mechanism is visible per episode. Under a forged lift signal (class:
+sensor false positive), B0 commits a pick that never occurred --- the
+ledger then asserts a pallet is aboard the vehicle while ground truth has
+it still on the rack; every subsequent decision inherits the false state.
+B3 rejects the same commit (five-gate evidence jointly fails), retries,
+and on the genuine lift (98\% contact support, 0.5\,s stability window,
+pose in tolerance) commits atomically; the episode ends ledger-equal to
+ground truth. Recovery in B3 is re-observation-based (mean 0.31\,s), not
+timeout- or narration-based. Full per-episode transcripts:
+\texttt{reports/demo\_contrast/}; aggregate: \texttt{reports/ablation\_n30.json}.
+
+\pending{6.2 H2 VCR vs.\ complexity for B0--B3 (paired episode matrix);
+6.3 physical fidelity study (timestep/parameter convergence, R1--R3);
+6.4 cost accounting (tokens, wall-clock, LLM calls per episode).}
 
 \section{Discussion and Limitations}
 \textbf{Simulation only.} Claims are about an internally consistent physical
