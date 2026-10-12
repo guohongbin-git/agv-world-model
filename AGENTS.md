@@ -12,17 +12,35 @@
 6. Python 3.12 venv（`.venv/`；原设计基线 3.10.14 经负责人 2026-10-09 批准升级，原因见 reports/environment.md）；测试 `./.venv/bin/python -m pytest tests/ -x -q`；参数检查 `./.venv/bin/python -m configs.check`。
 7. 每次取放/库存逻辑修改：跑受影响的验收用例子集；不删失败样本。
 
+## 架构红线（M2 起，改代码前先读）
+
+1. **单一指令入口**：agent（LLM/规则）只能提交意图；物理执行走判据层，禁止 agent 直写状态。
+2. **物理证据门控**：`EvidenceVerdict` 五门联合判据（承托率≥95% ∧ 旧支撑卸载≤5% ∧ 0.5s 稳定窗 ∧ 静止 ∧ 位姿≤10mm），11 帧采样、版本化、TTL。
+3. **原子事务**：`World.commit_transfer` 单事务（乐观版本→变更→事件→证据→幂等）；物理成功而提交失败 → `RECONCILIATION_REQUIRED` + 现场重观测恢复。`PREPARED` 必须在不可逆物理影响前持久化（数据库可回滚、物理不可回滚）。
+4. **观测隔离**：决策侧（agent/调度/记忆）零真值引用（测试 AST 强制）；真值只流向 evaluator。感知走 `twin/observation.py`。
+5. **需求真实性**：SKU 目录与需求曲线由真实数据标定（Kaggle 零售 456 万行 → 40 SKU + 周内/月度因子），不凭空捏造需求。
+6. **调度/执行分离**：CP-SAT 只产出计划；执行前按台账重验（C02，`matrix_server._gate`）；调度器不得直接写库存或占用。
+7. **技能层**（`sim/robot_skills.py`，Voyager 范式）：agent 只选技能+传参；技能展开为已验证的相位机任务序列，agent 不可能组合出物理不成立的序列。
+
 ## 目录
 
-- `configs/` design.yaml + 参数/环境检查
+- `configs/` design.yaml（参数单一来源）+ 参数/环境检查
 - `cad/` build123d 参数化模型 → STEP/网格/碰撞体
-- `sim/` MJCF、控制器、VirtualAdapter
-- `scene/` 全场景、标签纹理、MuJoCo 相机
-- `services/` perception / world / tasks / scheduler / adapters
-- `tests/` T01-T16 用例（pytest）
-- `reports/` 环境、验收证据（按 run_id 归档）
+- `sim/` MJCF 与仿真层：`warehouse_cell.py`（128 架矩阵+8 车）、`demand.py`（需求引擎）、`dispatch.py`（CP-SAT 调度）、`navigation.py`（A*+运动）、`traffic.py`（锁矩阵）、`mission.py`（相位机+台账）、`robot_skills.py`（技能库）、`forklift_cell.py`（M1 双车场景，保留）
+- `twin/` 数字孪生服务：`matrix_server.py`（:8400 矩阵服务/news）、`server.py`（:8300 M1 双车）、`observation.py`、`memory.py`、`agent.py`、`web/matrix.html`
+- `services/` world（本体+事务+证据）/ perception / tasks / scheduler / adapters
+- `experiments/` 论文实验：`fault_ablation.py`（B0-B3 消融）、`convergence.py`、`solver_sweep.py`
+- `scripts/` 压测与取证工具（`press.py`、`pen_probe.py`、`pen_align.py`、`detfix_*.py`）
+- `data/demand/` 真实零售数据标定的 SKU 目录与需求曲线
+- `docs/knowledge/` 相关工作、Paper I 故障矩阵、发散取证
+- `tests/` T01-T16 + M1/M2 用例（pytest）
+- `reports/` 环境、验收证据（按 run_id / 版本归档）
 - `deliverables/` 影片与最终报告
 
-## 当前状态
+## 当前状态（2026-10-12）
 
-W01 环境验证进行中；W02-W07 未开始。完成判据见设计文档第 17.1 节。
+**M2 矩阵仓库主线**：128 架（4×4 组×8 架×3 层=384 货位）+ 8 车异构车队（F01-F04 叉车 / A01-A04 潜伏顶升 AGV，L1/L2/L3 承重分级、能力强速度慢）+ 需求驱动 24h continuous。
+- 已落地：CP-SAT 调度（能力约束/时间窗/回退贪心）+ 网格 A* + 巷道/交叉口锁矩阵 + 决策面板（`:8400`）+ 利用率反馈控制 + 技能库 + 原子事务/观测隔离/恢复（B1-B3）+ 24h 自恢复看门狗
+- 验证：`pytest tests/` 300+ 用例；Paper I 消融 120 runs（B0-B3）；30 分钟压测脚本 `scripts/press.py`
+- **已知未闭**：8 车满并发下 3 个窄巷用例（zero_collision / determinism / head_on）仍有稀发车-车接触（11mm）与后排放托偏移，根因定位见 `docs/knowledge/detfix_fault_chain.md`（等待车无锁驻巷），收敛中
+- design_version 2.3.0（`reports/v2.3.0.md`）；旧 W01-W07 表述已废弃
