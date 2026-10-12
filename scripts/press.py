@@ -81,6 +81,7 @@ def snap(svc: MatrixService, wall_s: float, sim0: float) -> dict:
         "queue_depth": m["queue_depth"],
         "jobs_active": m["jobs_active"],
         "utilization": m["utilization"],
+        "util_window": m.get("util_window", {}),
         "lock_waits": m["lock_waits"],
         "lock_wait_s": m["lock_wait_s"],
         "collisions": m["collisions"],
