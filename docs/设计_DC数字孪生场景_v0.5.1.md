@@ -270,3 +270,17 @@ Intenseye/SAI) 都是**感知-分析-告警**层, 无一做"物理证据→账�
 真实灌装线节拍 = 每小时数万瓶 (毫秒级); 我们仿真用**减速比时间轴**
 (1 工位动作 = 秒级仿真), KPI 按"仿真节拍×减速比"折算报告, 避免
 毫秒级物理仿真不可行的错位承诺。
+
+## 15. 可视化决策 (用户定向 2026-10-13): 面板 tab 切换, 不做独立页
+
+产线状态页**不做独立站点**, 在现有 :8400 面板 (twin/web/matrix.html)
+加 **tab 切换: 仓库 | 产线**。产线 tab 内容: 工位状态机 (ST-PRESS
+idle/feeding/pressing/eject)/线边库水位/载体位置/证据事件流/产量
+对账 (physical_done vs ledger_committed)。
+
+- 数据源: line runtime `snapshot()` 接口 (字段契约由 LineP0 定,
+  纯函数式无副作用); 面板 REST 轮询或 WS 复用。
+- 架构口径: 面板属演示壳 (matrix_server), 可组合消费 dc-twin
+  状态 (演示壳→场景方向, 不违反 dc-twin→core 的禁 import 方向);
+  core 内核零改动。
+- 实施时点: LineP0 交付审后, 与产线验收一并出。
