@@ -348,3 +348,21 @@ Blender (headless, 既有管线)          three.js (面板实时)
    两者差异即"感知误差可视化", 也是证据门控存在理由的直观展示。
 3. **Sim2Real 环叙事**: 我们的故障注入管线 = 蓝图里的 SDG; 模型/判据
    在孪生内验证后部署到"实体" (未来硬件在环), 与 NVIDIA 叙事同构。
+
+### 16.5 第三样张 (0:49 实时 AI 监控) 增补
+
+元素: 工人姿态估计 (骨骼关键点+安全帽/反光衣 PPE) / 传送带 SKU 检测
+框 / 左上 **KPI 仪表 HUD** (Line speed / Congestion 红绿条) / 字幕
+"Metropolis applications monitor and adjust conveyor belt speed" ——
+**感知→闭环控制** (拥堵检测反馈调速)。
+
+映射:
+1. **KPI HUD 仪表**: 产线 tab 左上角加 Line speed / Congestion /
+   账实一致率 仪表条 (红绿分级), 数据源 snapshot().production/takt
+   —— PanelTab。
+2. **工人姿态+PPE**: 安全联锁 (§14.1 Intenseye 行) 的感知事件类型:
+   human_in_zone (骨骼关键点级, L2b 渲染级) → 工位降速/停机联锁,
+   事件入证据链 —— LineP0 P0'.5 后。
+3. **感知→控制闭环**: 拥堵 (线边库满/传送带积压) 自动调速 —— 我们
+   已有同构物 (利用率反馈 + 需求钳制), 产线版 = 拥堵→takt 降速,
+   事件入证据链 (调速也有据可查) —— LineP0 P0'.5 后。
