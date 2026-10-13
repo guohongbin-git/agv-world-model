@@ -375,3 +375,49 @@ Blender (headless, 既有管线)          three.js (面板实时)
   感知→控制闭环可审计 (它只调参不留痕), 开源可复现全链 (它绑定
   Omniverse 专有栈), 30-seed 消融实证。
 - 逐帧像素级复刻**不做**; §16.1 元素清单仅用于资产库采购/建模范围。
+
+## 17. 框架定位: ESR — Evidence-Simulation-Ready (超越 SimReady 的开源 agentic 仿真框架)
+
+用户北极星 (2026-10-13): 用最新开源组件 + agentic 技术, 构建设计和
+思路上**超越 NVIDIA SimReady** 的框架。
+
+### 17.1 SimReady 现状 (2026, AOUSD 治理)
+
+SimReady = OpenUSD 资产内容规范: USDPhysics 物理属性 / 语义标签 /
+材质 / dense captions / **非视觉传感器属性** / 多运行时规格
+(simready-foundation, 解决跨物理引擎资产易碎问题)。
+它解决的是: "资产丢进仿真就能用"。它**不解决**: 资产动作的可信
+执行、资产间的事务语义、agentic 组合的可验证性。
+
+### 17.2 ESR = SimReady 超集 (四层资产-运行时框架)
+
+| 层 | SimReady | ESR (本框架) |
+|---|---|---|
+| L-资产几何/物理/语义 | USD (AOUSD) | GLB+manifest 核心; **OpenUSD 导出适配器** (interop 不设墙) |
+| L+1 **证据契约** ★ | 无 | 资产自带 evidence manifest: 哪些传感器组合能证明哪些状态转移、提交语义、恢复行为、非原子窗口上界 |
+| L+2 **技能接口** ★ | 无 | MCP tool 面: 每资产/工位暴露 agent 可调用技能 (前置条件→执行→证据→后置条件), Voyager 式技能库注册 |
+| L+3 **可验证性** | 无 | 资产/场景随附消融-评估 harness (B0-B4 基线), 指标预注册 |
+| 运行时 | 引擎无关 spec | 证据事务内核 (MuJoCo, 已建成) |
+
+★ = ESR 新增层。一句话: **SimReady 让资产"能仿真", ESR 让资产
+"能被信任地执行、被 agent 操作、被独立验证"**。
+
+### 17.3 agentic 技术栈 (最新开源组件选型)
+
+- **MCP (Model Context Protocol)**: 资产技能面统一暴露为 MCP tools
+  (场景组装/工位操作/对账查询), 任意 LLM 客户端可驱动 —— 对标并
+  超越 Warehouse Blueprint 的 API Gateway/MCP。
+- **LLM 组合场景**: 自然语言→场景装配 (对标 USD Search/Code NIM 的
+  开源实现: 本地 embedding 检索资产生命册 + 代码生成)。
+- **Agent 事件消费**: 证据审计 agent / 瓶颈分析 agent 消费事件 ring
+  (Warehouse Blueprint Agents 层的开源对应)。
+- 渲染: three.js/GLB (实时) + Blender Cycles (离线照片级)。
+
+### 17.4 落地路径 (现有资产 → ESR)
+
+1. dc-twin P0' (已建) = ESR 运行时+第一个场景的雏形;
+2. 把 line registry/证据事件/技能面重构为 ESR manifest+MCP 规范
+   (P0'.5 后);
+3. 发布 ESR 规范 v0.1 (assets/evidence-contract/skill-interface
+   三份 spec) + dc-twin 作为参考实现;
+4. 学术叙事: Paper I 为主轴论文, ESR 为框架论文 (Paper III 候选)。
