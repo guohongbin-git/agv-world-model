@@ -1,7 +1,7 @@
 [project]
 name = "agv-warehouse-core"
-version = "2.4.0"
-description = "Evidence-grounded warehouse kernel: MuJoCo cell, CP-SAT dispatch, lock-matrix traffic, evidence-gated ledger (design_version 2.4.0)"
+version = "2.5.0"
+description = "Evidence-grounded warehouse kernel: MuJoCo cell, CP-SAT dispatch, lock-matrix traffic, evidence-gated ledger (design_version 2.4.0; core 2.5.0 扩展点: 节点源/腿类型/事件类型/到达源注册表)"
 requires-python = ">=3.11"
 dependencies = ["numpy"]
 
