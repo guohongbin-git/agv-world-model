@@ -331,3 +331,20 @@ Blender (headless, 既有管线)          three.js (面板实时)
 | HF-2 GLB 管线 | 导出+three.js GLTFLoader+HDRI/ACES/阴影 + sim 锚点驱动 | 1 天 |
 | HF-3 产线场景装配 | LineCell 布局 → 资产拼装 + 实时状态绑定 | 0.5-1 天 |
 | HF-4 面板集成 | 产线 tab 内嵌 3D 视图 + 侧栏数据卡 (PanelTab 既有) | 0.5 天 |
+
+### 16.4 第二样张 (0:45 数字孪生↔物理世界) 增补
+
+元素: 传送带箱装饮品 (Aquafina 24 瓦/MtnDew 12 罐), 检测框带 **SKU 级
+标签+置信度** (0.93-0.98), 左 DIGITAL TWIN 右 PHYSICAL WORLD 分屏,
+字幕 "updated models transferred to the physical world" —— **Sim2Real
+模型部署环** (孪生内训模型→实体摄像头部署)。
+
+我们架构的对应 (全部已有挂点):
+1. **SKU 级检测事件**: L2a/L2b 检测事件增加 sku_id + confidence 字段
+   (sku_catalog.json 已在 core) —— 检测不是"有托盘", 是"哪 个 SKU 的
+   哪种包装, 多可信"。
+2. **数字|物理 分屏视图**: 产线 tab 增加分屏模式 —— 左 = 仿真真值态
+   (digital twin), 右 = 感知融合层重建态 (noisy detections→融合), 
+   两者差异即"感知误差可视化", 也是证据门控存在理由的直观展示。
+3. **Sim2Real 环叙事**: 我们的故障注入管线 = 蓝图里的 SDG; 模型/判据
+   在孪生内验证后部署到"实体" (未来硬件在环), 与 NVIDIA 叙事同构。
