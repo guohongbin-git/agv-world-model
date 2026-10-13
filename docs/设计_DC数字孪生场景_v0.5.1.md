@@ -206,3 +206,10 @@ GPT 第五轮第四节三条 (工程记录规范), 不阻断架构方向。
 ### 签字链
 GPT 第五轮 CONDITIONAL PASS (gpt_v05_review_conditional_pass.md) →
 C1-C5 并入本 v0.5.1 → **待用户最终签字冻结蓝图**。
+
+## 12. 签字记录
+
+- **用户签字: 批准冻结 (2026-10-13)** —— v0.5.1 蓝图生效, dc-twin
+  项目按 P0 开工。
+- 评审链: 三轮自审 → GPT 第四轮 REJECT → v0.5 → GPT 第五轮
+  CONDITIONAL PASS → v0.5.1 (C1-C5 并入) → 冻结。
