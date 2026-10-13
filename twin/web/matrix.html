@@ -99,6 +99,46 @@ font-size:10.5px;font-family:ui-monospace,monospace;color:var(--dim)}
 .k-cone_injected .kind,.k-cone_cleared .kind{color:var(--pur)}
 .k-assign .kind{color:var(--acc)}.k-op_done .kind{color:var(--ok)}
 .k-op_phase .kind,.k-claim_ok .kind{color:var(--dim)}
+/* ── 产线 tab (蓝图 §15) ── */
+#viewtabs{position:absolute;top:12px;left:50%;transform:translateX(-50%);display:flex;gap:4px;
+background:#161b22cc;backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:12px;
+padding:4px;z-index:9}
+#viewtabs button{background:#21262d;color:var(--dim);border:1px solid var(--line);border-radius:8px;
+padding:4px 16px;font-size:12.5px;font-weight:700;cursor:pointer}
+#viewtabs button.on{background:var(--acc);color:#0d1117;border-color:var(--acc)}
+#linepane{position:absolute;inset:0;background:var(--bg);z-index:8;display:none;overflow-y:auto;padding:66px 18px 16px}
+#linepane.on{display:block}
+.ln-head{display:flex;gap:12px;align-items:baseline;margin-bottom:10px;flex-wrap:wrap}
+.ln-head h2{font-size:15px}
+#ln-main{display:flex;gap:10px;height:calc(100vh - 128px);min-height:420px}
+#ln3d{flex:1;position:relative;border:1px solid var(--line);border-radius:12px;
+background:#0d1117;overflow:hidden;min-width:0}
+#ln3d canvas{display:block}
+#ln3d .ln-hint{position:absolute;left:10px;bottom:8px;color:var(--dim);font-size:10.5px;z-index:2}
+#ln3d .ln-fix{position:absolute;top:8px;left:10px;z-index:2;font-size:10.5px;color:var(--warn);
+background:#161b22cc;border:1px solid var(--line);border-radius:8px;padding:2px 9px;display:none}
+#ln-side{width:344px;flex:none;overflow-y:auto;display:flex;flex-direction:column;gap:10px}
+.lncard{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:#161b22}
+.lncard h3{font-size:12px;color:var(--dim);margin-bottom:7px;font-weight:700}
+.lnrow{display:flex;gap:8px;margin:3px 0;font-size:12.5px;align-items:center}
+.lnrow .k{color:var(--dim);width:78px;flex:none;font-size:11px}
+.st-idle{background:#30363d}.st-feeding{background:#1f6feb}.st-pressing{background:#9e6a03}.st-eject{background:#1a7f37}
+.lnk{display:flex;align-items:center;gap:7px;margin:5px 0;font-size:12px;font-variant-numeric:tabular-nums}
+.lnk .nid{width:44px;font-family:ui-monospace,monospace;font-weight:700}
+.lnbar{flex:1;height:9px;background:#21262d;border-radius:5px;overflow:hidden}
+.lnbar i{display:block;height:100%;background:var(--blue);border-radius:5px}
+.lncount{width:86px;text-align:right;color:var(--dim)}
+.lnev{padding:4px 6px;border-bottom:1px dashed #21262d;display:flex;gap:9px;font-size:11px;
+font-family:ui-monospace,monospace;align-items:center;flex-wrap:wrap}
+.lnev .kind{font-weight:700;flex:none;width:96px}
+.lnev.k-FEED .kind{color:var(--blue)}.lnev.k-OP_COMPLETE .kind{color:var(--ok)}
+.lnev .tt{color:var(--dim)}
+.lnev .fid{color:var(--dim);flex:none;max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ln-off{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+color:var(--dim);min-height:70vh;text-align:center}
+.ln-off .big{font-size:22px;font-weight:800;color:var(--txt)}
+.ln-note{display:inline-block;padding:1px 9px;border-radius:99px;background:#9e6a0333;
+border:1px solid #d2992288;color:var(--warn);font-size:10.5px;font-weight:700;margin-left:6px}
 ::-webkit-scrollbar{width:9px}::-webkit-scrollbar-thumb{background:#30363d;border-radius:5px}
 </style>
 <script type="importmap">
@@ -127,6 +167,42 @@ font-size:10.5px;font-family:ui-monospace,monospace;color:var(--dim)}
     </div>
     <div class="vehbar" id="vb"></div>
     <div class="speedbar" id="sp"></div>
+    <div id="viewtabs">
+      <button data-v="wh" class="on">仓库</button>
+      <button data-v="line">产线</button>
+    </div>
+    <div id="linepane">
+      <div id="ln-off" class="ln-off">
+        <div class="big">产线离线</div>
+        <div>等待 dc-twin 状态发布器写入 line_state.json<br>
+          (默认 ~/1-Projects/dc-twin/reports/line_state.json · /api/line/state 文件契约)</div>
+      </div>
+      <div id="ln-on" style="display:none">
+        <div class="ln-head">
+          <h2>产线 · ST-PRESS 供料闭环</h2>
+          <span id="ln-run" class="badge m-idle">—</span>
+          <span id="ln-t" class="v">—</span>
+          <span id="ln-takt" class="ms">—</span>
+          <span id="ln-w" class="ms">—</span>
+        </div>
+        <div id="ln-main">
+          <div id="ln3d">
+            <div class="ln-fix" id="ln-fixnote">携托联动 P0'.5 修复中 · 拾放物理联动未闭合, 如实渲染</div>
+            <div class="ln-hint">拖拽旋转 · 滚轮缩放 · 数据 = /api/line/state 文件契约 1Hz</div>
+          </div>
+          <div id="ln-side">
+            <div class="lncard"><h3>工位状态机</h3><div id="ln-st"></div></div>
+            <div class="lncard"><h3>载体 · 供料/清型</h3><div id="ln-veh"></div></div>
+            <div class="lncard"><h3>线边库水位</h3><div id="ln-rk"></div></div>
+            <div class="lncard"><h3>产量对账<span class="ln-note">携托联动 P0'.5 修复中</span></h3><div id="ln-prod"></div></div>
+            <div class="lncard">
+              <h3>证据事件流 (FEED / OP_COMPLETE · 时间三元组 采≤入≤判, 最新在前)</h3>
+              <div id="ln-evs"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
   <div id="rail">
     <div id="tabs">
@@ -145,7 +221,7 @@ font-size:10.5px;font-family:ui-monospace,monospace;color:var(--dim)}
   </div>
 </div>
 <script type="module">
-window.__probe = {errors:[], booted:false, wsOpen:false, states:0, decisions:0, frames:0, veh:0};
+window.__probe = {errors:[], booted:false, wsOpen:false, states:0, decisions:0, frames:0, veh:0, line:'-'};
 window.addEventListener('error', e => {
   window.__probe.errors.push(String(e.message||e));
   document.title = 'BOOTERR:' + String(e.message||e).slice(0,110);
@@ -622,6 +698,345 @@ el('tabs').onclick = e => {
   document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b));
   document.querySelectorAll('.pane').forEach(p => p.classList.toggle('on', p.id === 'p-' + b.dataset.t));
 };
+// ── 产线 tab (蓝图 §15): /api/line/state 文件契约轮询 ────────────
+// 数据源 = dc-twin 发布器原子写的 line_state.json (server 只读透传);
+// available=false → 「产线离线」。轮询与 tab 显隐解耦 (切回仓库仍续更)。
+el('viewtabs').onclick = e => {
+  const b = e.target.closest('button'); if (!b) return;
+  document.querySelectorAll('#viewtabs button').forEach(x => x.classList.toggle('on', x === b));
+  el('linepane').classList.toggle('on', b.dataset.v === 'line');
+  if (b.dataset.v === 'line') lnResize();      // 隐藏期间 clientWidth=0
+};
+const LN_STC = {idle:'st-idle', feeding:'st-feeding', pressing:'st-pressing', eject:'st-eject'};
+const f3 = x => (x == null || isNaN(+x)) ? '—' : (+x).toFixed(3);
+function renderLine(d){
+  const s = d.state || {}, tk = s.takt || {};
+  el('ln-run').textContent = (d.run_id || '—') + ' · 在线';
+  el('ln-run').className = 'badge m-running';
+  el('ln-t').textContent = f3(s.sim_t) + ' s';
+  el('ln-takt').textContent = `takt ${tk.takt_s ?? '—'}s · 拍 k=${tk.k ?? '—'} · 下拍 ${
+    tk.next_tick_s != null ? f3(tk.next_tick_s) + 's' : '—'}`;
+  el('ln-w').textContent = '发布 ' + (d.written_at || '—');
+  const st = (s.station || {})['ST-PRESS'] || {}, le = st.last_event;
+  const vd = le && le.verdict || {};
+  el('ln-st').innerHTML = `
+    <div class="lnrow"><span class="k">状态</span>
+      <span class="badge ${LN_STC[st.state] || 'm-idle'}">${st.state || '—'}</span></div>
+    <div class="lnrow"><span class="k">在机载体</span><span class="v">${st.part ?? '—'}</span></div>
+    <div class="lnrow"><span class="k">PLC 字</span><span class="v">${st.plc_word ?? '—'}</span></div>
+    <div class="lnrow"><span class="k">最近证据</span><span class="ms">${le
+      ? `${le.kind} ${le.operation_id} · 判@${f3(le.t_decide)}s · ${
+         vd.passed ? '✓' : '✗ ' + (vd.failures || []).join(';')}` : '—'}</span></div>`;
+  const stock = tk.stock || {};
+  el('ln-rk').innerHTML = ['L-B1', 'L-B2', 'L-B3'].map(n => {
+    const lv = stock[n] || {}, n0 = lv.L0 ?? 0;
+    return `<div class="lnk"><span class="nid">${n}</span>
+      <div class="lnbar"><i style="width:${Math.min(n0 * 25, 100)}%"></i></div>
+      <span class="lncount">${n0} L0 · ${lv.L1 ?? 0} L1</span></div>`;
+  }).join('');
+  el('ln-veh').innerHTML = [['carrier', '供料 A02'], ['clearer', '清型 A03']]
+    .map(([key, label]) => {
+      const v = s[key] || {};
+      return `<div class="lnrow"><span class="k">${label}</span>
+        <span class="v">(${(v.pos || []).map(f3).join(', ')})</span>
+        <span class="ms">${v.task || '—'}</span></div>`;
+    }).join('');
+  const pr = s.production || {}, mism = pr.mismatches || [];
+  el('ln-prod').innerHTML = `
+    <div class="lnrow"><span class="k">物理完成</span>
+      <span class="v" style="color:var(--ok)">${pr.physical_done ?? '—'}</span></div>
+    <div class="lnrow"><span class="k">台账提交</span>
+      <span class="v" style="color:var(--blue)">${pr.ledger_committed ?? '—'}</span></div>
+    <div class="lnrow"><span class="k">对账差异</span>
+      <span class="v" style="color:${mism.length ? 'var(--bad)' : 'var(--ok)'}">${mism.length}</span></div>
+    ${mism.length ? `<div class="ms" style="color:var(--bad)">未闭合: ${
+      mism.slice(0, 8).join(', ')}${mism.length > 8 ? ' …' : ''}</div>` : ''}
+    <div class="ms" style="margin-top:5px">对账未闭合为已知状态 (携托联动 P0'.5 修复中);
+      权威口径 dc_twin.scorer.line.score_line_run</div>`;
+  el('ln-evs').innerHTML = (s.evidence_recent || []).slice().reverse().map(e => {
+    const v = e.verdict || {}, ok = v.passed;
+    return `<div class="lnev k-${e.kind}"><span class="kind">${e.kind}</span>
+      <span class="fid">${e.event_id || ''}</span>
+      <span>${e.operation_id || ''} · ${e.pallet_id || '—'}</span>
+      <span class="tt">采 ${f3(e.t_capture)} ≤ 入 ${f3(e.t_ingest)} ≤ 判 ${f3(e.t_decide)} s</span>
+      <span style="color:${ok ? 'var(--ok)' : 'var(--bad)'}">${
+        ok ? '✓' : '✗ ' + (v.failures || []).join(';')}</span></div>`;
+  }).join('') || '<div class="ms" style="padding:4px 6px">暂无证据事件</div>';
+}
+async function pollLine(){
+  try {
+    const d = await (await fetch('/api/line/state')).json();
+    const off = !d || d.available !== true;
+    el('ln-off').style.display = off ? 'flex' : 'none';
+    el('ln-on').style.display = off ? 'none' : 'block';
+    if (!off){ renderLine(d); lnUpdate(d.state || {}); }
+    window.__probe.line = off ? 'off' : 'on';
+  } catch(e){ window.__probe.line = 'err'; }
+}
+pollLine(); setInterval(pollLine, 1000);
+
+// ── 产线 3D 场景 (蓝图 §15 升级): MJCF→three.js 几何镜像 ─────────
+// scene_static.geoms 全量清单 1:1 重建 (mujoco 约定: box half-size,
+// cylinder/capsule size=[r, half_len], quat (w,x,y,z)); dyn_geoms 每
+// 拍按 id 更新 pos/quat, 渲染循环内 lerp/slerp 平滑。坐标映射
+// M(x,z,y) = 绕 X 轴 -90° 的正交旋转, 故四元数做 p⊗q⊗p⁻¹ 共轭。
+// PBR 材质按 material_class; ACESFilmic + sRGB + PCFSoft 阴影。
+const lnBox = el('ln3d');
+let lnRend = null, lnScene = null, lnCam = null, lnCtl = null, lnBuilt = false;
+const lnMats = new Map(), lnGeoms = new Map();     // 材质缓存 / id→mesh
+const LN_CLASS = {
+  rack:   {color:0x4a5568, metalness:.55, roughness:.38},   // 机架蓝灰金属
+  safety: {color:0xe8b53a, metalness:.15, roughness:.50},   // 安全黄
+  steel:  {color:0xd8dde2, metalness:.85, roughness:.25},   // 不锈钢白
+  floor:  {color:0x2a313a, metalness:.05, roughness:.65},   // 环氧地坪
+  pallet: {color:0xb0885e, metalness:.05, roughness:.75},
+  agv:    {color:0x388bfd, metalness:.35, roughness:.45},
+  press:  {color:0xf0883e, metalness:.40, roughness:.40},
+  // dc_twin scene.py material_class 词表
+  steel_frame:  {color:0x4a5568, metalness:.55, roughness:.38},
+  machine_frame:{color:0xd8dde2, metalness:.80, roughness:.30},
+  safety_yellow:{color:0xe8b53a, metalness:.15, roughness:.50},
+  agv_blue:     {color:0x388bfd, metalness:.35, roughness:.45},
+  pallet_wood:  {color:0xb0885e, metalness:.05, roughness:.75},
+  part_blank:   {color:0xd8dde2, metalness:.60, roughness:.35},
+  generic:      {color:0x6e7681, metalness:.20, roughness:.60},
+  default:{color:0x6e7681, metalness:.20, roughness:.60},
+};
+function lnMat(cls, rgba){
+  const key = cls + ':' + (rgba ? rgba.join(',') : '');
+  if (lnMats.has(key)) return lnMats.get(key);
+  const o = LN_CLASS[cls] || LN_CLASS.default;
+  const m = new THREE.MeshStandardMaterial({color:o.color,
+    metalness:o.metalness, roughness:o.roughness});
+  if (rgba){
+    m.color.setRGB(rgba[0], rgba[1], rgba[2]);
+    if (rgba[3] < 1){ m.transparent = true; m.opacity = rgba[3]; }
+  }
+  lnMats.set(key, m);
+  return m;
+}
+function lnQuat(q){          // mujoco (w,x,y,z) → three: p⊗q⊗p⁻¹
+  const p = new THREE.Quaternion(Math.SQRT1_2, -Math.SQRT1_2, 0, 0);
+  return p.clone().multiply(new THREE.Quaternion(q[0], q[1], q[2], q[3]))
+          .multiply(p.clone().invert());
+}
+function qMul(a, b){         // mujoco 系 (w,x,y,z) 四元数积
+  return [a[0]*b[0] - a[1]*b[1] - a[2]*b[2] - a[3]*b[3],
+          a[0]*b[1] + a[1]*b[0] + a[2]*b[3] - a[3]*b[2],
+          a[0]*b[2] - a[1]*b[3] + a[2]*b[0] + a[3]*b[1],
+          a[0]*b[3] + a[1]*b[2] - a[2]*b[1] + a[3]*b[0]];
+}
+function qRot(q, v){         // 向量 v 经四元数 q 旋转 (mujoco 系)
+  const qv = [0, v[0], v[1], v[2]];
+  const r = qMul(qMul(q, qv), [q[0], -q[1], -q[2], -q[3]]);
+  return [r[1], r[2], r[3]];
+}
+function lnGeomMesh(g){
+  const s = g.size || [];
+  let geo = null, plane = false;
+  if (g.type === 'box')
+    geo = new THREE.BoxGeometry(2 * (s[0] || .01), 2 * (s[2] || .01),
+                                2 * (s[1] || .01));
+  else if (g.type === 'cylinder')
+    geo = new THREE.CylinderGeometry(s[0], s[0], 2 * (s[1] || .01), 28);
+  else if (g.type === 'capsule')
+    geo = new THREE.CapsuleGeometry(s[0], 2 * (s[1] || .01), 6, 20);
+  else if (g.type === 'sphere')
+    geo = new THREE.SphereGeometry(s[0], 22, 16);
+  else if (g.type === 'plane'){
+    geo = new THREE.PlaneGeometry(60, 60);
+    plane = true;
+  } else return null;                    // mesh/hfield: 导出器保证盒近似
+  const mesh = new THREE.Mesh(geo, lnMat(g.material || g.material_class,
+                                          g.rgba));
+  if (plane){
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.receiveShadow = true;
+  } else {
+    mesh.castShadow = mesh.receiveShadow = true;
+  }
+  mesh.position.set(g.pos ? g.pos[0] : 0, g.pos ? (g.pos[2] ?? 0) : 0,
+                    g.pos ? -(g.pos[1] ?? 0) : 0);
+  if (g.quat) mesh.quaternion.copy(lnQuat(g.quat));
+  return {mesh, plane};
+}
+function lnBoot(){
+  if (lnRend) return;
+  lnRend = new THREE.WebGLRenderer({antialias:true});
+  lnRend.setPixelRatio(Math.min(devicePixelRatio, 2));
+  lnRend.outputColorSpace = THREE.SRGBColorSpace;
+  lnRend.toneMapping = THREE.ACESFilmicToneMapping;
+  lnRend.toneMappingExposure = 1.05;
+  lnRend.shadowMap.enabled = true;
+  lnRend.shadowMap.type = THREE.PCFSoftShadowMap;
+  lnBox.appendChild(lnRend.domElement);
+  lnScene = new THREE.Scene();
+  lnScene.background = new THREE.Color(0x10151b);
+  lnScene.add(new THREE.HemisphereLight(0x9db2c9, 0x2a2620, 0.85));
+  const sun = new THREE.DirectionalLight(0xfff4e0, 2.6);
+  sun.position.set(4, 7, 3);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.camera.left = sun.shadow.camera.bottom = -8;
+  sun.shadow.camera.right = sun.shadow.camera.top = 8;
+  sun.shadow.bias = -0.0004;
+  lnScene.add(sun);
+  lnCam = new THREE.PerspectiveCamera(42, 1, 0.01, 80);
+  lnCam.position.set(2.6, 3.6, 5.6);
+  lnCtl = new OrbitControls(lnCam, lnRend.domElement);
+  lnCtl.target.set(1.2, 0, -2.0);
+  lnResize();
+}
+function lnResize(){
+  if (!lnRend) return;
+  const w = lnBox.clientWidth, h = lnBox.clientHeight;
+  if (!w || !h) return;
+  lnRend.setSize(w, h);
+  lnCam.aspect = w / h;
+  lnCam.updateProjectionMatrix();
+}
+function lnInitStatic(sc){
+  if (lnBuilt || !sc || !Array.isArray(sc.geoms)) return;
+  lnBuilt = true;
+  let headRec = null;
+  for (const g of sc.geoms){
+    const e = lnGeomMesh(g);
+    if (!e) continue;
+    lnScene.add(e.mesh);
+    const gid = g.id || g.name;
+    if (gid){
+      const body = g.body || gid.split(':')[0];
+      const rec = {mesh:e.mesh, plane:e.plane, tpos:null, tq:null,
+                   mq:g.quat || null,
+                   mpos:[g.pos ? g.pos[0] : 0, g.pos ? (g.pos[1] ?? 0) : 0,
+                         g.pos ? (g.pos[2] ?? 0) : 0],
+                   body, gid,
+                   tint:body.startsWith('wp_'),
+                   fit:body.startsWith('rack_L-B') || body.startsWith('line_')
+                       || body.startsWith('A02') || body.startsWith('A03')
+                       || body.startsWith('stg') || body.startsWith('out')};
+      if (gid.endsWith('_head') && body.startsWith('line_press'))
+        headRec = rec;
+      if (rec.tint){
+        e.mesh.material = e.mesh.material.clone();
+        rec.baseHex = '#' + e.mesh.material.color.getHexString();
+      }
+      lnGeoms.set(gid, rec);
+    }
+  }
+  for (const g of (sc.dyn_geoms || [])){   // 动体初始世界位姿 (按 body)
+    const e = lnGeoms.get(g.id) ||
+              [...lnGeoms.entries()].find(([k, r]) =>
+                k === g.id || r.body === g.id)?.[1];
+    if (!e || !g.pos) continue;
+    if (g.quat){
+      e.mesh.position.set(
+        g.pos[0] + qRot(g.quat, e.mpos)[0],
+        (g.pos[2] ?? 0) + qRot(g.quat, e.mpos)[2],
+        -(g.pos[1] + qRot(g.quat, e.mpos)[1]));
+      e.mesh.quaternion.copy(lnQuat(qMul(g.quat, e.mq || [1, 0, 0, 0])));
+    } else {
+      e.mesh.position.set(g.pos[0] + e.mpos[0], (g.pos[2] ?? 0) + e.mpos[2],
+                          -(g.pos[1] + e.mpos[1]));
+    }
+  }
+  const bb = new THREE.Box3();           // 相机自框景 (产线区, 地面/仓库
+  for (const [, e] of lnGeoms) if (e.fit) bb.expandByObject(e.mesh);  // 货架不参与)
+  if (!bb.isEmpty()){
+    const c = bb.getCenter(new THREE.Vector3());
+    const r = Math.max(bb.getSize(new THREE.Vector3()).length() * .95, 3);
+    lnCtl.target.copy(c);
+    lnCam.position.set(c.x + r * .42, c.y + r * .72, c.z + r * .78);
+  }
+  const lay = sc.layout || {};
+  const pz = lay.station && lay.station.plunger;
+  if (pz){                               // 布局锚 (真实产线区中心)
+    lnCtl.target.set(pz.x + 0.35, 0, -pz.y + 0.35);
+    lnCam.position.set(pz.x + 1.0, 1.9, -pz.y + 2.2);
+  } else if (headRec){                   // 回退: 冲压头为构图锚
+    const p = headRec.mesh.position;
+    lnCtl.target.set(p.x, 0, p.z);
+    const rr = 3.2;
+    lnCam.position.set(p.x + rr * .35, rr * .8, p.z + rr * .8);
+  }
+  lnResize();
+  window.__probe.ln = {geoms: lnGeoms.size,
+    cam: [lnCam.position.x, lnCam.position.y, lnCam.position.z]
+      .map(v => +v.toFixed(2)),
+    tgt: [lnCtl.target.x, lnCtl.target.y, lnCtl.target.z]
+      .map(v => +v.toFixed(2))};
+}
+function lnUpdate(s){
+  lnBoot();
+  lnInitStatic(s.scene_static);
+  if (!lnBuilt) return;
+  const st = ((s.station || {})['ST-PRESS']) || {};
+  if (Array.isArray(s.dyn_geoms) && s.dyn_geoms.length){
+    const bp = {};                         // dyn id = body 名 → 世界位姿
+    for (const g of s.dyn_geoms) if (g.pos) bp[g.id] = g;
+    for (const [, e] of lnGeoms){
+      const b = bp[e.gid] || bp[e.body];
+      if (!b) continue;
+      const rq = b.quat || [1, 0, 0, 0], off = qRot(rq, e.mpos);
+      e.tpos = [b.pos[0] + off[0], (b.pos[2] ?? 0) + off[2],
+                -(b.pos[1] + off[1])];
+      e.tq = lnQuat(qMul(rq, e.mq || [1, 0, 0, 0]));
+    }
+  } else {
+    // 实体字段回退 (landed snapshot 契约): 刚体 = 实体 xy/heading ⊗
+    // 模型位姿; 工件/托盘按名查表; 冲头 z = plunger_z (底面) + 0.010。
+    const ent = {A02:s.carrier, A03:s.clearer};
+    const wps = s.workpieces || [], pls = s.pallets || [];
+    for (const [, e] of lnGeoms){
+      if (e.plane) continue;
+      const body = e.body;
+      const en = ent[body] ||
+                 (body.startsWith('A02') ? s.carrier
+                  : body.startsWith('A03') ? s.clearer : null);
+      if (en && en.pos){
+        const yaw = en.heading || 0, c = Math.cos(yaw), sn = Math.sin(yaw);
+        const wx = en.pos[0] + c * e.mpos[0] - sn * e.mpos[1];
+        const wy = en.pos[1] + sn * e.mpos[0] + c * e.mpos[1];
+        e.tpos = [wx, e.mpos[2], -wy];
+        e.tq = lnQuat(qMul([Math.cos(yaw / 2), 0, 0, Math.sin(yaw / 2)],
+                           e.mq || [1, 0, 0, 0]));
+      } else if (body.startsWith('wp_')){
+        const w = wps.find(v => v.name === body);
+        if (w){
+          e.tpos = [w.x, w.z ?? e.mpos[2], -w.y];
+          e.mesh.material.color.set(w.in_fixture ? 0x3fb950
+                                                  : (e.baseHex || 0xd8dde2));
+        }
+      } else if (body.startsWith('pl_')){
+        const p = pls.find(v => v.name === body);
+        if (p) e.tpos = [p.x, e.mpos[2], -p.y];
+      } else if (e.gid.endsWith('_head')
+                 && typeof st.plunger_z === 'number'){
+        const pzc = (((s.scene_static || {}).layout || {}).station || {})
+                      .plunger;
+        e.tpos = [pzc ? pzc.x : e.mpos[0], st.plunger_z + 0.010,
+                  pzc ? -pzc.y : -e.mpos[1]];
+      }
+    }
+  }
+  el('ln-fixnote').style.display =
+    ((s.production && s.production.mismatches || []).length)
+      ? 'block' : 'none';
+}
+function lnTick(dt){                     // 渲染循环内调: 平滑 + 绘制
+  if (!lnRend || !el('linepane').classList.contains('on')) return;
+  const k = 1 - Math.pow(0.0002, dt);
+  for (const [, e] of lnGeoms){
+    if (e.tpos){
+      e.mesh.position.x += (e.tpos[0] - e.mesh.position.x) * k;
+      e.mesh.position.y += (e.tpos[1] - e.mesh.position.y) * k;
+      e.mesh.position.z += (e.tpos[2] - e.mesh.position.z) * k;
+    }
+    if (e.tq) e.mesh.quaternion.slerp(e.tq, k);
+  }
+  lnCtl.update();
+  lnRend.render(lnScene, lnCam);
+}
 // ── 渲染循环 (位姿平滑 + 跟随) ──────────────────────────────────
 const tmpV = new THREE.Vector3();
 let lastFrame = performance.now();
@@ -654,12 +1069,14 @@ renderer.setAnimationLoop(() => {
   }
   ctl.update();
   renderer.render(scene, cam);
+  lnTick(dt);
   window.__probe.frames++;
 });
 addEventListener('resize', () => {
   cam.aspect = el('stage').clientWidth/el('stage').clientHeight;
   cam.updateProjectionMatrix();
   renderer.setSize(el('stage').clientWidth, el('stage').clientHeight);
+  lnResize();
 });
 // 探针落 DOM (headless dump-dom 断言用: 零错/连上 ws/决策到达/渲染帧)
 setInterval(() => {
@@ -675,11 +1092,14 @@ boot().then(() => {
     + '每次任务分配 (候选车→选定→理由→求解状态→耗时),「长跑监控」给吞吐/利用率/'
     + '锁等待/碰撞/事件深度。可随时「下 10 个订单」加压或「注入锥桶」制造绕行。');
 });
-// 深链选 tab: #decs / #mon / #evs (截图与 headless 断言用)
+// 深链选 tab: #decs / #mon / #evs / #chat (侧栏) · #line (产线视图,
+// 截图与 headless 断言用)
 {
   const h = location.hash.slice(1);
   if (['decs','mon','evs','chat'].includes(h))
     document.querySelector(`#tabs button[data-t="${h}"]`)?.click();
+  if (h === 'line')
+    document.querySelector('#viewtabs button[data-v="line"]')?.click();
 }
 </script>
 </body>

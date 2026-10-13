@@ -1468,6 +1468,27 @@ async def state():
     return SVC.state()
 
 
+# ---- 产线 tab (蓝图 §15): 文件契约数据源 ----
+#: dc-twin 状态发布器周期原子写 line_state.json (默认路径两侧一致),
+#: 此处只读透传; 无文件/坏文件 → {"available": false} (面板显示产线
+#: 离线)。路径可用环境变量 LINE_STATE_PATH 覆盖 (测试隔离)。
+LINE_STATE_PATH = "~/1-Projects/dc-twin/reports/line_state.json"
+
+
+def _line_state_payload() -> dict:
+    try:
+        p = Path(os.environ.get("LINE_STATE_PATH",
+                                LINE_STATE_PATH)).expanduser()
+        return json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"available": False}
+
+
+@app.get("/api/line/state")
+async def line_state():
+    return _line_state_payload()
+
+
 @app.websocket("/ws")
 async def ws_ep(ws: WebSocket):
     await ws.accept()
