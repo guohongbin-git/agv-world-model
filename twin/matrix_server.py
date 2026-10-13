@@ -789,12 +789,34 @@ class MatrixService:
         if self.mr.jobs.get(spec.vid) is not None:
             return False
         if spec.kind == "pick":
-            pn = c.pallet
-            if loc.get(pn) != f"slot:{spec.task['slot']}":
-                c.state = "failed"
-                self._feed(spec.vid, "chain_failed",
-                           f"{c.task_id}: 货位 {spec.task['slot']} 无托盘可取")
-                return False
+            slot = spec.task["slot"]
+            pn_now = self._pallet_at(loc, f"slot:{slot}")
+            if pn_now != c.pallet:
+                if pn_now is None:
+                    # detfix2: 补货开单即计划占位 (demand._place), 物理托盘
+                    # 却要到 putaway 落位才存在 —— 同 SKU 后续出库单先于
+                    # 落位发射时按名查账必空 (实测 live 5f82cc59: t=312
+                    # ORD-000006 R23-S1 / t=557 ORD-000013 R31-S2
+                    # chain_failed「无托盘可取」, 同刻补货链仍 pending)。
+                    # 同货位在途补货链未死 → 等落位再发射; 链死了才判死。
+                    inbound = any(
+                        cc is not c and cc.kind == "REPLENISH"
+                        and cc.state in ("pending", "active")
+                        and len(cc.specs) > 1
+                        and cc.specs[1].task.get("slot") == slot
+                        for cc in self.chains)
+                    if inbound:
+                        return False
+                    c.state = "failed"
+                    self._feed(spec.vid, "chain_failed",
+                               f"{c.task_id}: 货位 {slot} 无托盘可取")
+                    return False
+                # detfix2: 占位者与本链主角异名 —— 补货回填的是交付台
+                # 旧托 (名字带原货位, 如 pallet_R23_S4_L1 坐 slot:R32-S1),
+                # 按 slot 命名推断的 c.pallet 永不匹配。物理即真值: 重绑
+                # 链主角与作业对象 (mission 按 task["pallet"] 闭环作业)。
+                c.pallet = pn_now
+                spec.task["pallet"] = pn_now
             held, out_n = self._stand_holders()
             stand = spec.task["stand"]
             if (stand in held or self._pallet_at(loc, f"stand:{stand}")

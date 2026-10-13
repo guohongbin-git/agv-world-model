@@ -59,6 +59,8 @@ class Job:
     micro: bool = False                # 倒出微路由: 不推进 phase
     last_goal: str = ""                # 上次导航目标种类 (reroute 事件判定)
     last_path: list = field(default_factory=list)
+    lift_armed: bool = False           # detfix2: 高位越台进行中 (叉已升)
+    lift_back: float = 0.0             # 越台前叉关节高 (还原基准)
 
 
 class MissionRunner:
@@ -180,17 +182,39 @@ class MissionRunner:
         # ~2-3mm 裕度, 叉尖挂天花即把整托铲走 (实测 F01 回程绕行北穿
         # H02, 铲走自己刚放的托盘拖至 D_G11 刮坠)。升至 0.125 (>
         # 托盘顶 0.1115, 13mm 裕度) 越过, 再回原高度。
+        # detfix2: (a) dock 同享此 guard —— 交付台坐在行通道线上, 已提交
+        # 待取托盘 (顶板 0.115) 对 transit 叉底 0.102 同样裸奔 (实测
+        # live 5f82cc59 t≈484: F02 列通道穿越 D_G14, 把 ORD-000002
+        # 已提交托盘铲离台位 → REP-000004 fetch 物理校验失败)。
+        # (b) 升叉必须提前一节点: 预节点处叉尖已前探 0.12m、恰插到台位
+        # 托盘孔口 (节点距 0.16 − 叉长 0.12 = 台面缘), 原地升叉会顺孔
+        # 天花把整托吊起携走 (修复版回放 t=487 实录: 托盘随叉 0.224
+        # 高位沿行道拖行 26s)。提前到上一节点起步升叉, 叉尖入台位区
+        # 前即已过孔口高度; 过台后下一边起步回降。
         if vid in self.cell.forklift_ids:
-            hold = [n for n in (e.a, e.b)
-                    if self.graph.pos[n].kind == "stand"
-                    and self.ledger.at(n) is not None]
-            if hold:
-                view = self.cell.veh[vid]
-                back = view.q("lift")
+            view = self.cell.veh[vid]
+
+            def held_hit(k):
+                if not 0 <= k < len(job.edges):
+                    return False
+                e_k = job.edges[k]
+                return any(self.graph.pos[n].kind in ("stand", "dock")
+                           and self.ledger.at(n) is not None
+                           for n in (e_k.a, e_k.b))
+
+            cur_hit, nxt_hit = held_hit(i), held_hit(i + 1)
+            if job.lift_armed and not (cur_hit or nxt_hit):
+                # 过台后首个未触台边起步回降 (记录臂高, 防高位回拉)
+                legs = ([Leg("move", "lift",
+                             job.lift_back + K["transport_z"],
+                             K["lift"], 0.10)] + legs)
+                job.lift_armed = False
+            elif not job.lift_armed and (cur_hit or nxt_hit):
+                job.lift_back = view.q("lift")
                 legs = ([Leg("move", "lift", 0.125, K["lift"], 0.10)]
-                        + legs
-                        + [Leg("move", "lift",
-                               back + K["transport_z"], K["lift"], 0.10)])
+                        + legs)
+                job.lift_armed = True
+            # armed 且仍在台位区: 保持高叉, 不重复升
         for lg in legs:
             self.runner.submit(vid, [self._seg(vid, lg)])
         self.quad_of[vid] = self._quad_after(job, i, self.quad_of[vid])
@@ -282,14 +306,16 @@ class MissionRunner:
                 self._move_seg(vid, "y", stand_y - off, K["fk_approach"]),
                 self._slift(vid, rel_z, K["lift_slow"])]
 
-    def _op_pick_segs(self, vid, slot, level):
+    def _op_pick_segs(self, vid, slot, level, pn: str | None = None):
         fy = self.graph._slot_face(slot)[2]
         sgn = 1.0 if int(slot.split("S")[1]) < 4 else -1.0
         cp = self.cell.vclass(vid)
-        pn = pallet_name_for(f"{slot}-L{level}")
         # W1 顺序: 对中 → 升至插入高度 → 插叉 → 微升离梁 → 带载倒退。
         # 对中与高度均闭环到托盘实测位姿 (机理见 _pallet_align_seg /
         # _pallet_lift_seg docstring; 段工厂延迟到段启动时刻读值)。
+        # detfix2: pn 可由调度层显式指定 (补货回填的异名托盘 ——
+        # 物理occupant即真值, 不再按 slot+level 命名推断)。
+        pn = pn or pallet_name_for(f"{slot}-L{level}")
         return [self._pallet_align_seg(vid, pn),
                 self._pallet_lift_seg(vid, pn, 0.0095, cp["lift"]),
                 self._move_seg(vid, "y", fy + sgn * 0.120, K["fk_insert"]),
@@ -471,7 +497,7 @@ class MissionRunner:
             # (取托=台上托; 放托=pick 任务所取托盘)
             take = ph[0] == "op_stand_take"
             pn = (self.ledger.at(f"stand:{stand}") if take
-                  else pallet_name_for(f"{t['slot']}-L{t.get('level', 0)}")
+                  else self._pick_pallet(t)
                   if t["kind"] == "pick" else None)
             self.runner.submit(vid, self._op_stand_segs(vid, stand,
                                                         take, pn))
@@ -500,7 +526,8 @@ class MissionRunner:
             # notify_progress 释放; claim 仅作入口串行化 (自持幂等)。
             job.extras = ()
             self.runner.submit(vid, self._op_pick_segs(
-                vid, t["slot"], t.get("level", 0)))
+                vid, t["slot"], t.get("level", 0),
+                self._pick_pallet(t)))
         elif ph[0] == "op_put":
             j = self.graph._line_of_slot(
                 int(t["slot"][1]), int(t["slot"].split("S")[1]) < 4)
@@ -652,9 +679,20 @@ class MissionRunner:
                     return
             job.mode = "wait"
 
+    @staticmethod
+    def _pick_pallet(t):
+        """pick 作业对象托盘 (detfix2): 调度层显式重绑 (补货回填的异名
+        占位托盘) 优先, 否则按 slot+level 命名推断 (初始播种恒同名)。"""
+        return t.get("pallet") or pallet_name_for(
+            f"{t['slot']}-L{t.get('level', 0)}")
+
     def _finish_op(self, vid, final: bool):
         """op 相位收尾: 中间相位仅释放外延资源; 末端相位做台账搬动 +
-        物理校验 (台账位置必须与托盘实际位姿一致)。"""
+        物理校验 (台账位置必须与托盘实际位姿一致)。
+
+        detfix2: 物理校验失败即回滚本腿台账搬动 —— 物理即真值, 托盘
+        未被证实到达 dst, 账本不得断言 dst (否则幻影占位把 stand/dock
+        永久锁死, 后续链按死账取托, 账实失步级联)。"""
         job = self.jobs[vid]
         t = job.task
         kind = t["kind"]
@@ -665,14 +703,17 @@ class MissionRunner:
             self.traffic.events.append(
                 (self.traffic.t, vid, "op_phase", kind))
             return
+        pn, prev_loc = None, None
         if kind == "pick":
-            pn = pallet_name_for(f"{t['slot']}-L{t.get('level', 0)}")
+            pn = self._pick_pallet(t)
+            prev_loc = self.ledger.loc.get(pn)
             self.ledger.move(pn, f"stand:{t['stand']}")
         elif kind == "putaway":
             pn = self.ledger.at(f"stand:{t['stand']}")
             if pn is None:
                 self.op_errors.append(f"{vid}: 台上无托可上架 {t}")
             else:
+                prev_loc = f"stand:{t['stand']}"
                 self.ledger.move(pn, f"slot:{t['slot']}")
         elif kind in ("haul", "fetch"):
             src = f"stand:{t['stand']}" if kind == "haul" else f"dock:{t['dock']}"
@@ -681,16 +722,23 @@ class MissionRunner:
             if pn is None:
                 self.op_errors.append(f"{vid}: {src} 无托 {t}")
             else:
+                prev_loc = src
                 self.ledger.move(pn, dst)
-        self._verify_physical(vid, t, kind)
+        if pn is not None \
+                and not self._verify_physical(vid, t, kind) \
+                and prev_loc is not None:
+            self.ledger.loc[pn] = prev_loc       # detfix2: 失败不认账
         self.traffic.events.append((self.traffic.t, vid, "op_done", kind))
 
-    def _verify_physical(self, vid, t, kind):
-        """物理即真值: 作业后台账位置必须与托盘实际位姿一致 (±0.02)。"""
+    def _verify_physical(self, vid, t, kind) -> bool:
+        """物理即真值: 作业后台账位置必须与托盘实际位姿一致 (±0.02)。
+
+        返回 True=通过; 失败时照旧记 op_errors (spec 失败判据), 并由
+        _finish_op 据返回值回滚本腿台账搬动 (detfix2)。"""
         L = self.cell.layout
         level = t.get("level", 0)
         if kind == "pick":
-            pn = pallet_name_for(f"{t['slot']}-L{level}")
+            pn = self._pick_pallet(t)
             ex, ey, ez = (*L.stand_pose(t["stand"])[:2],
                           L.p["stand_top_z"])
         elif kind == "putaway":
@@ -706,13 +754,15 @@ class MissionRunner:
             ex, ey, ez = (*L.stand_pose(t["stand"])[:2],
                           L.p["stand_top_z"])
         if pn is None:
-            return
+            return False
         pos = self.cell.pallet_pose(pn)[0]
         err = math.hypot(pos[0] - ex, pos[1] - ey)
         if err > 0.02 or abs(pos[2] - ez) > 0.02:
             self.op_errors.append(
                 f"{vid}: {kind} 物理校验失败 {pn} "
                 f"dxy={err:.3f} dz={pos[2] - ez:.3f}")
+            return False
+        return True
 
     def _setup_reverse(self, vid) -> bool:
         """AGV 放托后倒出作业点 (W1 plan_agv_drop 同款): 沿来路倒回一线节点。"""

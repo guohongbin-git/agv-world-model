@@ -1,0 +1,313 @@
+{
+  "samples": [
+    {
+      "t": 0,
+      "sim": 20,
+      "busy": 2,
+      "orders": 0,
+      "tasks": 0,
+      "fail": 0,
+      "rss_mb": 0,
+      "divergence": false
+    },
+    {
+      "t": 60,
+      "sim": 81,
+      "busy": 4,
+      "orders": 0,
+      "tasks": 0,
+      "fail": 0,
+      "rss_mb": 0,
+      "divergence": false
+    },
+    {
+      "t": 120,
+      "sim": 146,
+      "busy": 3,
+      "orders": 0,
+      "tasks": 0,
+      "fail": 0,
+      "rss_mb": 0,
+      "divergence": false
+    },
+    {
+      "t": 180,
+      "sim": 212,
+      "busy": 4,
+      "orders": 0,
+      "tasks": 0,
+      "fail": 0,
+      "rss_mb": 0,
+      "divergence": false
+    },
+    {
+      "t": 240,
+      "sim": 271,
+      "busy": 5,
+      "orders": 0,
+      "tasks": 1,
+      "fail": 0,
+      "rss_mb": 0,
+      "divergence": false
+    },
+    {
+      "t": 300,
+      "sim": 336,
+      "busy": 6,
+      "orders": 0,
+      "tasks": 1,
+      "fail": 0,
+      "rss_mb": 0,
+      "divergence": false
+    },
+    {
+      "t": 360,
+      "sim": 395,
+      "busy": 7,
+      "orders": 1,
+      "tasks": 2,
+      "fail": 0,
+      "rss_mb": 0,
+      "divergence": false
+    },
+    {
+      "t": 420,
+      "sim": 458,
+      "busy": 5,
+      "orders": 1,
+      "tasks": 2,
+      "fail": 0,
+      "rss_mb": 0,
+      "divergence": false
+    },
+    {
+      "t": 480,
+      "sim": 517,
+      "busy": 6,
+      "orders": 1,
+      "tasks": 2,
+      "fail": 0,
+      "rss_mb": 0,
+      "divergence": false
+    },
+    {
+      "t": 540,
+      "sim": 577,
+      "busy": 6,
+      "orders": 1,
+      "tasks": 3,
+      "fail": 0,
+      "rss_mb": 0,
+      "divergence": false
+    },
+    {
+      "t": 600,
+      "sim": 636,
+      "busy": 5,
+      "orders": 1,
+      "tasks": 4,
+      "fail": 0,
+      "rss_mb": 0,
+      "divergence": false
+    },
+    {
+      "t": 660,
+      "sim": 695,
+      "busy": 5,
+      "orders": 1,
+      "tasks": 4,
+      "fail": 0,
+      "rss_mb": 0,
+      "divergence": false
+    },
+    {
+      "t": 720,
+      "sim": 751,
+      "busy": 4,
+      "orders": 1,
+      "tasks": 4,
+      "fail": 0,
+      "rss_mb": 0,
+      "divergence": false
+    },
+    {
+      "t": 780,
+      "sim": 806,
+      "busy": 5,
+      "orders": 2,
+      "tasks": 6,
+      "fail": 1,
+      "rss_mb": 0,
+      "divergence": false
+    },
+    {
+      "t": 840,
+      "sim": 869,
+      "busy": 5,
+      "orders": 2,
+      "tasks": 6,
+      "fail": 1,
+      "rss_mb": 0,
+      "divergence": false
+    },
+    {
+      "t": 900,
+      "sim": 929,
+      "busy": 6,
+      "orders": 2,
+      "tasks": 6,
+      "fail": 1,
+      "rss_mb": 0,
+      "divergence": false
+    },
+    {
+      "t": 960,
+      "sim": 985,
+      "busy": 5,
+      "orders": 3,
+      "tasks": 7,
+      "fail": 1,
+      "rss_mb": 0,
+      "divergence": false
+    },
+    {
+      "t": 1020,
+      "sim": 1041,
+      "busy": 6,
+      "orders": 3,
+      "tasks": 7,
+      "fail": 1,
+      "rss_mb": 0,
+      "divergence": false
+    },
+    {
+      "t": 1080,
+      "sim": 1101,
+      "busy": 5,
+      "orders": 3,
+      "tasks": 8,
+      "fail": 1,
+      "rss_mb": 0,
+      "divergence": false
+    },
+    {
+      "t": 1140,
+      "sim": 1161,
+      "busy": 5,
+      "orders": 3,
+      "tasks": 8,
+      "fail": 1,
+      "rss_mb": 0,
+      "divergence": false
+    },
+    {
+      "t": 1200,
+      "sim": 1221,
+      "busy": 4,
+      "orders": 4,
+      "tasks": 9,
+      "fail": 1,
+      "rss_mb": 0,
+      "divergence": false
+    },
+    {
+      "t": 1260,
+      "sim": 1281,
+      "busy": 4,
+      "orders": 4,
+      "tasks": 9,
+      "fail": 1,
+      "rss_mb": 0,
+      "divergence": false
+    },
+    {
+      "t": 1320,
+      "sim": 1341,
+      "busy": 5,
+      "orders": 4,
+      "tasks": 9,
+      "fail": 1,
+      "rss_mb": 0,
+      "divergence": false
+    },
+    {
+      "t": 1380,
+      "sim": 1401,
+      "busy": 5,
+      "orders": 4,
+      "tasks": 10,
+      "fail": 1,
+      "rss_mb": 0,
+      "divergence": false
+    },
+    {
+      "t": 1440,
+      "sim": 1460,
+      "busy": 4,
+      "orders": 4,
+      "tasks": 12,
+      "fail": 1,
+      "rss_mb": 0,
+      "divergence": false
+    },
+    {
+      "t": 1500,
+      "sim": 1521,
+      "busy": 5,
+      "orders": 5,
+      "tasks": 13,
+      "fail": 1,
+      "rss_mb": 0,
+      "divergence": false
+    },
+    {
+      "t": 1560,
+      "sim": 1581,
+      "busy": 5,
+      "orders": 5,
+      "tasks": 13,
+      "fail": 1,
+      "rss_mb": 0,
+      "divergence": false
+    },
+    {
+      "t": 1620,
+      "sim": 1641,
+      "busy": 5,
+      "orders": 5,
+      "tasks": 13,
+      "fail": 1,
+      "rss_mb": 0,
+      "divergence": false
+    },
+    {
+      "t": 1680,
+      "sim": 1701,
+      "busy": 6,
+      "orders": 5,
+      "tasks": 13,
+      "fail": 1,
+      "rss_mb": 0,
+      "divergence": false
+    },
+    {
+      "t": 1740,
+      "sim": 1761,
+      "busy": 5,
+      "orders": 6,
+      "tasks": 14,
+      "fail": 1,
+      "rss_mb": 0,
+      "divergence": false
+    }
+  ],
+  "summary": {
+    "n_samples": 30,
+    "http_errors": 0,
+    "sim_reached": 1761,
+    "fails": 1,
+    "any_divergence": false,
+    "rss_first": 0,
+    "rss_last": 0
+  }
+}
