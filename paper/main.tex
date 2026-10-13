@@ -214,6 +214,16 @@ faults by re-observation.}
 \label{tab:ablation}
 \end{table}
 
+Denominators: invalid-commit rate is the per-episode ratio
+(unsafe commits / commit attempts), averaged over 30 seeds per cell;
+zeros are exact (0/300 per group), whose one-sided 95\% Wilson upper
+bound is \(\approx\)1.0\% per group and 9.5\% per scenario --- we claim
+zero observed invalid commits, not proven zero probability. B3 recovery
+(0.31\,s mean) denotes ledger reconciliation plus re-observation; it
+excludes physical re-execution, and the residual non-atomic window
+between physical settle and commit is measured (max 0.54\,s in the
+dc-twin P0 scenario) rather than assumed away.
+
 The mechanism is visible per episode. Under a forged lift signal (class:
 sensor false positive), B0 commits a pick that never occurred --- the
 ledger then asserts a pallet is aboard the vehicle while ground truth has

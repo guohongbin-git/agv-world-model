@@ -110,7 +110,7 @@ PYTHONPATH=. python twin/server.py           # http://127.0.0.1:8300
 - **Paper I**: Evidence-Grounded Transactional Execution（感知错误/数据库失败/事件重放/部分交接下的状态正确性）
 - **Paper II**: Evidence-Conditioned Decision Adaptation（Decision Memory 因果影响）
 - 相关工作对照（MAPF/openTCS/Voyager/两阶段调度）见 [docs/knowledge/related_work.md](docs/knowledge/related_work.md)
-- 与 openTCS 等工业标准的差异：`COMMITTED` 只在物理证据成立后提交——工业框架没有"事务-物理"一致性层
+- 与 openTCS 等工业标准的差异：`COMMITTED` 只在物理证据成立后提交。openTCS 7 的外设作业已支持"必须成功完成"的依赖语义与失败联动撤销——但作业确认仍来自设备消息层; 我们的增量是把确认升级为**物理证据裁决** (承托率/稳定窗/位姿联合判据) 并与账本原子提交耦合, 且有 1200 runs 故障注入消融量化该增量 (含工业强基线 B4)
 
 ## 历史（M1 双车时代）
 
