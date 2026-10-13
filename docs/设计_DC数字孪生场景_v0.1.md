@@ -1,6 +1,6 @@
 # DC 数字孪生场景设计 — M2 矩阵仓库 × PepsiCo/Omniverse 风格配送中心
 
-状态: **v0.2 设计稿, 待签字** · 2026-10-13 · 参照: NVIDIA GTC D4109
+状态: **v0.3 设计稿, 待签字** (架构定位: 开源复刻) · 2026-10-13 · 参照: NVIDIA GTC D4109
 (PepsiCo DC × Omniverse + Metropolis) + NVIDIA 官方文档/专利调研
 
 ## 1. 视频要素 → 我们的映射
@@ -103,3 +103,39 @@ PepsiCo 演示背后的正式产品。分层: Foundational Microservices
    agent": 消费事件流, 对账实分歧发告警) —— 放 P2, 不阻塞主线。
 3. 术语: 对外叙事用 "Evidence-Grounded Warehouse Digital Twin",
    避免与 NVIDIA Warehouse Blueprint 重名。
+
+
+## 7. v0.3 架构定位: 用本仓库开源栈复刻 Warehouse Blueprint 范式
+
+**原则: 零 NVIDIA 依赖** —— 纯 Python 开源栈 (mujoco/numpy/ortools/
+PIL), pip 可装, 全链路可复现。目标是"开源版 Warehouse Blueprint":
+同构分层架构, 换掉专有底座, 并补上他们缺失的证据事务层。
+
+### 7.1 组件对标 (他们的 → 我们的)
+
+| Warehouse Blueprint 组件 | 专有底座 | 开源复刻 (本仓库) |
+|---|---|---|
+| 物理仿真 (Isaac Sim/Omniverse) | USD/Omniverse Kit | **MuJoCo 1kHz** warehouse_cell |
+| 感知 (Metropolis/DeepStream 视觉) | DNN 摄像头管线 | **虚拟摄像头传感器模型** (检测事件+噪声) |
+| 2D Blueprint 检测事件流 | Kafka 出口 | feeds/decision ring + 同 schema 事件 |
+| 3D 数字孪生渲染 | Omniverse Renderer | **Blender 照片级管线** (真值 CSV 驱动, 既有) |
+| AI Agents (Safety Inspector 等) | NIM 微服务 | Python agent (证据审计/告警), 消费事件 ring |
+| WMS/ERP 集成 | 企业连接器 | 账本 SQLite + JSON API (:8400) |
+| Simulation/SDG | Replicator | **故障注入管线** (面向证据协议的 SDG) |
+| (缺失) | — | **证据门控事务执行层** (我们的独占层) |
+
+### 7.2 分层架构 (开源版)
+
+```
+L4  Agentic 应用     : 证据审计 agent / what-if 优化 agent      (P2)
+L3  Blueprints       : DC 场景 blueprint (月台+存储+车队)        (P0)
+L2  感知微服务       : 虚拟摄像头 → 检测事件流 (噪声模型)        (P1)
+L1  基础微服务       : MuJoCo 物理 + 锁矩阵调度 + 账本事务       (已有)
+L1.5 (独占) 证据事务 : PREPARED→证据→原子提交→恢复对账          (已有)
+```
+
+### 7.3 叙事
+
+"开源、物理可证的 Warehouse Blueprint 同构实现 —— 补上了专有方案
+缺失的执行证据层": 这同时回应 GPT 尽调 (可复现性=学术可信度) 与
+开源社区价值 (无 USD/Omniverse 门槛)。
