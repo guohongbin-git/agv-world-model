@@ -1,6 +1,6 @@
 # DC 数字孪生场景设计 — M2 矩阵仓库 × PepsiCo/Omniverse 风格配送中心
 
-状态: **v0.3 设计稿, 待签字** (架构定位: 开源复刻) · 2026-10-13 · 参照: NVIDIA GTC D4109
+状态: **v0.4-dev 设计稿, 待签字** (架构定位: 开源复刻; **项目形态: 独立项目**) · 2026-10-13 · 参照: NVIDIA GTC D4109
 (PepsiCo DC × Omniverse + Metropolis) + NVIDIA 官方文档/专利调研
 
 ## 1. 视频要素 → 我们的映射
@@ -139,3 +139,32 @@ L1.5 (独占) 证据事务 : PREPARED→证据→原子提交→恢复对账    
 "开源、物理可证的 Warehouse Blueprint 同构实现 —— 补上了专有方案
 缺失的执行证据层": 这同时回应 GPT 尽调 (可复现性=学术可信度) 与
 开源社区价值 (无 USD/Omniverse 门槛)。
+
+
+## 8. v0.4 项目形态决策 (2026-10-13, 用户定): 独立项目 + 组合
+
+**DC 生产场景不进 desktop-agv-demo, 独立成新 repo**, 通过组合契约
+使用仓库能力 (库依赖, 非拷贝)。
+
+### 8.1 项目拆分
+
+| 项目 | 内容 | 形态 |
+|---|---|---|
+| desktop-agv-demo (现有) | 仓库内核: 物理/调度/锁矩阵/证据事务/账本 | 演示+内核; 补 pyproject 打包为可安装库 `agv-warehouse-core` |
+| dc-twin (新) | DC 场景: 月台/卡车 agent/虚拟摄像头/融合层/AI agents/what-if/blueprint 面板 | 独立 repo, `pip install agv-warehouse-core` 组合 |
+
+### 8.2 组合契约 (dc-twin ↔ warehouse-core)
+
+- dc-twin import: warehouse_cell (布局/物理), ledger/证据事务 API,
+  demand 引擎, 渲染管线 (真值 CSV)。
+- 禁止 import: twin/matrix_server (演示壳), 面板前端。
+- 版本纪律: warehouse-core 语义化版本; dc-twin 锁 minor; design_version
+  联动沿 AGENTS 规则 4 (仓库侧变更→core 版本→dc-twin 适配)。
+- 内核变更门: dc-twin 需要的新钩子 (truck 节点类/装车证据事件) 在
+  core 侧以**可扩展点**实现 (注册表), 不为场景硬编码。
+
+### 8.3 好处
+
+- 仓库演示保持纯净 (GPT 尽调: 不要为了场景膨胀);
+- DC 场景独立演进/独立开源发布;
+- 组合即卖点: "core+dc-twin = 开源版 Warehouse Blueprint"。
