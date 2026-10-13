@@ -196,14 +196,21 @@ rather than seed-lucky.
 Variant & Invalid commits & Atomicity viol. & Recovery & VCR (faulted)\\
 \midrule
 B0 rule scheduler      & 61.9\% & 100\% & ---            & 20\%\\
+B-Industrial strong baseline & 11.1\% & 0\% & 100\% (0.08\,s) & 80\%\\
 B1 gate only           & 4.8\%  & 100\% & ---            & 60\%\\
 B2 gate+transactions   & 0\%    & 0\%   & 25\% (2.59\,s) & 70\%\\
 B3 +reconciliation     & \textbf{0\%} & \textbf{0\%} & \textbf{100\%} (0.31\,s) & \textbf{100\%}\\
 \bottomrule
 \end{tabular}
-\caption{Fault-injection study (1{,}200 episodes). B0 commits facts that
-never physically happened; B3 commits nothing unverified and recovers all
-injected faults by re-observation.}
+\caption{Fault-injection study (1{,}200 episodes; B-Industrial row adds
+300 episodes at 30 seeds). B0 commits facts that never physically
+happened. B-Industrial --- PLC-style device ACK, idempotent re-delivery,
+journaled retries and restart reconciliation, the standard industrial
+toolkit --- still commits 11.1\% unsafe (fork-load and slip classes,
+where device status words carry no mechanics); the incremental value of
+physical evidence gating is measured against this strong baseline, not
+against B0. B3 commits nothing unverified and recovers all injected
+faults by re-observation.}
 \label{tab:ablation}
 \end{table}
 
