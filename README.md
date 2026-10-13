@@ -115,4 +115,4 @@ PYTHONPATH=. python twin/server.py           # http://127.0.0.1:8300
 
 ## 目录
 
-见 `docs/桌面AGV与机器人仓储Demo_阶段一仿真详细设计_v2.0.0.md`（规格基线，design_version 现行 2.3.0，验收报告 `reports/v2.*.md`）。
+见 `docs/桌面AGV与机器人仓储Demo_阶段一仿真详细设计_v2.0.0.md`（规格基线，已被 M2 矩阵设计取代；现行 design_version 2.4.0，验收报告 `reports/v2.4.0.md`）。

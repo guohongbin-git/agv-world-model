@@ -12,6 +12,17 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+def rss_server_mb() -> float:
+    """:8400 进程 RSS (ps), 修复旧版恒 0 的 process.rss_mb 幻字段。"""
+    try:
+        pid = subprocess.run(["lsof", "-ti", ":8400"], capture_output=True,
+                             text=True).stdout.strip().splitlines()[0]
+        out = subprocess.run(["ps", "-o", "rss=", "-p", pid],
+                             capture_output=True, text=True).stdout.strip()
+        return round(int(out) / 1024, 1)
+    except Exception:  # noqa: BLE001
+        return 0.0
 sys.path.insert(0, str(ROOT))
 OUT = ROOT / "reports" / "detfix" / "press_reverify.json"
 URL = "http://127.0.0.1:8400/api/state"
@@ -22,12 +33,19 @@ for i in range(30):
         with urllib.request.urlopen(URL, timeout=8) as r:
             m = json.load(r)
         met = m.get("metrics", {})
+        uw = met.get("util_window", {}) or {}
         rows.append({
             "t": round(i * 60), "sim": round(m.get("sim_t", 0)),
             "busy": sum(1 for v in m.get("vehicles", []) if v.get("busy")),
             "orders": met.get("orders_done"), "tasks": met.get("tasks_done"),
             "fail": met.get("tasks_failed"),
-            "rss_mb": round(m.get("process", {}).get("rss_mb", 0), 1),
+            "util_fleet": uw.get("fleet"),
+            "throughput": met.get("throughput_tasks_h"),
+            "max_pen_m": met.get("max_pen_m"),
+            "collisions": met.get("collisions"),
+            "chains_open": met.get("chains_open"),
+            "queue_depth": met.get("queue_depth"),
+            "rss_mb": rss_server_mb(),
             "divergence": bool(m.get("health", {}).get("diverged")),
         })
     except Exception as e:  # noqa: BLE001

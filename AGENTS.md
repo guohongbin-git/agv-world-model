@@ -33,7 +33,7 @@
 - `scripts/` 压测与取证工具（`press.py`、`pen_probe.py`、`pen_align.py`、`detfix_*.py`）
 - `data/demand/` 真实零售数据标定的 SKU 目录与需求曲线
 - `docs/knowledge/` 相关工作、Paper I 故障矩阵、发散取证
-- `tests/` T01-T16 + M1/M2 用例（pytest）
+- `tests/` 矩阵/fleet/事务/观测隔离/robot_skills/DetFix 回归用例（pytest, 全库 325）
 - `reports/` 环境、验收证据（按 run_id / 版本归档）
 - `deliverables/` 影片与最终报告
 
@@ -41,6 +41,6 @@
 
 **M2 矩阵仓库主线**：128 架（4×4 组×8 架×3 层=384 货位）+ 8 车异构车队（F01-F04 叉车 / A01-A04 潜伏顶升 AGV，L1/L2/L3 承重分级、能力强速度慢）+ 需求驱动 24h continuous。
 - 已落地：CP-SAT 调度（能力约束/时间窗/回退贪心）+ 网格 A* + 巷道/交叉口锁矩阵 + 决策面板（`:8400`）+ 利用率反馈控制 + 技能库 + 原子事务/观测隔离/恢复（B1-B3）+ 24h 自恢复看门狗
-- 验证：`pytest tests/` 300+ 用例；Paper I 消融 120 runs（B0-B3）；30 分钟压测脚本 `scripts/press.py`
-- **物理收敛已闭**（DetFix，2026-10-13）：t=558s 六层发散链根断——三修复（落架释放高度 z+0.010 消 1.5mm 楔 / row:j 锁持有至退场 / 载运路由 hard-block 有托台位），全库 320 passed + fleet 15/15（含 determinism 双 run 逐位一致）+ L0/L1 press 点位 7/7 PASS。取证：`docs/knowledge/detfix_fault_chain.md` + `reports/detfix/run1-14`。30min 压测复验进行中
-- design_version **2.4.0**（`reports/v2.4.0.md`: 物理收敛+需求控制稳定化+30-seed 主实验）；残留: 落座残缺陷 (DetFix2 进行中)/失败链账本回滚/饱和均衡/拥堵瞬态 2.2mm；旧 W01-W07 表述已废弃
+- 验证：`pytest tests/` 全库 **325 passed**；Paper I 消融 **1200 runs 主实验**（4 组×10 场景×30 seed, `reports/ablation_n30.json`）；30 分钟压测脚本 `scripts/press.py`
+- **物理收敛已闭**（DetFix，2026-10-13）：t=558s 六层发散链根断——三修复（落架释放高度 z+0.010 消 1.5mm 楔 / row:j 锁持有至退场 / 载运路由 hard-block 有托台位），全库 320 passed（DetFix2 后 **325**）+ fleet 15/15（含 determinism 双 run 逐位一致）+ L0/L1 press 点位 7/7 PASS。取证：`docs/knowledge/detfix_fault_chain.md` + `reports/detfix/run1-14`。30min 压测复验进行中
+- design_version **2.4.0**（`reports/v2.4.0.md`: 物理收敛+需求控制稳定化+30-seed 主实验）；残留: ~~落座残缺陷/失败链账本回滚~~ (**DetFix2 已闭**, 3a1d5e0: dock guard+pick 等待重绑+台账回滚)/饱和均衡/拥堵瞬态 2.2mm (压测 #3 复测中)；旧 W01-W07 表述已废弃

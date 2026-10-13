@@ -118,7 +118,7 @@ final_metrics / failure_reason。**物理真值日志与 Agent 观测日志物�
 | 协议要求 | 已就绪 | 缺口 |
 |---|---|---|
 | 证据门禁+事务 | World/Event/CommitEvidenceMissing ✅ | 证据过期/部分交接注入 |
-| 判据执行内核 | ForkliftAdapter+Ramp+210 测试 ✅ | — |
+| 判据执行内核 | ForkliftAdapter+Ramp+325 测试 ✅ | — |
 | 多货物 | 三层 cell ✅（P2 进行中） | 任务 DAG/B0 规则调度器 |
 | 双车+交接 | WarehouseScene 存在（未接线） | P3 |
 | 锥桶+LiDAR 感知 | 设计定稿（mj_multiRay 参数表） | P4 实现 |

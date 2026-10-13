@@ -50,10 +50,10 @@ from sim.warehouse_cell import K, LAYOUT, WarehouseCell, pallet_name_for
 
 WEB = Path(__file__).parent / "web"
 PUB_HZ = 12                      # ws 状态推送频率
-MAX_CHAINS = 16                  # 在飞订单链上限 (bound CP-SAT 批规模/队列)
 MAX_OUT_STANDS = 4               # 出库链同时持有的交接台数上限 (防 stand↔dock 环)
 EVENT_RING, DEC_RING, CHAT_RING = 2048, 512, 200
-MAX_CHAINS = 24                  # 在飞订单链上限 (倍率高时队列不憋死)
+MAX_CHAINS = 24                  # 在飞订单链上限 (bound CP-SAT 批规模/队列;
+                                 # 倍率高时队列不憋死; 原 16 重复赋值死量已删)
 BACKLOG_CAP = 24                 # 未提交订单背压上限 (超限暂缓生成)
 UTIL_SAMPLE_S = 60.0             # 利用率滑动窗采样周期 (仿真秒)
 UTIL_WIN = 5                     # 滑动窗样本数 (~5min 仿真)
