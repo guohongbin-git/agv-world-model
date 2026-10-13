@@ -97,6 +97,23 @@ SAFETY_MARGIN = 0.05          # 单侧安全余量 (规格: 包络 + 2× 余量)
 _SLOT_RE = re.compile(r"R([1-9])([1-9])-S([0-7])(?:-L([0-2]))?$")
 
 
+# ---------------------------------------------------------------- 节点注册表
+#: 场景节点源 (L3 场景载荷经此注册进布局/调度索引, 不硬编码进主路径):
+#: fn(MatrixLayout) -> {node_id: (x, y, z)}。node_id 全局唯一 —— 重名在
+#: extra_nodes() 求值时抛 ValueError (内核节点名同样不可占用)。
+_NODE_SOURCES: list = []
+
+
+def register_node_source(fn):
+    """注册场景节点源; 返回 fn 本身 (可作装饰器)。
+
+    契约: fn 纯函数 (同 layout 同结果, 不持引用); 语义上是「节点类」
+    的一段派生规则 —— 如 dc-twin 的 tk:* 卡车位 (D_G 延伸段)。
+    """
+    _NODE_SOURCES.append(fn)
+    return fn
+
+
 def parse_slot(slot_id: str) -> tuple[int, int, int, int]:
     """'R23-S5-L1' → (r=2, c=3, k=5, level=1); 缺省层 = L0。"""
     m = _SLOT_RE.fullmatch(slot_id)
@@ -216,6 +233,21 @@ class MatrixLayout:
             return self.dock_poses()[sid]
         raise KeyError(f"未知交接台 {sid!r}; 可用: 交接台 {self.p['handoff_ids']}"
                        f" / 交付台 D_G<r><c>")
+
+    def extra_nodes(self) -> dict[str, tuple[float, float, float]]:
+        """合并全部注册节点源的命名节点 (布局可扩展点; 内核节点名保留)。
+
+        重名 (源间互撞或撞内核 H/D/货位名) 即抛 ValueError —— 注册表
+        求值时统一拦截, 主路径消费方无需感知来源数量。
+        """
+        out: dict[str, tuple[float, float, float]] = {}
+        reserved = {**self.handoff_poses(), **self.dock_poses()}
+        for src in _NODE_SOURCES:
+            for name, p in dict(src(self)).items():
+                if name in out or name in reserved or _SLOT_RE.fullmatch(name):
+                    raise ValueError(f"注册节点重名/占用内核名: {name!r}")
+                out[name] = (float(p[0]), float(p[1]), float(p[2]))
+        return out
 
 
 # ---------------------------------------------------------------- 车辆视图

@@ -34,6 +34,33 @@ POSE_TOL_M = 0.010            # 位姿容差: 稳定窗内位姿极差 ≤10mm
 KIND_PICK = "PICK"            # 取托: 新支撑 = 叉臂, 旧支撑 = 横梁/台面
 KIND_PLACE = "PLACE"          # 放托: 新支撑 = 横梁/台面, 旧支撑 = 叉臂
 
+# ---------- 事件类型注册表 (设计 v0.5.1 §1: 场景载荷经可扩展点注册) ----------
+#: kind → 描述。内核 PICK/PLACE 常驻; 场景事件类型 (如 dc-twin 的 LOAD
+#: 装车, 四态之首) 经 register_event_kind 进同一张表。门判据 (GATES)
+#: 全类型共享, 注册只扩类型面、不改裁决语义。
+EVENT_KINDS: dict[str, str] = {}
+
+
+def register_event_kind(kind: str, description: str = "") -> str:
+    """注册证据事件类型; 返回 kind。非法名/重注册拒绝。"""
+    if (not kind or kind != kind.strip() or kind != kind.upper()
+            or any(not (c.isascii() and c.isalnum() or c == "_")
+                   for c in kind)):
+        raise ValueError(f"事件类型非法 (大写字母/数字/下划线): {kind!r}")
+    if kind in EVENT_KINDS:
+        raise ValueError(f"事件类型已注册: {kind!r}")
+    EVENT_KINDS[kind] = description
+    return kind
+
+
+def event_kinds() -> dict[str, str]:
+    """已注册事件类型快照 (kind → 描述)。"""
+    return dict(EVENT_KINDS)
+
+
+register_event_kind(KIND_PICK, "取托 (内核)")
+register_event_kind(KIND_PLACE, "放托 (内核)")
+
 GATES = {"min_new_support": MIN_NEW_SUPPORT,
          "max_old_support": MAX_OLD_SUPPORT,
          "stable_window_s": STABLE_WINDOW_S,

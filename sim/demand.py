@@ -122,6 +122,7 @@ class DemandEngine:
         initial_pallets: int = _SEED_PALLETS,
         replenish_threshold: int = 1,
         max_qty: int = 1,
+        arrival_sources: tuple = (),
     ):
         if global_multiplier <= 0:
             raise ValueError("global_multiplier 必须为正")
@@ -147,6 +148,11 @@ class DemandEngine:
         self._n_out = 0
         self._n_rep = 0
         self.orders: list[DemandOrder] = []
+        #: 外部到达源 (可扩展点, 设计 v0.5.1 §3-P0): 每源实现
+        #: arrivals_in(t0_s, t1_s) -> [order-like (须含 t_s/order_id)]。
+        #: 到达单与内部订单合并后按 t_s 排序 (稳定: 同刻内部单在前);
+        #: 引擎不解释外部单语义 (如 dc-twin 卡车时刻表 → 装运单)。
+        self.arrival_sources: tuple = tuple(arrival_sources)
 
         # ---- 计划库存: slot -> sku | None ----
         self.slots: list[str] = list(slots) if slots is not None else _default_slots()
@@ -244,11 +250,13 @@ class DemandEngine:
 
     # ------------------------------------------------------------ 生成
     def generate_until(self, t_end_s: float) -> list[DemandOrder]:
-        """推进 cursor 到 t_end_s, 返回新产生的订单 (含触发的补货单)。"""
+        """推进 cursor 到 t_end_s, 返回新产生的订单 (含触发的补货单 +
+        外部到达源的窗口内到达, 按 t_s 归并)。"""
         if t_end_s < self.cursor_s:
             raise ValueError("t_end_s 早于 cursor, 时间不能倒流")
         fresh: list[DemandOrder] = []
         t = self.cursor_s
+        t0 = t
         while t < t_end_s - 1e-9:
             dt = min(_BUCKET_S, t_end_s - t)
             lam = self.rate_per_day(t + dt / 2) / _SECONDS_PER_DAY * dt
@@ -259,6 +267,10 @@ class DemandEngine:
                     fresh.extend(self._emit(t + off))
             t += dt
         self.cursor_s = t_end_s
+        ext: list = []
+        for src in self.arrival_sources:
+            ext.extend(src.arrivals_in(t0, t_end_s))
+        fresh = sorted(fresh + ext, key=lambda o: o.t_s)   # 稳定归并
         self.orders.extend(fresh)
         return fresh
 

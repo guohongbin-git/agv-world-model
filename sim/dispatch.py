@@ -114,8 +114,29 @@ FLEET_STUB: tuple[Vehicle, ...] = (
     Vehicle("A04", "agv", "L3", (2.22, -2.85)),           # 打桩: 南带外侧
 )
 
-#: 车辆类型 ↔ 任务腿类型 (类型匹配: 叉车=货位端操作, AGV=干线段)
+#: 车辆类型 ↔ 任务腿类型 (类型匹配: 叉车=货位端操作, AGV=干线段)。
+#: 既有 fork/trunk 为内核语义 (不改); 场景腿类型 (如 dc-twin 的 load)
+#: 经 register_leg_type 注册进同一张表 —— 指派/时长逻辑只读表, 不分叉。
 LEG_VEHICLE_TYPE = {"fork": "forklift", "trunk": "agv"}
+_LEG_HANDLING: dict[str, Callable[["Leg"], float]] = {}
+
+
+def register_leg_type(leg_type: str, *, vehicle_type: str,
+                      handling_s: Callable[["Leg"], float] | float) -> None:
+    """注册新腿类型: 合格载具类型 + 腿端固定作业时长 (标量或 fn(leg))。
+
+    重注册拒绝 (内核 fork/trunk 同样不可覆盖); 合法名 = 非空无空白。
+    """
+    if not leg_type or leg_type.split() != [leg_type]:
+        raise ValueError(f"腿类型非法 (非空无空白): {leg_type!r}")
+    if leg_type in LEG_VEHICLE_TYPE:
+        raise ValueError(f"腿类型已注册: {leg_type!r}")
+    LEG_VEHICLE_TYPE[leg_type] = vehicle_type
+    if callable(handling_s):
+        _LEG_HANDLING[leg_type] = handling_s
+    else:
+        h = float(handling_s)
+        _LEG_HANDLING[leg_type] = lambda leg, _h=h: _h
 
 
 # ---------------------------------------------------------------- 任务
@@ -135,6 +156,8 @@ class Leg:
             lvl = max(0, round((self.level_z - 0.10) / 0.15))   # LAYOUT 层高派生
             return (RACK_PICK_BASE_S + RACK_PICK_PER_LEVEL_S * lvl
                     + STAND_PLACE_S)
+        if self.leg_type in _LEG_HANDLING:                      # 注册腿类型
+            return _LEG_HANDLING[self.leg_type](self)
         return STAND_PICK_S + STAND_PLACE_S
 
 
@@ -490,6 +513,8 @@ def _layout_index() -> tuple[dict[str, tuple[float, float, float]], list[str],
         pos[h] = (p[0], p[1], 0.0)
     for d, p in lay.dock_poses().items():
         pos[d] = (p[0], p[1], 0.0)
+    for n, p in lay.extra_nodes().items():    # 场景注册节点 (如 tk:*)
+        pos[n] = (p[0], p[1], p[2])
     # 入库区: 西边缘通道 × 南泊位带 (打桩常量, 不改 W1 布局语义)
     inbound = (lay.p["handoff_x"][0], round(lay.handoff_y - 0.30, 4), 0.0)
     return pos, list(lay.p["handoff_ids"]), inbound
@@ -542,10 +567,11 @@ def _solve_cpsat(tasks, elig, node_xy, fleet, *, timeout_s, seed, workers,
 
     makespan = m.NewIntVar(0, horizon, "makespan")
     for t in tasks:
-        f, k = t.legs
-        m.Add(start[f.leg_id] >= t.release_tick)          # 释放期
-        m.Add(start[k.leg_id] >= end[f.leg_id] + HANDOFF_DWELL_TICKS)  # 交接链
-        m.Add(makespan >= end[k.leg_id])
+        m.Add(start[t.legs[0].leg_id] >= t.release_tick)      # 释放期
+        # 交接链先后 (N 腿泛化; 两腿任务与原 f,k 约束逐字等价)
+        for u, w in zip(t.legs, t.legs[1:]):
+            m.Add(start[w.leg_id] >= end[u.leg_id] + HANDOFF_DWELL_TICKS)
+        m.Add(makespan >= end[t.legs[-1].leg_id])
 
     # 车辆互斥: 同车全部腿区间不重叠 (时间窗)
     for v in fleet:
@@ -557,6 +583,7 @@ def _solve_cpsat(tasks, elig, node_xy, fleet, *, timeout_s, seed, workers,
             m.AddNoOverlap(ivs)
 
     # 交接台离散资源时间窗: 占用 = [落托结束, 接管开始], 同台不重叠
+    # (N 腿泛化: 窗取「dst==交接台腿」与其后继; 纯场景链无台边界则不占窗)
     by_handoff: dict[str, list] = {}
     for t in tasks:
         by_handoff.setdefault(t.handoff, []).append(t)
@@ -565,13 +592,18 @@ def _solve_cpsat(tasks, elig, node_xy, fleet, *, timeout_s, seed, workers,
             continue
         ivs = []
         for t in ts:
-            f, k = t.legs
+            pair = next(((a, b) for a, b in zip(t.legs, t.legs[1:])
+                         if a.dst == t.handoff), None)
+            if pair is None:
+                continue
+            f, k = pair
             occ = m.NewIntVar(HANDOFF_DWELL_TICKS, horizon,
                               f"occs_{t.task_id}_{h}")
             m.Add(occ == start[k.leg_id] - end[f.leg_id])
             ivs.append(m.NewIntervalVar(
                 end[f.leg_id], occ, start[k.leg_id], f"occ_{t.task_id}_{h}"))
-        m.AddNoOverlap(ivs)
+        if len(ivs) > 1:
+            m.AddNoOverlap(ivs)
 
     # 负载均衡 (利用率专项): load_v = 批前累计偏置 + 本批指派给 v 的腿
     # 时长和; 峰值 max_v load_v 以小权重进目标 —— 同等 makespan/Σstart 下
