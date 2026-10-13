@@ -5,7 +5,21 @@ journal 前置日志 + 重启对账 (超时→failed+回滚) + 失败腿重试 �
 红线: 完成判据不读物理真值/传感器 (与 B3 证据判据严格分道);
 twin/services 生产代码零改动。
 """
+import pytest
+
 import experiments.fault_ablation as fa
+
+
+@pytest.fixture(autouse=True)
+def _fake_mujoco_scoped():
+    """fake mujoco 替换只在本测试存活: 进场确保装上, 退场还原真实面。
+
+    harness 模块级替换是进程级全局态 —— 不还原则同进程后续测试
+    (真 mujoco 路径) 全部被污染, 顺序耦合失败。
+    """
+    fa.install_fake_mujoco()
+    yield
+    fa.restore_real_mujoco()
 
 
 def _make_ctx(fault="S01", seed=0):

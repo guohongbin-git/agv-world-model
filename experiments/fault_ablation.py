@@ -18,7 +18,8 @@ Task Completion Rate / Ledger–Physical Divergence Duration。
 实现原则 (不改生产代码, 只在实验进程内组合):
 1. 物理层 = FakeCell 运动学孪生 (truth = 物理真值; observed = 传感器口径,
    故障注入即篡改 observed)。经 WorldService(resume_cell=...) 注入, 并把
-   twin.server / twin.perception 的模块级 mujoco 换成 fake —— 因此
+   twin.server / twin.perception 的模块级 mujoco 换成 fake (Ctx 构造时装,
+   可经 restore_real_mujoco 还原) —— 因此
    PREPARE / EvidenceVerdict 五门 / commit_transfer 原子事务 /
    recover_open_commands 重启对账 / reconcile 全部走**生产代码**。
 2. B0/B1 的「旧式逐次 commit」= harness 侧 legacy 写入器 (每条 DML 独立
@@ -100,8 +101,24 @@ class _FakeMujoco:
 
 
 FAKE_MUJOCO = _FakeMujoco()
-srv.mujoco = FAKE_MUJOCO
-tper.mujoco = FAKE_MUJOCO
+#: 真实 mujoco 面 (还原基准; 捕获于任何替换之前, 必为真件)
+_MUJOCO_REAL = {"srv": srv.mujoco, "tper": tper.mujoco}
+
+
+def install_fake_mujoco() -> None:
+    """把 twin.server/twin.perception 的 mujoco 面换成 fake (幂等)。
+
+    Ctx 构造时调用 (harness 全程 fake); 不在模块导入时替换 —— 导入即
+    污染同进程其他消费者 (测试顺序耦合失败的根因)。
+    """
+    srv.mujoco = FAKE_MUJOCO
+    tper.mujoco = FAKE_MUJOCO
+
+
+def restore_real_mujoco() -> None:
+    """还原真实 mujoco 面 —— 同进程其他测试不背 harness 的替换。"""
+    srv.mujoco = _MUJOCO_REAL["srv"]
+    tper.mujoco = _MUJOCO_REAL["tper"]
 
 
 # ================================================================ FakeCell
@@ -410,6 +427,7 @@ def sample_verdict_harness(ctx, kind: str, pid: str, vid: str
 # ================================================================ 运行上下文
 class Ctx:
     def __init__(self, group: str, fault_id: str, seed: int):
+        install_fake_mujoco()   # harness 全程 fake 面 (测试可 fixture 还原)
         self.group, self.fault_id, self.seed = group, fault_id, seed
         self.rng = random.Random(
             zlib.crc32(f"{seed}|{fault_id}|{group}".encode()) & 0xFFFFFFFF)
