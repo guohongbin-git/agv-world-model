@@ -8,6 +8,7 @@
 | B1 仅物理门控   | 有 | 无 (旧式逐次 commit) | 无 |
 | B2 门控+事务    | 有 | 有 (commit_transfer) | 无 (RECONCILIATION 后不恢复, 挂死) |
 | B3 完整方案     | 有 | 有 | 有 (recover_open_commands / reconcile) |
+| B4 工业强基线   | 无 (PLC 状态字) | 有 (op_id 幂等) | 有 (journal 对账+重试≤2, 不读真值) |
 
 场景子集 (确定性): S01/S05/S06, D02/D03/D04/D06, H01/H03, C01。
 指标 (每场景×组×seed): Unsafe Commit Rate / False Rejection Rate /
@@ -67,7 +68,7 @@ TABLES = ("pallets", "goods", "slots", "bindings", "events", "command_log",
           "execution_evidence", "transfers")
 TIMESTEP = 0.0005
 PALLET_HALF_H = 0.011
-GROUPS = ("B0", "B1", "B2", "B3")
+GROUPS = ("B0", "B1", "B2", "B3", "B4")
 
 
 # ================================================================ fake mujoco
@@ -430,6 +431,10 @@ class Ctx:
         self.atomic_viol = 0
         self.safe_failure = False
         self._task_override = None
+        # B4 工业强基线: 幂等表 (op_id → 状态) + 模拟 PLC 状态字 + journal
+        self.b4_ops: dict[str, str] = {}
+        self.plc = _PlcStub()
+        self._journal: "_Journal | None" = None
 
     # ---------- world / service ----------
     @property
@@ -470,6 +475,21 @@ class Ctx:
         svc2.gate.speed = 64.0
         self.svc = svc2
         return t_restart, list(svc2.last_recovery)
+
+    @property
+    def journal(self) -> "_Journal":
+        """B4 前置写日志 (JSONL 落盘, 路径含 time_ns 防跨 run 撞名)。"""
+        if self._journal is None:
+            self._journal = _Journal(
+                RUNS / f"{self.run_id}-{time.time_ns()}.b4.journal.jsonl")
+        return self._journal
+
+    def restart_b4(self):
+        """B4 的重启 = 重开账本 + journal 对账 (设备字/进程分离存续:
+        WMS 崩溃不拖垮设备, 状态字在 ctx 上保留)。"""
+        self._w._conn.close()
+        self._w = World(run_id=self.run_id, db_path=self.db_path)
+        return float(self.cell.data.time), _b4_reconcile(self)
 
     # ---------- 观测 / 记账 ----------
     def checkpoint(self, note=""):
@@ -512,6 +532,8 @@ class Ctx:
                 p = Path(str(self.db_path) + suf)
                 if p.exists():
                     p.unlink()
+        if self._journal is not None and self._journal.path.exists():
+            self._journal.path.unlink()
 
 
 # ================================================================ legacy 写入器 (B0/B1)
@@ -630,13 +652,268 @@ def _b2_expected(ctx, phase):
     return exp
 
 
+# ================================================================ B4 工业强基线
+B4_MAX_RETRIES = 2              # 失败腿自动重试上限 (首试 + 2)
+B4_BACKOFF_S = 0.1              # 重试间仿真退避 (线性)
+
+
+class _PlcStub:
+    """B4 模拟 PLC 状态字 —— 设备侧唯一完成来源。
+
+    「到点位」由设备自身动作程序置位 (任务状态机/设备字), 与 observed
+    传感器通道和物理真值严格分道: B4 不读 cell.observed, 不读 cell.truth。
+    设备字不感知负载/接触 —— H 类机械故障 (半托/滑落) 对状态字不可见,
+    这是工业基线与 B3 证据门控的本质差异 (消融设计意图)。
+    """
+    ACK_POLL_MAX = 3            # 有限重询次数
+    ACK_POLL_BACKOFF_S = 0.05   # 重询间仿真退避
+
+    def __init__(self):
+        self.words: dict[str, str] = {}     # op_id -> BUSY | DONE
+
+    def issue(self, op_id: str) -> None:
+        self.words[op_id] = "BUSY"
+
+    def finish(self, op_id: str) -> None:
+        """设备内: 动作程序到点 → 状态字置位 (模拟伺服 in-position)。"""
+        if self.words.get(op_id) == "BUSY":
+            self.words[op_id] = "DONE"
+
+    def ack(self, op_id: str) -> bool:
+        return self.words.get(op_id) == "DONE"
+
+    def poll(self, op_id: str, cell) -> bool:
+        """有限重询: 至多 ACK_POLL_MAX 次, 间隔退避推进仿真时钟。"""
+        for i in range(self.ACK_POLL_MAX):
+            if self.ack(op_id):
+                return True
+            cell.advance(self.ACK_POLL_BACKOFF_S * (i + 1))
+        return self.ack(op_id)
+
+
+class _Journal:
+    """B4 前置写日志 (write-ahead): 每次状态变更先落一条 JSONL 再执行;
+    崩溃/重启后折叠出每 op 最后状态, 依工业可得信息 (journal + 设备字 +
+    超时) 对账 —— 不读真值/传感器。"""
+
+    def __init__(self, path):
+        self.path = Path(path)
+        self.entries: list[dict] = []
+        if self.path.exists():          # 进程级重启: 从文件恢复
+            for line in self.path.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    self.entries.append(json.loads(line))
+
+    def append(self, kind: str, *, t: float, op: str, **fields) -> None:
+        e = {"kind": kind, "t": round(float(t), 4), "op": op, **fields}
+        self.entries.append(e)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with self.path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(e, ensure_ascii=False) + "\n")
+
+
+class _NoVerdict:
+    """B4 无证据门控: 复用 B2 变更集构造时以空 verdict_id 顶替。"""
+    verdict_id = ""
+
+
+def _b4_mutations_events(ctx, phase, vid):
+    """B4 账本变更集 = 生产 SQL 语义, evidence_id 为空 (无证据档)。"""
+    return _b2_mutations_events(ctx, phase, vid, _NoVerdict())
+
+
+def _b4_leg(ctx, phase, vid, *, key, expected=None, crash=None, actuate=None):
+    """B4 单腿协议: 幂等去重 → 预检 → 下发 → 设备字 ACK (有限重询) → 原子提交。
+
+    - op_id = 转移幂等键: 跨重试/重启稳定;
+    - 重复回报 → 生产 commit_transfer 幂等重放 (零重复事件/记账);
+    - ACK 未置位 → 退避重试 ≤ B4_MAX_RETRIES → chain_failed (账本零写入);
+    - 预检版本冲突为确定性失败 (盲重试会吞掉 C01 并发错误) → 立即失败;
+    - crash 注入: ("pre_exec",) 下发后执行前 | ("pre_commit",) ACK 后提交前
+      | ("faultconn", n) 提交事务内 | ("ack",) 提交后回执丢失;
+    - actuate: None=该腿标准动作程序 | callable=场景注入动作 | False=设备
+      无动作程序 (超时路径, 仅测试/对账语义)。
+    返回 (status, reason, verdict_id, incident)。
+    """
+    w, cell, plc = ctx.world, ctx.cell, ctx.plc
+    mut, evs = _b4_mutations_events(ctx, phase, vid)
+    exp = expected if expected is not None else _b2_expected(ctx, phase)
+    spec = {"mutations": [[sql, list(p)] for sql, p in mut],
+            "events": [[ty, p] for ty, p in evs],
+            "expected": dict(exp)}
+
+    # 1) 幂等表: op 已提交 → 重复回报去重 (生产幂等重放, 零写入)
+    if ctx.b4_ops.get(key) == "COMMITTED" or w.transfer_recorded(key):
+        r = w.commit_transfer("", exp, mut, evs, key, task_id=ctx.task_ref,
+                              sim_time_s=float(cell.data.time))
+        ctx.b4_ops[key] = "COMMITTED"
+        return ("committed",
+                f"重复回报去重 (op_id 幂等重放 replayed={r.replayed})",
+                "", None)
+
+    # 2) 预检 (乐观版本, 下发动作前; 与生产提交内检查同语义)
+    for entity, ver in exp.items():
+        cur = w.entity_version_of(entity)
+        if cur != ver:
+            ctx.b4_ops[key] = "FAILED"
+            ctx.safe_failure = True
+            ctx.journal.append("FAILED", t=float(cell.data.time), op=key,
+                               reason=f"预检版本冲突: {entity} v{ver}≠v{cur}")
+            return ("chain_failed",
+                    f"计划版本过期 (预检): {entity} 期望 v{ver}, 实际 v{cur}"
+                    " → chain_failed (重派发需重规划)", "", None)
+
+    if actuate is None:                 # 默认: 该腿标准动作程序
+        actuate = (_physical_place_ok if phase == "PLACE"
+                   else _physical_pick_ok)
+    incident = None
+    last_reason = "设备字未置位 (ACK 超时, 有限重询穷尽)"
+    for attempt in range(1, B4_MAX_RETRIES + 2):
+        ctx.journal.append("ISSUED", t=float(cell.data.time), op=key,
+                           attempt=attempt, spec=spec)
+        plc.issue(key)                  # 下发: 状态字 BUSY (未执行)
+        if crash == ("pre_exec",):
+            raise InjectedCrash("pre_exec")
+        if actuate:                     # 设备执行动作程序, 到点即置位
+            actuate(ctx, vid)
+            plc.finish(key)
+            ctx.journal.append("EXECUTED", t=float(cell.data.time), op=key,
+                               attempt=attempt)
+        if not plc.poll(key, cell):
+            ctx.cell.advance(B4_BACKOFF_S * attempt)     # 退避后再询
+            continue
+        if crash == ("pre_commit",):
+            raise InjectedCrash("pre_commit")
+        proxy = None
+        real = w._conn
+        if crash and crash[0] == "faultconn" and attempt == 1:
+            proxy = _FaultConn(real, crash[1])
+            w._conn = proxy
+            proxy.armed = True
+        try:
+            ctx.journal.append("COMMIT_BEGIN", t=float(cell.data.time),
+                               op=key, attempt=attempt)
+            w.commit_transfer("", exp, mut, evs, key, task_id=ctx.task_ref,
+                              sim_time_s=float(cell.data.time))
+        except sqlite3.OperationalError:
+            last_reason = "提交事务中断 (原子回滚, 零残留)"
+            ctx.journal.append("ERROR", t=float(cell.data.time), op=key,
+                               attempt=attempt, reason=last_reason)
+            if attempt > B4_MAX_RETRIES:
+                break
+            ctx.cell.advance(B4_BACKOFF_S * attempt)     # 退避后幂等重试
+            continue
+        except WorldError as e:     # 确定性拒绝 (提交内版本冲突等)
+            ctx.b4_ops[key] = "FAILED"
+            ctx.safe_failure = True
+            ctx.journal.append("FAILED", t=float(cell.data.time), op=key,
+                               reason=f"生产拒绝: {e}")
+            return ("chain_failed", f"生产拒绝: {e} → chain_failed", "", None)
+        finally:
+            if proxy is not None:
+                proxy.armed = False
+                w._conn = real
+        ctx.journal.append("COMMITTED", t=float(cell.data.time), op=key,
+                           attempt=attempt)
+        ctx.b4_ops[key] = "COMMITTED"
+        if crash and crash[0] == "faultconn" and incident is None:
+            # 事务内故障已由幂等重试闭合 —— 记 incident 供场景侧闭合
+            incident = _mk_incident(ctx, key, ctx.fault_id, "mid_commit")
+        if crash == ("ack",):
+            raise AckLost(key)
+        return ("committed", "设备字 ACK → 原子提交 (工业基线, 无证据门控)",
+                "", incident)
+    ctx.b4_ops[key] = "FAILED"
+    ctx.safe_failure = True
+    ctx.journal.append("FAILED", t=float(cell.data.time), op=key,
+                       reason=last_reason)
+    return ("chain_failed",
+            f"{last_reason}; 重试 {B4_MAX_RETRIES} 次仍失败 → chain_failed",
+            "", None)
+
+
+def _b4_reconcile(ctx) -> list[dict]:
+    """B4 重启对账: 只用 journal + 设备字 + 超时策略 (工业可得信息)。
+
+    - EXECUTED/ACK 已置位且无终态 → 幂等重放提交 (committed_by_replay /
+      already_committed);
+    - 仅 ISSUED (设备未执行) → 有限重询 → 超时 → 标 failed 并回滚该腿
+      (无 COMMITTED 即无账本写入; COMMIT_BEGIN 后的归属由 transfers 表
+      幂等登记裁决, sqlite 原子性保证零残留/零重复);
+    - 已有终态 (COMMITTED/FAILED) → 无事可做。
+    不读 cell.truth / cell.observed —— 与 B3 的真值重观测对账严格分道。
+    """
+    w, plc = ctx.world, ctx.plc
+    state: dict[str, dict] = {}
+    for e in ctx.journal.entries:
+        st = state.setdefault(e["op"], {"issued": False, "executed": False,
+                                        "terminal": None, "spec": None})
+        k = e["kind"]
+        if k == "ISSUED":
+            st["issued"] = True
+            st["spec"] = e.get("spec") or st["spec"]
+        elif k == "EXECUTED":
+            st["executed"] = True
+        elif k in ("COMMITTED", "FAILED"):
+            st["terminal"] = k
+
+    def _replay(op: str, st: dict) -> tuple[str, bool]:
+        t0 = float(ctx.cell.data.time)
+        if w.transfer_recorded(op):     # 提交已落账 (journal 缺终态行)
+            ctx.b4_ops[op] = "COMMITTED"
+            ctx.journal.append("COMMITTED", t=t0, op=op, attempt="reconcile")
+            return "already_committed", True
+        spec = st["spec"]
+        try:
+            w.commit_transfer("", spec["expected"], spec["mutations"],
+                              spec["events"], op, task_id=ctx.task_ref,
+                              sim_time_s=t0)
+        except WorldError:
+            ctx.b4_ops[op] = "FAILED"
+            ctx.journal.append("FAILED", t=t0, op=op,
+                               reason="reconcile_replay_rejected")
+            return "replay_rejected_failed", False
+        ctx.b4_ops[op] = "COMMITTED"
+        ctx.journal.append("COMMITTED", t=t0, op=op, attempt="reconcile")
+        return "committed_by_replay", True
+
+    rep: list[dict] = []
+    for op, st in state.items():
+        if st["terminal"] is not None or not st["issued"]:
+            continue
+        t0 = float(ctx.cell.data.time)
+        if st["executed"] or plc.ack(op):
+            decision, recovered = _replay(op, st)
+        else:
+            for i in range(plc.ACK_POLL_MAX):      # 超时策略: 有限重询
+                if plc.ack(op):
+                    break
+                ctx.cell.advance(plc.ACK_POLL_BACKOFF_S * (i + 1))
+            if plc.ack(op) and st["spec"]:
+                decision, recovered = _replay(op, st)
+            else:
+                ctx.b4_ops[op] = "FAILED"
+                ctx.safe_failure = True
+                ctx.journal.append("FAILED", t=float(ctx.cell.data.time),
+                                   op=op, reason="reconcile_timeout")
+                # 已达成一致决定并回滚该腿 → 一致性恢复 (任务链失败)
+                decision, recovered = "timeout_failed_rolled_back", True
+        rep.append({"command_id": op, "decision": decision,
+                    "recovered": recovered,
+                    "recovery_time_s":
+                        round(float(ctx.cell.data.time) - t0, 4)})
+    return rep
+
+
 # ================================================================ 提交尝试 (组开关核心)
 def commit_attempt(ctx, phase, vid="F01", *, forged=None, crash=None,
-                   expected=None, reject_reason="", injection_point=""):
+                   expected=None, reject_reason="", injection_point="",
+                   actuate=None):
     """一次取/放提交尝试, 按组走不同机制组合。
 
     crash: None | ("entry",) | ("legacy_after", n) | ("faultconn", n)
-           | ("ack",)
+           | ("ack",) | ("pre_exec",) | ("pre_commit",)     (后两个为 B4)
+    actuate: 仅 B4 —— 腿动作程序 (None=标准动作, False=设备不执行)。
     返回 outcome dict; 审计记录按矩阵 V0.1 schema 落账。
     """
     w = ctx.world
@@ -726,6 +1003,15 @@ def commit_attempt(ctx, phase, vid="F01", *, forged=None, crash=None,
                     if proxy is not None:
                         proxy.armed = False
                         w._conn = real
+
+        elif ctx.group == "B4":
+            # B4 工业强基线: 不读证据/传感器/真值 —— 完成判据 = 模拟 PLC
+            # 状态字 ACK; forged 注入对本组不可见 (协议分道)。
+            if crash == ("entry",):
+                raise InjectedCrash("entry")
+            status, reason, verdict_id, incident = _b4_leg(
+                ctx, phase, vid, key=key, expected=expected, crash=crash,
+                actuate=actuate)
 
         else:  # B3 —— 生产路径
             svc = ctx.svc
@@ -873,7 +1159,8 @@ def crash_label(crash):
     if crash is None:
         return ""
     return {"entry": "before_begin", "legacy_after": "mid_write",
-            "faultconn": "mid_commit", "ack": "ack_boundary"}[crash[0]]
+            "faultconn": "mid_commit", "ack": "ack_boundary",
+            "pre_exec": "after_issue", "pre_commit": "after_ack"}[crash[0]]
 
 
 def _mk_incident(ctx, key, fault_id, point) -> dict:
@@ -1105,6 +1392,16 @@ def sc_H01(ctx):
     """托盘抬升但叉臂承托比不足阈值 (真值=观测, 机械性故障)。"""
     if ctx.group == "B3":
         _b3_prepare(ctx)
+    if ctx.group == "B4":
+        # 半托机械态: 设备字只反映「到点」, 不承载支撑比 → 基线照常提交
+        # (不安全提交) → 随后完整举升补完链条。B4 无稳定窗/支撑证据。
+        out = commit_attempt(ctx, "PICK", injection_point="evidence_gate",
+                             actuate=_physical_pick_partial)
+        ctx.cell.animate_to(xyz=POSE["ROBOT:F01"], fork={"F01": 0.97},
+                            beam=0.03, claim="ROBOT:F01", duration=0.4)
+        ctx.cell.advance(0.2)
+        commit_attempt(ctx, "PLACE", injection_point="post_fault")
+        return
     _physical_pick_partial(ctx)
     out = commit_attempt(ctx, "PICK", injection_point="evidence_gate")
     if out["status"] == "rejected":
@@ -1121,6 +1418,18 @@ def sc_H03(ctx):
     """放托后托盘滑落, 瞬态接触货架 (瞬态期提交必错, 稳定窗捕获坠落)。"""
     if ctx.group == "B3":
         _b3_prepare(ctx)
+    if ctx.group == "B4":
+        out = commit_attempt(ctx, "PICK", injection_point="prefault")
+        assert out["status"] == "committed", out
+        # 滑落: 瞬态接触 H01 即「到点」→ 设备字置位 → B4 无稳定窗照常提交
+        def _faulted_place(c, vid):
+            c.cell.animate_to(xyz=(-0.330, 0.0, 0.057), beam=0.90,
+                              fork={"F01": 0.03}, claim=None, duration=0.3)
+            c.cell.arm_fall(delay=0.15, fall_dur=0.12)
+        commit_attempt(ctx, "PLACE", injection_point="evidence_gate",
+                       actuate=_faulted_place)
+        ctx.cell.advance(0.5)               # 坠落完成 (B4 无法捕获)
+        return
     _physical_pick_ok(ctx)
     out = commit_attempt(ctx, "PICK", injection_point="prefault")
     assert out["status"] == "committed", out
@@ -1172,6 +1481,22 @@ def _b3_recovery_ok(ctx, rep) -> bool:
 
 def sc_D02(ctx):
     """PREPARED 成功后物理动作前进程退出。"""
+    if ctx.group == "B4":
+        # B4 对应注入: op 下发 (journal ISSUED) 后、设备执行前进程退出。
+        out = commit_attempt(ctx, "PICK", crash=("pre_exec",),
+                             injection_point="after_issue")
+        inc = out["incident"]
+        ctx.cell.advance(ctx.rng.uniform(1.5, 2.5))
+        ctx.checkpoint("crash")
+        t_restart, rep = ctx.restart_b4()
+        inc["t_restart"] = t_restart
+        ok = bool(rep) and all(r["recovered"] for r in rep)
+        _close_incident(ctx, inc, recovered=ok,
+                        decision=f"journal_reconcile:"
+                                 f"{sorted({r['decision'] for r in rep})}",
+                        t_close=ctx.cell.data.time)
+        ctx.checkpoint("recovered")
+        return                            # 腿已超时 failed → 链失败
     if ctx.group == "B3":
         svc = ctx.svc
         orig = srv.WorldService._prepare_task
@@ -1214,6 +1539,25 @@ def sc_D02(ctx):
 
 def sc_D03(ctx):
     """物理动作完成、BEGIN 前进程退出。"""
+    if ctx.group == "B4":
+        # B4 对应注入: 设备已执行 (EXECUTED+ACK) 但提交未落账时崩溃。
+        out = commit_attempt(ctx, "PICK", crash=("pre_commit",),
+                             injection_point="before_begin")
+        inc = out["incident"]
+        ctx.cell.advance(ctx.rng.uniform(1.5, 2.5))
+        ctx.checkpoint("crash")
+        t_restart, rep = ctx.restart_b4()
+        inc["t_restart"] = t_restart
+        ok = bool(rep) and all(r["recovered"] for r in rep) and \
+            ctx.world.transfer_recorded(out["key"])
+        _close_incident(ctx, inc, recovered=ok,
+                        decision=f"journal_reconcile:"
+                                 f"{sorted({r['decision'] for r in rep})}",
+                        t_close=ctx.cell.data.time)
+        ctx.checkpoint("recovered")
+        if ok:
+            commit_attempt(ctx, "PLACE", injection_point="post_recovery")
+        return
     if ctx.group == "B3":
         _b3_prepare(ctx)
     _physical_pick_ok(ctx)
@@ -1241,6 +1585,22 @@ def sc_D03(ctx):
 
 def sc_D04(ctx):
     """事务中托盘位置更新后异常 (B0/B1: 第 n 步后崩溃; B2/B3: 事务内断开)。"""
+    if ctx.group == "B4":
+        # B4: 提交事务内故障 → 原子回滚零残留 → 腿内幂等重试 (≤2) 闭合
+        out = commit_attempt(ctx, "PICK", crash=("faultconn", 1),
+                             injection_point="mid_commit")
+        inc = out["incident"]
+        if inc is None:                    # 重试闭合路径: 手动补记 incident
+            inc = _mk_incident(ctx, out["key"], "D04", "mid_commit")
+        ok = out["status"] == "committed"
+        _close_incident(ctx, inc, recovered=ok,
+                        decision="atomic_rollback+idempotent_retry:"
+                                 f"{out['status']}",
+                        t_close=ctx.cell.data.time)
+        ctx.checkpoint("recovered")
+        if ok:
+            commit_attempt(ctx, "PLACE", injection_point="post_recovery")
+        return
     if ctx.group == "B3":
         _b3_prepare(ctx)
     _physical_pick_ok(ctx)
@@ -1275,6 +1635,24 @@ def sc_D04(ctx):
 
 def sc_D06(ctx):
     """COMMIT 成功但调用方未收到 ACK。"""
+    if ctx.group == "B4":
+        # B4: 提交已落账 (journal COMMITTED + transfers 幂等登记) 而回执
+        # 丢失 → 重启对账判 already_committed, op_id 去重保证零重复事件。
+        out = commit_attempt(ctx, "PICK", crash=("ack",),
+                             injection_point="ack_boundary")
+        inc = out["incident"]
+        ctx.cell.advance(ctx.rng.uniform(1.5, 2.5))
+        t_restart, rep = ctx.restart_b4()
+        inc["t_restart"] = t_restart
+        ok = (ctx.world.transfer_recorded(out["key"])
+              and _pallet_moved_count(ctx) == 1)
+        _close_incident(ctx, inc, recovered=ok,
+                        decision="closed_in_journal (op_id 幂等去重)",
+                        t_close=ctx.cell.data.time)
+        ctx.checkpoint("recovered")
+        if ok:
+            commit_attempt(ctx, "PLACE", injection_point="post_recovery")
+        return
     if ctx.group == "B3":
         _b3_prepare(ctx)
     _physical_pick_ok(ctx)
@@ -1359,6 +1737,20 @@ def sc_C01(ctx):
                 resource_lease=f"aisle:{second}",
                 expected_versions=plan_v0,
                 sim_time_s=float(ctx.cell.data.time))
+    if ctx.group == "B4":
+        # 第一车正常腿; 第二车持旧计划 → 下发前预检版本冲突 (确定性失败,
+        # 盲重试会吞掉并发错误) → chain_failed, 第二车不动作。
+        out1 = commit_attempt(ctx, "PICK", first, expected=plan_v0,
+                              injection_point="first_committer")
+        assert out1["status"] == "committed", out1
+        ctx._task_override = f"{ctx.run_id}-T02"
+        out2 = commit_attempt(ctx, "PICK", second, expected=plan_v0,
+                              injection_point="concurrent_commit")
+        ctx._task_override = None
+        assert out2["status"] == "chain_failed", out2
+        # 落托由腿协议内动作程序执行 (单次 place_settled, 与 B0-B2 同形)
+        commit_attempt(ctx, "PLACE", first, injection_point="first_committer")
+        return
     _physical_pick_ok(ctx, first)
     out1 = commit_attempt(ctx, "PICK", first, expected=plan_v0,
                           injection_point="first_committer")
@@ -1600,6 +1992,11 @@ MODELING_NOTES = [
     "(commit_lag_divergence_s, 物理完成→合法提交的固有窗口)。",
     "本 3-seed 快验只验方向 (B0 Unsafe>0 / B3 零 Unsafe 且完成率不塌); "
     "30-seed 主实验待 DetFix 回归后。",
+    "B4 工业强基线: 完成判据 = 模拟 PLC 状态字 (伺服到点位, 任务状态机侧), "
+    "不读 observed 传感器与物理真值; op_id 幂等去重 + journal 前置日志 + "
+    "重启对账 (超时→failed+回滚) + 失败腿重试≤2 → S/D 类故障下账实一致 "
+    "(vs B0 挂死/重复); 但 H 类机械故障 (半托/滑落) 对设备字不可见 → "
+    "不安全提交仍发生 —— 证据门控 (B1-B3) 的增量价值所在。",
 ]
 
 
@@ -1713,6 +2110,9 @@ def main(argv=None) -> int:
                 "B1": "仅物理门控: EvidenceVerdict 五门+I4; 逐次 commit",
                 "B2": "门控+事务: 生产 commit_transfer (无 PREPARED/恢复)",
                 "B3": "完整: PREPARED→VERIFIED→原子提交→重启对账/reconcile",
+                "B4": "工业强基线: 设备字 ACK+op_id 幂等+journal 前置日志+"
+                      "重启对账(超时→failed+回滚)+失败腿重试≤2; "
+                      "不读传感器/真值, 无证据门控",
             },
             "scenario_meta": {k: {"category": v[0], "fault": v[1]}
                               for k, v in SCENARIO_META.items()},
