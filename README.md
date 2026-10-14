@@ -11,9 +11,9 @@ is the *only* command entry, physical execution runs in a contact-faithful MuJoC
 and inventory facts commit to a transactional ledger **only when sensor evidence
 (support ratio, contact, withdrawal clearance) proves them**.
 
-`Purpose: NATIVE AI` · `Type: WORLD MODEL / PHYSICS KERNEL` · `Evidence: 1200-RUN ABLATION`
+[![purpose](https://img.shields.io/badge/Purpose-NATIVE_AI-6f42c1)](https://github.com/topprismdata) [![type](https://img.shields.io/badge/Type-WORLD_MODEL_%2F_PHYSICS_KERNEL-blue)](https://github.com/topprismdata/agv-world-model) [![evidence](https://img.shields.io/badge/Evidence-1200_RUN_ABLATION-2ea44f)](reports/ablation_n30.json)
 
-![evidence](https://img.shields.io/badge/Unsafe_Commits_B4_11.1%25_%E2%86%92_B3_0-1200_runs-above) ![gating](https://img.shields.io/badge/Evidence_Gating-5%E9%97%A8%E5%88%A4%E6%8D%AE-2ea44f) ![atomicity](https://img.shields.io/badge/Atomic_Transactions-%E6%81%A2%E5%A4%8D%E5%AF%B9%E8%B4%A6_100%25-blue) ![physics](https://img.shields.io/badge/MuJoCo-contact--faithful-orange) ![license](https://img.shields.io/badge/tests-345_passed-8a2be2)
+![gate](https://img.shields.io/badge/Unsafe_Commits_B4_11.1%25_%E2%86%92_B3_0-1200_runs-above) ![gating](https://img.shields.io/badge/Evidence_Gating-5%E9%97%A8%E5%88%A4%E6%8D%AE-2ea44f) ![atomicity](https://img.shields.io/badge/Atomic_Transactions-%E6%81%A2%E5%A4%8D%E5%AF%B9%E8%B4%A6_100%25-blue) ![physics](https://img.shields.io/badge/MuJoCo-contact--faithful-orange) ![license](https://img.shields.io/badge/tests-345_passed-8a2be2)
 
 > 属于 **TopPrism Native AI** — 让组织级机器学习能力在跨项目实践中持续复利的工程体系。
 
