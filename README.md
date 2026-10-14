@@ -1,12 +1,33 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/topprismdata/.github/main/assets/brand/topprism-repo-header.png" alt="TopPrism dual-prism visual" width="100%" />
+</p>
+
 # AGV World Model：物理证据门控的 Agentic 仓储世界模型
+
+> **语言 / Language:** 中文为主 · English overview follows。
 
 **English**: An agentic world model for warehouse management in which an LLM/rule agent
 is the *only* command entry, physical execution runs in a contact-faithful MuJoCo engine,
 and inventory facts commit to a transactional ledger **only when sensor evidence
 (support ratio, contact, withdrawal clearance) proves them**.
 
-> 核心命题：*具身智能的深层价值不是替代体力，而是把物理执行变成持续可观测、可验证、
-> 可学习的过程。* Agent 可以改变计划，但不能改变未经物理验证的事实。
+`Purpose: NATIVE AI` · `Type: WORLD MODEL / PHYSICS KERNEL` · `Evidence: 1200-RUN ABLATION`
+
+> 属于 **TopPrism Native AI** — 让组织级机器学习能力在跨项目实践中持续复利的工程体系。
+
+## Why this exists
+
+物流与仓储仿真普遍"执行不可信"：感知出告警就止步，物理成败与账本事实脱节，
+状态正确性没有证据链。
+
+> **核心命题**：*具身智能的深层价值不是替代体力，而是把物理执行变成
+> 持续可观测、可验证、可学习的过程。* Agent 可以改变计划，但不能改变
+> 未经物理验证的事实。
+
+成熟工业实践（PLC 状态字 ACK + 幂等 + journal 对账）在 1200 runs 故障注入
+消融中仍有 **11.1% 不安全提交**（半托/滑落类：设备字不承载力学证据）；
+物理证据门控将其压到 **0**。这个增量就是本项目存在的理由。
+
 > 全文论证见 [docs/agentic_world_model_literature.md](docs/agentic_world_model_literature.md)。
 
 ## 界面一览（:8400 矩阵仓库）
